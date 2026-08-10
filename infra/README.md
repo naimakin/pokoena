@@ -14,6 +14,22 @@ sudo usermod -aG docker "$USER"
 # log out/in (or `newgrp docker`) so the group membership takes effect
 ```
 
+### 1a. Swap file (recommended on droplets ≤2GB RAM)
+
+Cheap insurance against OOM kills — a burst gets slowed down by swapping instead of
+a container getting killed outright.
+
+```bash
+sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+On a 1GB/1vCPU droplet specifically: `infra/app-stack.yml` intentionally does not
+deploy the `worker`/`redis` services (nothing in Phase 1 enqueues a Celery task) to
+leave headroom for Traefik + frontend + backend. Re-add them once Phase 2's async
+analysis jobs are built, ideally alongside a droplet resize.
+
 ## 2. Init single-node Swarm
 
 ```bash
@@ -59,7 +75,6 @@ printf 'postgresql+psycopg://poko_app:REPLACE_DB_PASSWORD@REPLACE-db-host.db.ond
   | docker secret create db_url -
 
 openssl rand -base64 48 | docker secret create jwt_secret -
-openssl rand -base64 32 | docker secret create redis_password -
 
 # Cloudflare dashboard -> My Profile -> API Tokens -> Create Token -> "Edit zone DNS"
 # template, scoped to the pokoena.com zone only.
@@ -97,7 +112,17 @@ docker service logs traefik_traefik -f   # watch for successful ACME cert issuan
 
 ## 10. First app deploy (bootstrap only — CI takes over after this)
 
+Run migrations *before* the first deploy so `backend` isn't crash-looping against an
+empty database on its first boot (subsequent deploys run migrations before the stack
+update the same way, via `deploy.yml`):
+
 ```bash
+docker service create --name pokoena-migrate --network traefik-public \
+  --secret db_url --restart-condition none --with-registry-auth \
+  ghcr.io/naimakin/pokoena-backend:latest alembic upgrade head
+docker service logs pokoena-migrate -f
+docker service rm pokoena-migrate
+
 IMAGE_TAG=latest docker stack deploy -c infra/app-stack.yml --with-registry-auth pokoena
 ```
 
@@ -113,16 +138,18 @@ Repo → Settings → Secrets and variables → Actions:
 
 ## 12. Seed data + first admin user
 
-Run once, on the droplet, against the running `backend` service image:
+Run once, on the droplet, against the running `backend` service image. `--network
+traefik-public` is just for internet egress to the managed Postgres host — these jobs
+publish nothing and carry no Traefik labels.
 
 ```bash
-docker service create --name pokoena-seed --network pokoena-internal \
+docker service create --name pokoena-seed --network traefik-public \
   --secret db_url --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest python -m scripts.seed_demo
 docker service logs pokoena-seed -f
 docker service rm pokoena-seed
 
-docker service create --name pokoena-admin --network pokoena-internal \
+docker service create --name pokoena-admin --network traefik-public \
   --secret db_url --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest \
   python -m scripts.create_admin --email admin@pokoena.com --password 'REPLACE_ME' --name "Jordan Diaz"
@@ -146,9 +173,8 @@ curl -I https://api.pokoena.com/healthz
 | `DO_SSH_HOST` / `DO_SSH_USER` / `DO_SSH_KEY` | GitHub Actions secrets | Deploy job's `DOCKER_HOST=ssh://` |
 | `GITHUB_TOKEN` | Built-in per workflow run | Push images to GHCR; forwarded for `--with-registry-auth` |
 | GHCR read PAT | Local `docker login` on the droplet only (not a GitHub secret) | Manual `docker service` ops outside CI |
-| `db_url` | Docker Swarm secret | Postgres DSN for `backend` + `worker` |
+| `db_url` | Docker Swarm secret | Postgres DSN for `backend` (and `worker`, once Phase 2 redeploys it) |
 | `jwt_secret` | Docker Swarm secret | JWT signing key |
-| `redis_password` | Docker Swarm secret | Redis auth |
 | `cf_api_token` | Docker Swarm secret | Traefik's Cloudflare DNS-01 ACME resolver |
 | `traefik_dashboard_htpasswd` | Docker Swarm secret | Basic auth on `traefik.pokoena.com` |
 | DO Trusted Sources allowlist | DigitalOcean control panel | Firewall for the managed Postgres instance |

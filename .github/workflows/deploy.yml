@@ -76,9 +76,11 @@ jobs:
         run: |
           set -euo pipefail
           JOB="pokoena-migrate-${{ github.run_id }}"
+          # traefik-public purely for internet egress to the managed Postgres host —
+          # this job publishes nothing and carries no traefik labels.
           docker service create \
             --name "$JOB" \
-            --network pokoena-internal \
+            --network traefik-public \
             --secret db_url \
             --restart-condition none \
             --with-registry-auth \
