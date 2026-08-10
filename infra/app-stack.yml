@@ -1,0 +1,129 @@
+# Deployed by CI on every push to main:
+#   IMAGE_TAG=<sha> docker stack deploy -c infra/app-stack.yml --with-registry-auth pokoena
+# Traefik itself lives in a separate stack (infra/traefik/traefik-stack.yml) and is
+# never touched by this file's redeploys.
+
+version: "3.9"
+
+networks:
+  traefik-public:
+    external: true
+  pokoena-internal:
+    driver: overlay
+    internal: true
+
+volumes:
+  redis_data:
+
+secrets:
+  db_url:
+    external: true
+  jwt_secret:
+    external: true
+  redis_password:
+    external: true
+
+services:
+  frontend:
+    image: ghcr.io/naimakin/pokoena-frontend:${IMAGE_TAG:-latest}
+    environment:
+      NODE_ENV: production
+    networks: [traefik-public]
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: start-first
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        max_failure_ratio: 0
+      rollback_config: { parallelism: 1, order: stop-first }
+      restart_policy: { condition: on-failure, delay: 5s, max_attempts: 3, window: 120s }
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+        reservations: { cpus: "0.1", memory: 128M }
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(`pokoena.com`) || Host(`www.pokoena.com`)"
+        - "traefik.http.routers.frontend.entrypoints=websecure"
+        - "traefik.http.routers.frontend.tls.certresolver=cfdns"
+        - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+  backend:
+    image: ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG:-latest}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      ENV: production
+      DATABASE_URL_FILE: /run/secrets/db_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      CORS_ORIGINS: "https://pokoena.com,https://www.pokoena.com"
+      COOKIE_DOMAIN: ".pokoena.com"
+    secrets: [db_url, jwt_secret, redis_password]
+    networks: [traefik-public, pokoena-internal]
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: start-first
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        max_failure_ratio: 0
+      rollback_config: { parallelism: 1, order: stop-first }
+      restart_policy: { condition: on-failure, delay: 5s, max_attempts: 3, window: 120s }
+      resources:
+        limits: { cpus: "1.0", memory: 1024M }
+        reservations: { cpus: "0.2", memory: 256M }
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.backend.rule=Host(`api.pokoena.com`)"
+        - "traefik.http.routers.backend.entrypoints=websecure"
+        - "traefik.http.routers.backend.tls.certresolver=cfdns"
+        - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+  worker:
+    image: ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG:-latest}
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      ENV: production
+      DATABASE_URL_FILE: /run/secrets/db_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets: [db_url, jwt_secret, redis_password]
+    networks: [pokoena-internal]
+    deploy:
+      replicas: 1
+      update_config: { parallelism: 1, order: start-first, delay: 10s }
+      restart_policy: { condition: on-failure, delay: 5s, max_attempts: 5, window: 120s }
+      resources:
+        limits: { cpus: "1.0", memory: 1024M }
+        reservations: { cpus: "0.1", memory: 256M }
+      labels:
+        - "traefik.enable=false"
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", "redis-server --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    secrets: [redis_password]
+    networks: [pokoena-internal]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy: { condition: on-failure }
+      resources: { limits: { cpus: "0.5", memory: 256M } }
+      labels:
+        - "traefik.enable=false"

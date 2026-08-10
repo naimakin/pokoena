@@ -1,0 +1,103 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: vars
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/naimakin/pokoena-backend:${{ steps.vars.outputs.tag }}
+            ghcr.io/naimakin/pokoena-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.pokoena.com
+          tags: |
+            ghcr.io/naimakin/pokoena-frontend:${{ steps.vars.outputs.tag }}
+            ghcr.io/naimakin/pokoena-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+      - name: Trust droplet host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DO_SSH_HOST }} >> ~/.ssh/known_hosts
+      - name: Login to ghcr (for --with-registry-auth forwarding)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run database migrations (one-shot swarm job)
+        env:
+          DOCKER_HOST: ssh://${{ secrets.DO_SSH_USER }}@${{ secrets.DO_SSH_HOST }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          JOB="pokoena-migrate-${{ github.run_id }}"
+          docker service create \
+            --name "$JOB" \
+            --network pokoena-internal \
+            --secret db_url \
+            --restart-condition none \
+            --with-registry-auth \
+            "ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG}" \
+            alembic upgrade head
+          for _ in $(seq 1 30); do
+            STATE=$(docker service ps --filter "desired-state=shutdown" --format '{{.CurrentState}}' "$JOB" | head -n1)
+            echo "migration state: $STATE"
+            if [[ "$STATE" == Complete* ]]; then break; fi
+            sleep 2
+          done
+          docker service logs "$JOB" || true
+          docker service rm "$JOB"
+      - name: Deploy app stack
+        env:
+          DOCKER_HOST: ssh://${{ secrets.DO_SSH_USER }}@${{ secrets.DO_SSH_HOST }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          docker stack deploy \
+            -c infra/app-stack.yml \
+            --with-registry-auth \
+            pokoena
