@@ -82,6 +82,7 @@ jobs:
             --name "$JOB" \
             --network traefik-public \
             --secret db_url \
+            --env DATABASE_URL_FILE=/run/secrets/db_url \
             --restart-condition none \
             --with-registry-auth \
             "ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG}" \

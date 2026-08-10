@@ -118,7 +118,8 @@ update the same way, via `deploy.yml`):
 
 ```bash
 docker service create --name pokoena-migrate --network traefik-public \
-  --secret db_url --restart-condition none --with-registry-auth \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest alembic upgrade head
 docker service logs pokoena-migrate -f
 docker service rm pokoena-migrate
@@ -144,13 +145,15 @@ publish nothing and carry no Traefik labels.
 
 ```bash
 docker service create --name pokoena-seed --network traefik-public \
-  --secret db_url --restart-condition none --with-registry-auth \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest python -m scripts.seed_demo
 docker service logs pokoena-seed -f
 docker service rm pokoena-seed
 
 docker service create --name pokoena-admin --network traefik-public \
-  --secret db_url --restart-condition none --with-registry-auth \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest \
   python -m scripts.create_admin --email admin@pokoena.com --password 'REPLACE_ME' --name "Jordan Diaz"
 docker service logs pokoena-admin -f
