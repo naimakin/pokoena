@@ -10,6 +10,11 @@ networks:
 
 volumes:
   traefik_certs:
+  docker_proxy_sock:
+
+configs:
+  docker_proxy_conf:
+    file: ./docker-proxy.conf
 
 secrets:
   cf_api_token:
@@ -18,10 +23,36 @@ secrets:
     external: true
 
 services:
+  # Traefik's bundled Docker client hardcodes API version 1.24 and ignores both
+  # version negotiation and DOCKER_API_VERSION for the swarm provider — recent
+  # Docker Engine (here: 29.x / API 1.52) rejects that outright. This sidecar
+  # strips the /vX.YY prefix from requests so the daemon falls back to its own
+  # default version. It's reachable only via a Unix socket on a shared volume,
+  # never on any network, so nothing else in the stack can reach the Docker API
+  # through it.
+  docker-proxy:
+    image: nginx:alpine
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - docker_proxy_sock:/proxy
+    configs:
+      # Replaces the whole nginx.conf (not just conf.d/) — it needs `user root;`
+      # at the top level, and nginx rejects a duplicate `user` directive if one
+      # is added on top of the base image's default nginx.conf instead.
+      - source: docker_proxy_conf
+        target: /etc/nginx/nginx.conf
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits: { cpus: "0.1", memory: 32M }
+
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.5
     command:
-      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+      - "--providers.swarm.endpoint=unix:///proxy/docker-proxy.sock"
       - "--providers.swarm.exposedByDefault=false"
       - "--providers.swarm.network=traefik-public"
       - "--entrypoints.web.address=:80"
@@ -37,11 +68,6 @@ services:
       - "--accesslog=true"
     environment:
       CF_DNS_API_TOKEN_FILE: /run/secrets/cf_api_token
-      # Traefik v3.1's bundled Docker client defaults to API 1.24, which recent
-      # Docker Engine releases (here: 29.x, API 1.52) refuse outright ("client
-      # version 1.24 is too old"). Pin it explicitly rather than relying on
-      # negotiation.
-      DOCKER_API_VERSION: "1.51"
     secrets:
       - cf_api_token
       - traefik_dashboard_htpasswd
@@ -53,7 +79,7 @@ services:
         published: 443
         mode: host
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - docker_proxy_sock:/proxy
       - "traefik_certs:/certs"
     networks:
       - traefik-public
@@ -64,6 +90,12 @@ services:
         condition: on-failure
       labels:
         - "traefik.enable=true"
+        # Even with a router pinned to service=api@internal, the swarm provider
+        # still tries to build its own implicit default service for this
+        # container (logged as service "traefik-traefik") and errors on it for
+        # lack of a port — which was silently blocking this whole container's
+        # label set, including the dashboard router's cert request below.
+        - "traefik.http.services.traefik-traefik.loadbalancer.server.port=8080"
         - "traefik.http.routers.dashboard.rule=Host(`traefik.pokoena.com`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=websecure"
