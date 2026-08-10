@@ -18,7 +18,12 @@ COPY --from=builder /root/.local /home/appuser/.local
 COPY . .
 RUN chown -R appuser:app /app
 USER appuser
-ENV PATH=/home/appuser/.local/bin:$PATH \
+# Explicit HOME, not left to runc's /etc/passwd inference: pip's `--user` install
+# above resolves its site-packages via $HOME/.local, and this must match the
+# COPY destination one line up or `import alembic` (and everything else) 404s
+# at runtime despite the CLI script itself being found on PATH.
+ENV HOME=/home/appuser \
+    PATH=/home/appuser/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8000
