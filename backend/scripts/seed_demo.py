@@ -55,6 +55,14 @@ def main() -> None:
         )
         db.add_all([admin, sub_user])
 
+        # Flush the parent rows (project/companies/users) before anything that
+        # references them by foreign key: none of these models declare an ORM
+        # relationship() to each other (kept deliberately plain-column, see the
+        # models), so the unit-of-work has no dependency graph to auto-order
+        # inserts by — without this, activities can get flushed before their
+        # own project row exists and the FK constraint rejects them.
+        db.flush()
+
         period = UpdatePeriod(
             id=uuid.uuid4(),
             project_id=project.id,
