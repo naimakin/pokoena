@@ -61,36 +61,55 @@ echo "<GHCR_READ_PAT>" | docker login ghcr.io -u naimakin --password-stdin
 
 ## 6. DigitalOcean Managed Postgres
 
-Row-level security needs one new DB role on top of whatever app user already
-exists — see the RLS design in `backend/alembic/versions/0001_initial_schema.py`
-and `backend/app/db/session.py`:
+Row-level security needs two new, non-superuser DB roles — see the RLS design in
+`backend/alembic/versions/0001_initial_schema.py` and `backend/app/db/session.py`.
+The original setup's `db_url` secret turned out to hold the `doadmin` superuser DSN
+directly (not a dedicated least-privilege app user, despite step 6 originally saying
+to create one) — **that matters a lot here**: a superuser always bypasses RLS, no
+exception, so the running `backend` service can never connect as `doadmin` or every
+RLS policy silently never applies. Keep `db_url`/`doadmin` for migrations only (it
+already needs full schema-owner rights for those); create two new roles for
+everything else, connected to the same database `db_url` points at (check with
+`docker exec <backend-container> cat /run/secrets/db_url` — for this deployment
+it's `defaultdb`, substitute your own if different):
 
-- Your existing app DB user (whatever `db_url` already points at) keeps doing
-  double duty as both the ordinary request-path role *and* the migration
-  role: it already owns the schema from every prior migration, so it already
-  has the `ALTER`/`CREATE POLICY` rights the RLS migration needs — no new
-  role or secret required for it. RLS applies to it too via `FORCE ROW LEVEL
-  SECURITY` on every tenant-scoped table, table ownership included.
-- `poko_bypass` is the one genuinely new role — platform support-access path
-  only. Create it via the DO control panel (your database → **Users &
-  Databases**) or `doadmin`, then grant it `BYPASSRLS`:
-  `ALTER ROLE poko_bypass BYPASSRLS;`. **Verify DO's managed offering actually
-  allows granting BYPASSRLS before relying on this in production** — if it
-  doesn't, the platform support-access feature needs to stay disabled until
-  there's another way to grant it (e.g. a support ticket).
+```sql
+-- Run as doadmin (DO control panel → your database → Console, or `psql "$(cat db_url-value)"`)
+CREATE ROLE poko_app LOGIN PASSWORD 'REPLACE_STRONG_PASSWORD_1';
+GRANT USAGE ON SCHEMA public TO poko_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO poko_app;
+
+CREATE ROLE poko_bypass LOGIN PASSWORD 'REPLACE_STRONG_PASSWORD_2' BYPASSRLS;
+GRANT USAGE ON SCHEMA public TO poko_bypass;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO poko_bypass;
+
+-- Applies to both, scoped to whichever role runs this (doadmin) so tables the
+-- migration job creates later are covered automatically, not just existing ones.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO poko_app, poko_bypass;
+```
+
+`poko_bypass` also needs `BYPASSRLS` verified as actually grantable on your DO plan
+before relying on it in production — if it isn't, the platform support-access
+feature needs to stay disabled until there's another way to grant it (e.g. a
+support ticket).
 
 Also:
 - **Trusted Sources**: this droplet should already be added (Databases → your
   DB → Settings → Trusted Sources) from the original setup.
-- DO managed Postgres requires TLS — the DSN below includes `sslmode=require`.
+- DO managed Postgres requires TLS — the DSNs below include `sslmode=require`.
 
-## 7. Create the one new Docker Swarm secret
+## 7. Create the two new Docker Swarm secrets
 
-`db_url` and `jwt_secret` should already exist from the original setup — only
-`db_url_bypass` is new:
+`db_url` and `jwt_secret` already exist from the original setup and don't change —
+`db_url_app` and `db_url_bypass` are new (same host/port/database as `db_url`, just
+the new role names and passwords from step 6):
 
 ```bash
-printf 'postgresql+psycopg://poko_bypass:REPLACE_DB_PASSWORD@REPLACE-db-host.db.ondigitalocean.com:25060/poko?sslmode=require' \
+printf 'postgresql+psycopg://poko_app:REPLACE_STRONG_PASSWORD_1@REPLACE-db-host.db.ondigitalocean.com:25060/defaultdb?sslmode=require' \
+  | docker secret create db_url_app -
+
+printf 'postgresql+psycopg://poko_bypass:REPLACE_STRONG_PASSWORD_2@REPLACE-db-host.db.ondigitalocean.com:25060/defaultdb?sslmode=require' \
   | docker secret create db_url_bypass -
 
 # Cloudflare dashboard -> My Profile -> API Tokens -> Create Token -> "Edit zone DNS"
@@ -193,7 +212,8 @@ curl -I https://api.pokoena.com/healthz
 | `DO_SSH_HOST` / `DO_SSH_USER` / `DO_SSH_KEY` | GitHub Actions secrets | Deploy job's `DOCKER_HOST=ssh://` |
 | `GITHUB_TOKEN` | Built-in per workflow run | Push images to GHCR; forwarded for `--with-registry-auth` |
 | GHCR read PAT | Local `docker login` on the droplet only (not a GitHub secret) | Manual `docker service` ops outside CI |
-| `db_url` | Docker Swarm secret | Postgres DSN for `backend`'s ordinary requests; also reused for `DATABASE_URL_MIGRATE` (same role, it already owns the schema) |
+| `db_url` | Docker Swarm secret | Postgres DSN as `doadmin` (superuser) — migration job only, `app-stack.yml`'s `backend` never uses it |
+| `db_url_app` | Docker Swarm secret | Postgres DSN as `poko_app` (ordinary, RLS-bound) — what `backend` actually connects with |
 | `db_url_bypass` | Docker Swarm secret | Postgres DSN as `poko_bypass` (BYPASSRLS) — platform support-access path only |
 | `jwt_secret` | Docker Swarm secret | JWT signing key — wired to both `backend` and `frontend` (middleware/`auth()` verify the same JWTs) in `app-stack.yml` |
 | `cf_api_token` | Docker Swarm secret | Traefik's Cloudflare DNS-01 ACME resolver |

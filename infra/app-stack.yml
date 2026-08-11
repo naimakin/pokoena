@@ -17,7 +17,11 @@ networks:
     external: true
 
 secrets:
-  db_url:
+  # NOT db_url — that secret holds the doadmin superuser DSN, used only by the
+  # one-shot migration job in deploy.yml. A superuser always bypasses RLS, so
+  # the running backend service must connect as the unprivileged poko_app
+  # role instead, or every RLS policy silently never applies.
+  db_url_app:
     external: true
   db_url_bypass:
     external: true
@@ -63,12 +67,12 @@ services:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       ENV: production
-      DATABASE_URL_FILE: /run/secrets/db_url
+      DATABASE_URL_FILE: /run/secrets/db_url_app
       DATABASE_URL_BYPASS_FILE: /run/secrets/db_url_bypass
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       CORS_ORIGINS: "https://pokoena.com,https://www.pokoena.com"
       COOKIE_DOMAIN: ".pokoena.com"
-    secrets: [db_url, db_url_bypass, jwt_secret]
+    secrets: [db_url_app, db_url_bypass, jwt_secret]
     networks: [traefik-public]
     deploy:
       replicas: 1
