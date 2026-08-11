@@ -61,42 +61,37 @@ echo "<GHCR_READ_PAT>" | docker login ghcr.io -u naimakin --password-stdin
 
 ## 6. DigitalOcean Managed Postgres
 
-Row-level security needs three separate DB roles — see the RLS design in
-`backend/alembic/versions/0001_initial_schema.py` and `backend/app/db/session.py`.
-A managed-Postgres app user generally can't `CREATE ROLE` itself, so all three are
-created once, by hand, via the DO control panel (your database →
-**Users & Databases**) — never reuse the default admin superuser for any of them:
+Row-level security needs one new DB role on top of whatever app user already
+exists — see the RLS design in `backend/alembic/versions/0001_initial_schema.py`
+and `backend/app/db/session.py`:
 
-- `poko` (or your migration user) — schema owner, runs `alembic upgrade`. Needs
-  `CREATE`/`ALTER`/`GRANT` on the `public` schema (DO's "Add new user" gives a
-  normal role by default; grant it schema ownership once via `doadmin`).
-- `poko_app` — ordinary request path. RLS-bound: no special grants beyond normal
-  table CRUD (RLS policies restrict rows automatically once `poko` grants them).
-- `poko_bypass` — platform support-access path only. Needs `BYPASSRLS`, granted via
-  `ALTER ROLE poko_bypass BYPASSRLS;` as `doadmin`. **Verify DO's managed offering
-  actually allows granting BYPASSRLS to a non-admin role before relying on this in
-  production** — if it doesn't, the platform support-access feature needs to stay
-  disabled until there's another way to grant it (e.g. a support ticket).
+- Your existing app DB user (whatever `db_url` already points at) keeps doing
+  double duty as both the ordinary request-path role *and* the migration
+  role: it already owns the schema from every prior migration, so it already
+  has the `ALTER`/`CREATE POLICY` rights the RLS migration needs — no new
+  role or secret required for it. RLS applies to it too via `FORCE ROW LEVEL
+  SECURITY` on every tenant-scoped table, table ownership included.
+- `poko_bypass` is the one genuinely new role — platform support-access path
+  only. Create it via the DO control panel (your database → **Users &
+  Databases**) or `doadmin`, then grant it `BYPASSRLS`:
+  `ALTER ROLE poko_bypass BYPASSRLS;`. **Verify DO's managed offering actually
+  allows granting BYPASSRLS before relying on this in production** — if it
+  doesn't, the platform support-access feature needs to stay disabled until
+  there's another way to grant it (e.g. a support ticket).
 
 Also:
-- **Trusted Sources**: add this droplet (Databases → your DB → Settings → Trusted
-  Sources → add droplet). Connections are refused otherwise, even with correct
-  credentials.
-- DO managed Postgres requires TLS — the DSNs below include `sslmode=require`.
+- **Trusted Sources**: this droplet should already be added (Databases → your
+  DB → Settings → Trusted Sources) from the original setup.
+- DO managed Postgres requires TLS — the DSN below includes `sslmode=require`.
 
-## 7. Create Docker Swarm secrets
+## 7. Create the one new Docker Swarm secret
+
+`db_url` and `jwt_secret` should already exist from the original setup — only
+`db_url_bypass` is new:
 
 ```bash
-printf 'postgresql+psycopg://poko_app:REPLACE_DB_PASSWORD@REPLACE-db-host.db.ondigitalocean.com:25060/poko?sslmode=require' \
-  | docker secret create db_url -
-
 printf 'postgresql+psycopg://poko_bypass:REPLACE_DB_PASSWORD@REPLACE-db-host.db.ondigitalocean.com:25060/poko?sslmode=require' \
   | docker secret create db_url_bypass -
-
-printf 'postgresql+psycopg://poko:REPLACE_DB_PASSWORD@REPLACE-db-host.db.ondigitalocean.com:25060/poko?sslmode=require' \
-  | docker secret create db_url_migrate -
-
-openssl rand -base64 48 | docker secret create jwt_secret -
 
 # Cloudflare dashboard -> My Profile -> API Tokens -> Create Token -> "Edit zone DNS"
 # template, scoped to the pokoena.com zone only.
@@ -138,11 +133,9 @@ Run migrations *before* the first deploy so `backend` isn't crash-looping agains
 empty database on its first boot (subsequent deploys run migrations before the stack
 update the same way, via `deploy.yml`):
 
-Migrations run as the schema-owner role, not `poko_app` — use `db_url_migrate`:
-
 ```bash
 docker service create --name pokoena-migrate --network traefik-public \
-  --secret db_url_migrate --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url_migrate \
+  --secret db_url --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url \
   --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest alembic upgrade head
 docker service logs pokoena-migrate -f
@@ -200,10 +193,9 @@ curl -I https://api.pokoena.com/healthz
 | `DO_SSH_HOST` / `DO_SSH_USER` / `DO_SSH_KEY` | GitHub Actions secrets | Deploy job's `DOCKER_HOST=ssh://` |
 | `GITHUB_TOKEN` | Built-in per workflow run | Push images to GHCR; forwarded for `--with-registry-auth` |
 | GHCR read PAT | Local `docker login` on the droplet only (not a GitHub secret) | Manual `docker service` ops outside CI |
-| `db_url` | Docker Swarm secret | Postgres DSN for `backend` as `poko_app` (RLS-bound, ordinary requests) |
+| `db_url` | Docker Swarm secret | Postgres DSN for `backend`'s ordinary requests; also reused for `DATABASE_URL_MIGRATE` (same role, it already owns the schema) |
 | `db_url_bypass` | Docker Swarm secret | Postgres DSN as `poko_bypass` (BYPASSRLS) — platform support-access path only |
-| `db_url_migrate` | Docker Swarm secret | Postgres DSN as the schema-owner role — `alembic upgrade` only, not a running service |
-| `jwt_secret` | Docker Swarm secret | JWT signing key — also needed by `frontend` (middleware/`auth()` verify the same JWTs), currently only wired to `backend` in `app-stack.yml` |
+| `jwt_secret` | Docker Swarm secret | JWT signing key — wired to both `backend` and `frontend` (middleware/`auth()` verify the same JWTs) in `app-stack.yml` |
 | `cf_api_token` | Docker Swarm secret | Traefik's Cloudflare DNS-01 ACME resolver |
 | `traefik_dashboard_htpasswd` | Docker Swarm secret | Basic auth on `traefik.pokoena.com` |
 | DO Trusted Sources allowlist | DigitalOcean control panel | Firewall for the managed Postgres instance |

@@ -78,11 +78,17 @@ jobs:
           JOB="pokoena-migrate-${{ github.run_id }}"
           # traefik-public purely for internet egress to the managed Postgres host —
           # this job publishes nothing and carries no traefik labels.
+          # Reuses the existing db_url secret for DATABASE_URL_MIGRATE: the app
+          # DB user it points to already owns the schema (it ran every prior
+          # migration), so it already has the DDL rights the RLS migration
+          # needs — no separate migration-owner role/secret required. Only
+          # poko_bypass (db_url_bypass, BYPASSRLS) is a genuinely new role —
+          # see infra/README.md.
           docker service create \
             --name "$JOB" \
             --network traefik-public \
             --secret db_url \
-            --env DATABASE_URL_FILE=/run/secrets/db_url \
+            --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url \
             --restart-condition none \
             --with-registry-auth \
             "ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG}" \

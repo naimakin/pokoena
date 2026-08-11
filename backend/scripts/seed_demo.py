@@ -74,7 +74,7 @@ def main() -> None:
             id=uuid.uuid4(),
             email="admin@pokoena.com",
             hashed_password=hash_password("ChangeMe123!"),
-            full_name="Jordan Diaz",
+            full_name="naim akin",
             is_active=True,
         )
         employee_user = User(
