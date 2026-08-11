@@ -36,7 +36,12 @@ services:
     # So unlike the backend's *_FILE indirection, the secret is read from its
     # mounted file once here, at container start, and exported as a plain env
     # var before the Node process (and therefore middleware) ever sees it.
-    command: ["sh", "-c", "export JWT_SECRET=\"$(cat /run/secrets/jwt_secret)\"; exec node server.js"]
+    # `$$` (not `$`) is required: docker stack deploy runs Compose variable
+    # interpolation over this file first, and `$(...)` is not valid interpolation
+    # syntax, so an unescaped `$` fails the whole deploy with "invalid
+    # interpolation format". `$$` is the escape for a literal `$` — the container's
+    # shell receives `$(cat /run/secrets/jwt_secret)` exactly as written here.
+    command: ["sh", "-c", "export JWT_SECRET=\"$$(cat /run/secrets/jwt_secret)\"; exec node server.js"]
     environment:
       NODE_ENV: production
     secrets: [jwt_secret]
