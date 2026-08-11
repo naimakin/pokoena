@@ -117,7 +117,7 @@ export default function PlatformTenantsPage() {
             </div>
             <div className="form-row">
               <div className="field">
-                <label htmlFor="admin-email">First admin's email</label>
+                <label htmlFor="admin-email">First admin&rsquo;s email</label>
                 <input
                   id="admin-email"
                   type="email"
@@ -127,7 +127,7 @@ export default function PlatformTenantsPage() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="admin-name">First admin's name</label>
+                <label htmlFor="admin-name">First admin&rsquo;s name</label>
                 <input
                   id="admin-name"
                   required

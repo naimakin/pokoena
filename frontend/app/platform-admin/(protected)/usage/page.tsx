@@ -31,7 +31,7 @@ export default function PlatformUsagePage() {
           <div>
             <div className="page-title">Aggregate usage</div>
             <div className="page-desc">
-              Anonymized counts only — no tenant business data. Use support access on a tenant's page for anything more.
+              Anonymized counts only — no tenant business data. Use support access on a tenant&rsquo;s page for anything more.
             </div>
           </div>
         </div>
