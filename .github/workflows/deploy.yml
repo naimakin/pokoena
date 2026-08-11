@@ -84,7 +84,13 @@ jobs:
           # needs — no separate migration-owner role/secret required. Only
           # poko_bypass (db_url_bypass, BYPASSRLS) is a genuinely new role —
           # see infra/README.md.
-          docker service create \
+          # --detach is required, not cosmetic: this is a one-shot task
+          # (--restart-condition none) that exits the moment alembic finishes,
+          # and the CLI's convergence progress bar only ever accepts a task that
+          # stays *running* as converged. Without it, `docker service create`
+          # spins on "overall progress: 0 out of 1 tasks" until the step times
+          # out and the polling loop below never even starts.
+          docker service create --detach \
             --name "$JOB" \
             --network traefik-public \
             --secret db_url \
@@ -93,20 +99,42 @@ jobs:
             --with-registry-auth \
             "ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG}" \
             alembic upgrade head
-          for _ in $(seq 1 30); do
-            STATE=$(docker service ps --filter "desired-state=shutdown" --format '{{.CurrentState}}' "$JOB" | head -n1)
-            echo "migration state: $STATE"
-            if [[ "$STATE" == Complete* ]]; then break; fi
+
+          # No desired-state filter: the task is still *running* for most of this
+          # loop, and the old filter (desired-state=shutdown) matched nothing
+          # until it had already stopped.
+          STATE=""
+          for _ in $(seq 1 60); do
+            STATE=$(docker service ps --format '{{.CurrentState}}' "$JOB" 2>/dev/null | head -n1 || true)
+            echo "migration state: ${STATE:-<pending>}"
+            case "$STATE" in
+              Complete*|Failed*|Rejected*|Orphaned*) break ;;
+            esac
             sleep 2
           done
+
           docker service logs "$JOB" || true
           docker service rm "$JOB"
+
+          # Fail loudly. Previously any non-Complete outcome (including a failed
+          # migration) fell straight through to the stack deploy below, which
+          # then shipped application code against an un-migrated schema.
+          case "$STATE" in
+            Complete*) echo "Migration completed." ;;
+            *) echo "::error::Migration did not complete (last state: ${STATE:-unknown})"; exit 1 ;;
+          esac
       - name: Deploy app stack
         env:
           DOCKER_HOST: ssh://${{ secrets.DO_SSH_USER }}@${{ secrets.DO_SSH_HOST }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         run: |
+          # --detach=false so the step waits for the services to actually
+          # converge and fails if they don't. Detached (the CLI default), this
+          # returns 0 the instant the spec is accepted — so a new container that
+          # crashes and gets rolled back by update_config's failure_action still
+          # reported a green deploy while production kept running the old image.
           docker stack deploy \
             -c infra/app-stack.yml \
             --with-registry-auth \
+            --detach=false \
             pokoena
