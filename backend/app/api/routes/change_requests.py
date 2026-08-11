@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_role, require_scope_access
+from app.deps import AuthContext, get_tenant_scoped_or_404, require_role, require_scope_access
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.change_request import ChangeRequest, ChangeRequestStatus

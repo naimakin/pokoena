@@ -25,6 +25,15 @@ def _hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
+def _as_aware_utc(dt: datetime) -> datetime:
+    """SQLite (the pytest suite's engine) ignores DateTime(timezone=True) and
+    always hands back naive datetimes, even though every value is written as
+    UTC-aware; Postgres round-trips tz-aware values correctly, so this is a
+    no-op there. Values are always written as UTC, so a naive value is assumed
+    to be UTC."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def create_invite(
     db: Session,
     tenant_id: uuid.UUID,
@@ -77,7 +86,7 @@ def get_invite_preview(db: Session, raw_token: str) -> Invite:
         raise InviteError("Invalid invite link")
     if invite.status != InviteStatus.pending:
         raise InviteError("This invite has already been used or revoked")
-    if invite.expires_at < datetime.now(timezone.utc):
+    if _as_aware_utc(invite.expires_at) < datetime.now(timezone.utc):
         raise InviteError("This invite has expired")
     return invite
 
@@ -95,7 +104,7 @@ def accept_invite(db: Session, raw_token: str, password: str, full_name: str) ->
         raise InviteError("Invalid invite link")
     if invite.status != InviteStatus.pending:
         raise InviteError("This invite has already been used or revoked")
-    if invite.expires_at < datetime.now(timezone.utc):
+    if _as_aware_utc(invite.expires_at) < datetime.now(timezone.utc):
         invite.status = InviteStatus.expired
         db.commit()
         raise InviteError("This invite has expired")
