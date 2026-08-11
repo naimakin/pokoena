@@ -52,6 +52,10 @@ export default function ScopePage() {
       const me = await api.get<User>("/auth/me");
       setUser(me);
 
+      // Scope-restricted by construction: /projects and /activities are
+      // already filtered server-side to this subcontractor's assigned
+      // scopes (require_scope_access) — there's no "mine" toggle to get
+      // wrong here, the backend never returns anything else.
       const projects = await api.get<Project[]>("/projects");
       const active = projects[0] ?? null;
       setProject(active);
@@ -61,7 +65,7 @@ export default function ScopePage() {
       const openPeriod = periods.find((p) => p.status === "open") ?? null;
       setPeriod(openPeriod);
 
-      const myActivities = await api.get<Activity[]>(`/activities?project_id=${active.id}&mine=true`);
+      const myActivities = await api.get<Activity[]>(`/activities?project_id=${active.id}`);
       setActivities(myActivities);
 
       const relationshipEntries = await Promise.all(

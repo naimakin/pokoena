@@ -12,15 +12,22 @@ import {
   GridIcon,
   LayersIcon,
   UploadCloudIcon,
+  UsersIcon,
   XIcon,
 } from "@/components/icons";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: GridIcon },
-  { href: "/review-queue", label: "Change Review Queue", icon: LayersIcon },
+  { href: "/dashboard", label: "Dashboard", icon: GridIcon, adminOnly: false },
+  { href: "/review-queue", label: "Change Review Queue", icon: LayersIcon, adminOnly: true },
+  { href: "/team", label: "Team", icon: UsersIcon, adminOnly: true },
 ];
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+const ROLE_LABEL: Record<string, string> = {
+  company_admin: "Project Controls",
+  company_employee: "Employee",
+};
+
+export default function CompanyLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -47,6 +54,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         .toUpperCase()
     : "";
 
+  const visibleNav = NAV.filter((item) => !item.adminOnly || user?.role === "company_admin");
+
   return (
     <div className="app-shell">
       <aside className="a-sidebar">
@@ -63,7 +72,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <nav>
           <div className="nav-group-label">Riverside Logistics Park</div>
           <div className="navlist">
-            {NAV.map(({ href, label, icon: Icon }) => (
+            {visibleNav.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href} className={`navitem${pathname?.startsWith(href) ? " active" : ""}`}>
                 <Icon className="icon" />
                 <span>{label}</span>
@@ -91,7 +100,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="avatar">{initials}</div>
           <div>
             <div className="who">{user?.full_name ?? "…"}</div>
-            <div className="role">{user?.role === "admin" ? "Project Controls" : "Viewer"}</div>
+            <div className="role">{user ? (ROLE_LABEL[user.role] ?? user.role) : ""}</div>
           </div>
           <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
             <XIcon className="icon" />

@@ -28,17 +28,35 @@ def _secret(name: str, default: str | None = None, required: bool = True) -> str
 class Settings(BaseModel):
     env: str = os.getenv("ENV", "development")
 
+    # Normal request path: RLS-bound `poko_app` role — every tenant-scoped query
+    # this connection makes is filtered by the session's `app.current_tenant_id`.
     database_url: str = _secret(
-        "DATABASE_URL", "postgresql+psycopg://poko:poko@localhost:5432/poko"
+        "DATABASE_URL", "postgresql+psycopg://poko_app:poko_app@localhost:5432/poko"
+    )
+    # Narrow, explicitly-audited path only: `poko_bypass` has BYPASSRLS. Never used
+    # for ordinary request handling — see app/db/session.py and the platform
+    # support-access route.
+    database_url_bypass: str = _secret(
+        "DATABASE_URL_BYPASS", "postgresql+psycopg://poko_bypass:poko_bypass@localhost:5432/poko"
+    )
+    # Alembic and one-off scripts (create_admin/seed_demo) run as the migration
+    # owner, which needs CREATEROLE/table-owner privileges the two roles above
+    # deliberately don't have.
+    database_url_migrate: str = _secret(
+        "DATABASE_URL_MIGRATE", "postgresql+psycopg://poko:poko@localhost:5432/poko"
     )
 
     jwt_secret: str = _secret("JWT_SECRET", "dev-insecure-secret-change-me")
     jwt_algorithm: str = "HS256"
-    jwt_expires_minutes: int = int(os.getenv("JWT_EXPIRES_MINUTES", "480"))
+    jwt_access_expires_minutes: int = int(os.getenv("JWT_ACCESS_EXPIRES_MINUTES", "15"))
+    jwt_refresh_expires_days: int = int(os.getenv("JWT_REFRESH_EXPIRES_DAYS", "14"))
 
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
     redis_password: str | None = _secret("REDIS_PASSWORD", None, required=False)
+
+    # Base URL for links embedded in emails (invite-accept, etc.).
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     cors_origins: list[str] = [
         origin.strip()

@@ -11,8 +11,9 @@ class ActivityOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    tenant_id: uuid.UUID
     project_id: uuid.UUID
-    company_id: uuid.UUID | None
+    project_scope_id: uuid.UUID | None
     external_id: str
     name: str
     discipline: str

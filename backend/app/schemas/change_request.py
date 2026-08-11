@@ -38,7 +38,7 @@ class ChangeRequestOut(BaseModel):
     # Populated by list_change_requests() for display; absent (falls back to None)
     # on the create/approve/reject responses, which return the bare ORM row.
     requested_by_name: str | None = None
-    requested_by_company: str | None = None
+    requested_by_org: str | None = None
     activity_name: str | None = None
     activity_external_id: str | None = None
 

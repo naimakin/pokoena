@@ -4,11 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import (
+    AuthContext,
+    get_current_tenant_user,
+    get_tenant_scoped_or_404,
+    require_project_permission,
+    require_scope_access,
+)
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship
+from app.models.project import Project
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
-from app.models.user import User, UserRole
+from app.models.user_tenant_role import TenantRole
 from app.schemas.activity import ActivityOut, ActivityRelationshipOut, ActivityUpdate
 
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -19,25 +26,33 @@ def list_activities(
     project_id: uuid.UUID,
     mine: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[Activity]:
-    query = db.query(Activity).filter(Activity.project_id == project_id)
-    if mine or user.role == UserRole.subcontractor:
-        if not user.company_id:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+
+    query = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id)
+    if mine or ctx.role == TenantRole.subcontractor:
+        if not ctx.scope_ids:
             return []
-        query = query.filter(Activity.company_id == user.company_id)
+        query = query.filter(Activity.project_scope_id.in_(ctx.scope_ids))
     return query.order_by(Activity.external_id).all()
 
 
 @router.get("/{activity_id}/relationships", response_model=list[ActivityRelationshipOut])
 def list_activity_relationships(
-    activity_id: uuid.UUID, db: Session = Depends(get_db), _=Depends(get_current_user)
+    activity_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> list[ActivityRelationship]:
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx)
+    require_scope_access(activity.project_scope_id, ctx)
+
     relationships = (
         db.query(ActivityRelationship)
         .filter(
+            ActivityRelationship.tenant_id == ctx.tenant_id,
             (ActivityRelationship.predecessor_id == activity_id)
-            | (ActivityRelationship.successor_id == activity_id)
+            | (ActivityRelationship.successor_id == activity_id),
         )
         .all()
     )
@@ -66,15 +81,12 @@ def update_activity(
     activity_id: uuid.UUID,
     payload: ActivityUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> Activity:
-    activity = db.get(Activity, activity_id)
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
 
-    if user.role == UserRole.subcontractor:
-        if activity.company_id != user.company_id:
-            raise HTTPException(status_code=403, detail="Not your scope")
+    if ctx.role == TenantRole.subcontractor:
+        require_scope_access(activity.project_scope_id, ctx)
         open_period = (
             db.query(UpdatePeriod)
             .filter(
@@ -85,7 +97,9 @@ def update_activity(
         )
         if not open_period:
             raise HTTPException(status_code=400, detail="No open update period for this project")
-    elif user.role != UserRole.admin:
+    elif ctx.role == TenantRole.company_employee:
+        require_project_permission(db, activity.project_id, ctx, need_edit=True)
+    elif ctx.role != TenantRole.company_admin:
         raise HTTPException(status_code=403, detail="Not permitted")
 
     changes = payload.model_dump(exclude_unset=True)

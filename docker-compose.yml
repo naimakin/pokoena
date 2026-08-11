@@ -12,6 +12,10 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Bootstraps the poko_app/poko_bypass RLS roles on first init only — see
+      # infra/postgres/init/01_rls_roles.sql. Re-run `docker compose down -v`
+      # (drops postgres_data) if you need it to re-apply after editing it.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U poko"]
       interval: 5s
@@ -25,14 +29,17 @@ services:
 
   backend:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       ENV: development
-      DATABASE_URL: postgresql+psycopg://poko:poko@postgres:5432/poko
+      DATABASE_URL: postgresql+psycopg://poko_app:poko_app@postgres:5432/poko
+      DATABASE_URL_BYPASS: postgresql+psycopg://poko_bypass:poko_bypass@postgres:5432/poko
+      DATABASE_URL_MIGRATE: postgresql+psycopg://poko:poko@postgres:5432/poko
       JWT_SECRET: dev-insecure-secret-change-me
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       CORS_ORIGINS: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
     volumes:
       - ./backend:/app
     ports:
@@ -46,10 +53,13 @@ services:
     command: celery -A app.worker.celery_app worker --loglevel=INFO
     environment:
       ENV: development
-      DATABASE_URL: postgresql+psycopg://poko:poko@postgres:5432/poko
+      DATABASE_URL: postgresql+psycopg://poko_app:poko_app@postgres:5432/poko
+      DATABASE_URL_BYPASS: postgresql+psycopg://poko_bypass:poko_bypass@postgres:5432/poko
+      DATABASE_URL_MIGRATE: postgresql+psycopg://poko:poko@postgres:5432/poko
       JWT_SECRET: dev-insecure-secret-change-me
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      FRONTEND_URL: http://localhost:3000
     volumes:
       - ./backend:/app
     depends_on:
@@ -62,6 +72,9 @@ services:
     command: sh -c "npm install && npm run dev"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # Server-only (no NEXT_PUBLIC_ prefix): middleware.ts and lib/auth.ts verify
+      # the backend's JWTs at the edge/in Server Components, never in the browser.
+      JWT_SECRET: dev-insecure-secret-change-me
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

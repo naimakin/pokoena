@@ -18,9 +18,10 @@ class Activity(Base):
     __tablename__ = "activities"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    company_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("companies.id"), nullable=True, index=True
+    project_scope_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("project_scopes.id"), nullable=True, index=True
     )
     external_id: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

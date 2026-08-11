@@ -4,15 +4,9 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { BuildingIcon } from "@/components/icons";
-import type { User } from "@/lib/types";
+import type { PlatformAdmin } from "@/lib/types";
 
-const ROLE_HOME: Record<string, string> = {
-  admin: "/dashboard",
-  viewer: "/dashboard",
-  subcontractor: "/scope",
-};
-
-export default function LoginPage() {
+export default function PlatformLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,8 +18,8 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const user = await api.post<User>("/auth/login", { email, password });
-      router.push(ROLE_HOME[user.role] ?? "/login");
+      await api.post<PlatformAdmin>("/platform-auth/login", { email, password });
+      router.push("/platform-admin/tenants");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
@@ -42,7 +36,7 @@ export default function LoginPage() {
           </div>
           <div>
             <div className="login-title">POKO</div>
-            <div className="login-sub">Project Intelligence &amp; Execution</div>
+            <div className="login-sub">Platform Admin — internal staff only</div>
           </div>
         </div>
 
@@ -74,6 +68,10 @@ export default function LoginPage() {
         <button className="btn btn-primary btn-block" type="submit" disabled={submitting}>
           {submitting ? "Signing in…" : "Sign in"}
         </button>
+
+        <a className="login-footnote" href="/login">
+          Tenant sign in
+        </a>
       </form>
     </div>
   );

@@ -91,14 +91,12 @@ export default function DashboardPage() {
     );
   }
 
-  const pendingCount = summary ? summary.companies_total - summary.companies_submitted : 0;
+  const pendingCount = summary ? summary.orgs_total - summary.orgs_submitted : 0;
   const deadlineAt = summary?.deadline_at ?? null;
   const deadlineDays = daysUntil(deadlineAt);
   const deadlineDateLabel = deadlineAt ? `Deadline ${new Date(deadlineAt).toLocaleDateString()}` : "No deadline set";
   const submittedPct =
-    summary && summary.companies_total > 0
-      ? Math.round((summary.companies_submitted / summary.companies_total) * 100)
-      : 0;
+    summary && summary.orgs_total > 0 ? Math.round((summary.orgs_submitted / summary.orgs_total) * 100) : 0;
 
   return (
     <>
@@ -139,7 +137,7 @@ export default function DashboardPage() {
             <AlertTriangleIcon className="icon" />
             <span className="banner-text">
               <b>
-                {pendingCount} of {summary?.companies_total} scopes
+                {pendingCount} of {summary?.orgs_total} scopes
               </b>{" "}
               haven&rsquo;t submitted yet. Closing now will freeze their activities at last-saved values.
             </span>
@@ -194,10 +192,10 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="kpi-value">
-              {summary?.companies_submitted ?? 0}
+              {summary?.orgs_submitted ?? 0}
               <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)" }}>
                 {" "}
-                / {summary?.companies_total ?? 0}
+                / {summary?.orgs_total ?? 0}
               </span>
             </div>
             <div className="progress">
@@ -222,7 +220,7 @@ export default function DashboardPage() {
             <div>
               <div className="card-title">Scope submission status</div>
               <div className="card-title-sub">
-                {summary?.companies_total ?? 0} subcontractors &middot; {summary?.active_period_label ?? "—"}
+                {summary?.orgs_total ?? 0} subcontractors &middot; {summary?.active_period_label ?? "—"}
               </div>
             </div>
           </div>
@@ -240,11 +238,11 @@ export default function DashboardPage() {
               <tbody>
                 {summary && summary.scope_status.length > 0 ? (
                   summary.scope_status.map((row) => (
-                    <tr key={row.company_id}>
+                    <tr key={row.subcontractor_org_id}>
                       <td>
                         <div className="cell-flex">
-                          <div className="subrow-avatar">{row.company_name.slice(0, 2).toUpperCase()}</div>
-                          <span className="subname">{row.company_name}</span>
+                          <div className="subrow-avatar">{row.org_name.slice(0, 2).toUpperCase()}</div>
+                          <span className="subname">{row.org_name}</span>
                         </div>
                       </td>
                       <td>{row.discipline}</td>

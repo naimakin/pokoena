@@ -1,31 +1,25 @@
-import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
 
-class UserRole(str, enum.Enum):
-    admin = "admin"
-    subcontractor = "subcontractor"
-    viewer = "viewer"
-
-
 class User(Base):
+    """A person. Platform-level identity only — which tenant(s) they can access
+    and with what role lives in UserTenantRole, not here. `is_platform_admin` is
+    orthogonal to tenant membership: POKO staff never hold a UserTenantRole row."""
+
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nullable: an invited-but-not-yet-activated user has no password yet, and a
+    # future SSO-only account may never have one (see UserIdentity).
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole, name="user_role"), nullable=False, default=UserRole.viewer
-    )
-    company_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("companies.id"), nullable=True
-    )
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

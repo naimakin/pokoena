@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.notifications import send_reminder_email
 from app.db.session import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_role
+from app.models.project import Project
 from app.models.scope_submission import ScopeSubmission
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
-from app.models.user import User, UserRole
+from app.models.user import User
+from app.models.user_tenant_role import TenantRole, UserTenantRole
 from app.schemas.update_period import UpdatePeriodCreate, UpdatePeriodOut
 
 router = APIRouter(prefix="/update-periods", tags=["update-periods"])
@@ -17,11 +19,12 @@ router = APIRouter(prefix="/update-periods", tags=["update-periods"])
 
 @router.get("", response_model=list[UpdatePeriodOut])
 def list_update_periods(
-    project_id: uuid.UUID, db: Session = Depends(get_db), _=Depends(get_current_user)
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> list[UpdatePeriod]:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
     return (
         db.query(UpdatePeriod)
-        .filter(UpdatePeriod.project_id == project_id)
+        .filter(UpdatePeriod.tenant_id == ctx.tenant_id, UpdatePeriod.project_id == project_id)
         .order_by(UpdatePeriod.period_number.desc())
         .all()
     )
@@ -29,9 +32,14 @@ def list_update_periods(
 
 @router.post("", response_model=UpdatePeriodOut, status_code=status.HTTP_201_CREATED)
 def open_update_period(
-    payload: UpdatePeriodCreate, db: Session = Depends(get_db), _=Depends(require_roles("admin"))
+    payload: UpdatePeriodCreate,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
 ) -> UpdatePeriod:
-    period = UpdatePeriod(id=uuid.uuid4(), status=UpdatePeriodStatus.open, **payload.model_dump())
+    get_tenant_scoped_or_404(db, Project, payload.project_id, ctx)
+    period = UpdatePeriod(
+        id=uuid.uuid4(), tenant_id=ctx.tenant_id, status=UpdatePeriodStatus.open, **payload.model_dump()
+    )
     db.add(period)
     db.commit()
     db.refresh(period)
@@ -40,11 +48,11 @@ def open_update_period(
 
 @router.post("/{period_id}/close", response_model=UpdatePeriodOut)
 def close_update_period(
-    period_id: uuid.UUID, db: Session = Depends(get_db), _=Depends(require_roles("admin"))
+    period_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
 ) -> UpdatePeriod:
-    period = db.get(UpdatePeriod, period_id)
-    if not period:
-        raise HTTPException(status_code=404, detail="Update period not found")
+    period = get_tenant_scoped_or_404(db, UpdatePeriod, period_id, ctx)
     period.status = UpdatePeriodStatus.closed
     period.closed_at = datetime.now(timezone.utc)
     db.commit()
@@ -56,19 +64,19 @@ def close_update_period(
 def submit_scope(
     period_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("subcontractor")),
+    ctx: AuthContext = Depends(require_role(TenantRole.subcontractor)),
 ) -> UpdatePeriod:
-    period = db.get(UpdatePeriod, period_id)
-    if not period or period.status != UpdatePeriodStatus.open:
+    period = get_tenant_scoped_or_404(db, UpdatePeriod, period_id, ctx)
+    if period.status != UpdatePeriodStatus.open:
         raise HTTPException(status_code=400, detail="Update period is not open")
-    if not user.company_id:
-        raise HTTPException(status_code=400, detail="User has no assigned company")
+    if not ctx.subcontractor_org_id:
+        raise HTTPException(status_code=400, detail="User has no assigned subcontractor organization")
 
     existing = (
         db.query(ScopeSubmission)
         .filter(
             ScopeSubmission.update_period_id == period_id,
-            ScopeSubmission.company_id == user.company_id,
+            ScopeSubmission.subcontractor_org_id == ctx.subcontractor_org_id,
         )
         .first()
     )
@@ -76,9 +84,10 @@ def submit_scope(
         db.add(
             ScopeSubmission(
                 id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
                 update_period_id=period_id,
-                company_id=user.company_id,
-                submitted_by_user_id=user.id,
+                subcontractor_org_id=ctx.subcontractor_org_id,
+                submitted_by_user_id=ctx.user.id,
             )
         )
         db.commit()
@@ -87,23 +96,34 @@ def submit_scope(
 
 @router.post("/{period_id}/remind")
 def remind_non_responders(
-    period_id: uuid.UUID, db: Session = Depends(get_db), _=Depends(require_roles("admin"))
+    period_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
 ) -> dict:
-    period = db.get(UpdatePeriod, period_id)
-    if not period:
-        raise HTTPException(status_code=404, detail="Update period not found")
+    period = get_tenant_scoped_or_404(db, UpdatePeriod, period_id, ctx)
 
-    submitted_company_ids = {
-        row.company_id
-        for row in db.query(ScopeSubmission).filter(ScopeSubmission.update_period_id == period_id).all()
+    submitted_org_ids = {
+        row.subcontractor_org_id
+        for row in db.query(ScopeSubmission)
+        .filter(ScopeSubmission.update_period_id == period_id)
+        .all()
     }
 
-    query = db.query(User).filter(User.role == UserRole.subcontractor, User.company_id.isnot(None))
-    if submitted_company_ids:
-        query = query.filter(~User.company_id.in_(submitted_company_ids))
+    query = (
+        db.query(User, UserTenantRole)
+        .join(UserTenantRole, UserTenantRole.user_id == User.id)
+        .filter(
+            UserTenantRole.tenant_id == ctx.tenant_id,
+            UserTenantRole.role == TenantRole.subcontractor,
+            UserTenantRole.is_active.is_(True),
+            UserTenantRole.subcontractor_org_id.isnot(None),
+        )
+    )
+    if submitted_org_ids:
+        query = query.filter(~UserTenantRole.subcontractor_org_id.in_(submitted_org_ids))
     non_responders = query.all()
 
-    for user in non_responders:
+    for user, _membership in non_responders:
         send_reminder_email(
             user.email,
             f"Reminder: {period.label} closes soon",

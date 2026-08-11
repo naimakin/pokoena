@@ -1,18 +1,53 @@
-export type UserRole = "admin" | "subcontractor" | "viewer";
+export type TenantRole = "company_admin" | "company_employee" | "subcontractor";
 
 export interface User {
   id: string;
   email: string;
   full_name: string;
-  role: UserRole;
-  company_id: string | null;
   is_active: boolean;
+  tenant_id: string;
+  role: TenantRole;
+  scope_ids: string[];
+}
+
+export interface PlatformAdmin {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+}
+
+export type TenantStatus = "active" | "suspended" | "deleted";
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: TenantStatus;
+  created_at: string;
+}
+
+export interface UsageSummary {
+  tenant_count: number;
+  active_tenant_count: number;
+  total_users: number;
+  total_projects: number;
 }
 
 export interface Project {
   id: string;
+  tenant_id: string;
   name: string;
   code: string;
+}
+
+export interface ProjectScope {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  subcontractor_org_id: string | null;
+  name: string;
+  discipline: string;
 }
 
 export type UpdatePeriodStatus = "open" | "closed";
@@ -32,8 +67,9 @@ export type ActivityStatus = "not_started" | "in_progress" | "complete";
 
 export interface Activity {
   id: string;
+  tenant_id: string;
   project_id: string;
-  company_id: string | null;
+  project_scope_id: string | null;
   external_id: string;
   name: string;
   discipline: string;
@@ -84,14 +120,14 @@ export interface ChangeRequest {
   reviewed_at: string | null;
   created_at: string;
   requested_by_name?: string | null;
-  requested_by_company?: string | null;
+  requested_by_org?: string | null;
   activity_name?: string | null;
   activity_external_id?: string | null;
 }
 
 export interface ScopeSubmissionStatus {
-  company_id: string;
-  company_name: string;
+  subcontractor_org_id: string;
+  org_name: string;
   discipline: string;
   activity_count: number;
   avg_percent_complete: number;
@@ -103,8 +139,47 @@ export interface DashboardSummary {
   active_period_label: string | null;
   active_period_status: UpdatePeriodStatus | null;
   deadline_at: string | null;
-  companies_total: number;
-  companies_submitted: number;
+  orgs_total: number;
+  orgs_submitted: number;
   flagged_pending: number;
   scope_status: ScopeSubmissionStatus[];
+}
+
+export interface ProjectMembershipInput {
+  project_id: string;
+  permission: "view" | "edit";
+}
+
+export interface InviteCreatePayload {
+  email: string;
+  role: TenantRole;
+  full_name?: string;
+  project_memberships?: ProjectMembershipInput[];
+  project_scope_ids?: string[];
+  subcontractor_org_id?: string | null;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: TenantRole;
+  status: string;
+  expires_at: string;
+}
+
+export interface InvitePreview {
+  email: string;
+  role: TenantRole;
+  tenant_name: string;
+  expires_at: string;
+}
+
+export interface TeamMember {
+  user_tenant_role_id: string;
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: TenantRole;
+  is_active: boolean;
+  created_at: string;
 }

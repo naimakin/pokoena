@@ -163,7 +163,7 @@ export default function ReviewQueuePage() {
                 )}
                 {items.map((item) => {
                   const isPending = item.status === "pending";
-                  const who = item.requested_by_company ?? item.requested_by_name ?? "Unknown";
+                  const who = item.requested_by_org ?? item.requested_by_name ?? "Unknown";
                   return (
                     <tr key={item.id} className={isPending ? "" : "resolved"}>
                       <td>

@@ -4,12 +4,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import require_roles
+from app.deps import AuthContext, get_tenant_scoped_or_404, require_role
 from app.models.activity import Activity
 from app.models.change_request import ChangeRequest, ChangeRequestStatus
-from app.models.company import Company
+from app.models.project import Project
+from app.models.project_scope import ProjectScope
 from app.models.scope_submission import ScopeSubmission
+from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
+from app.models.user_tenant_role import TenantRole
 from app.schemas.dashboard import DashboardSummary, ScopeSubmissionStatus
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -17,19 +20,25 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("/summary", response_model=DashboardSummary)
 def dashboard_summary(
-    project_id: uuid.UUID, db: Session = Depends(get_db), _=Depends(require_roles("admin", "viewer"))
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
 ) -> DashboardSummary:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+
     period = (
         db.query(UpdatePeriod)
-        .filter(UpdatePeriod.project_id == project_id)
+        .filter(UpdatePeriod.tenant_id == ctx.tenant_id, UpdatePeriod.project_id == project_id)
         .order_by(UpdatePeriod.period_number.desc())
         .first()
     )
 
-    companies = (
-        db.query(Company)
-        .join(Activity, Activity.company_id == Company.id)
-        .filter(Activity.project_id == project_id)
+    # Orgs represented in this project: distinct subcontractor_org_id across the
+    # project's scopes (a scope's org tag, not per-activity — see ProjectScope).
+    orgs = (
+        db.query(SubcontractorOrganization)
+        .join(ProjectScope, ProjectScope.subcontractor_org_id == SubcontractorOrganization.id)
+        .filter(ProjectScope.project_id == project_id, ProjectScope.tenant_id == ctx.tenant_id)
         .distinct()
         .all()
     )
@@ -38,8 +47,10 @@ def dashboard_summary(
     flagged_pending = 0
     if period:
         submitted_ids = {
-            row.company_id
-            for row in db.query(ScopeSubmission).filter(ScopeSubmission.update_period_id == period.id).all()
+            row.subcontractor_org_id
+            for row in db.query(ScopeSubmission)
+            .filter(ScopeSubmission.update_period_id == period.id)
+            .all()
         }
         flagged_pending = (
             db.query(ChangeRequest)
@@ -51,21 +62,25 @@ def dashboard_summary(
         )
 
     scope_status = []
-    for company in companies:
+    for org in orgs:
         activities = (
             db.query(Activity)
-            .filter(Activity.project_id == project_id, Activity.company_id == company.id)
+            .join(ProjectScope, ProjectScope.id == Activity.project_scope_id)
+            .filter(
+                Activity.project_id == project_id,
+                ProjectScope.subcontractor_org_id == org.id,
+            )
             .all()
         )
         avg_pct = sum(a.percent_complete for a in activities) / len(activities) if activities else 0.0
         scope_status.append(
             ScopeSubmissionStatus(
-                company_id=company.id,
-                company_name=company.name,
-                discipline=company.discipline,
+                subcontractor_org_id=org.id,
+                org_name=org.name,
+                discipline=org.discipline,
                 activity_count=len(activities),
                 avg_percent_complete=round(avg_pct, 1),
-                submitted=company.id in submitted_ids,
+                submitted=org.id in submitted_ids,
             )
         )
 
@@ -74,8 +89,8 @@ def dashboard_summary(
         active_period_label=period.label if period else None,
         active_period_status=period.status.value if period else None,
         deadline_at=period.deadline_at if period else None,
-        companies_total=len(companies),
-        companies_submitted=len(submitted_ids),
+        orgs_total=len(orgs),
+        orgs_submitted=len(submitted_ids),
         flagged_pending=flagged_pending,
         scope_status=scope_status,
     )

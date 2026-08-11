@@ -24,6 +24,7 @@ class ChangeRequest(Base):
     __tablename__ = "change_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     update_period_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("update_periods.id"), nullable=False, index=True
     )

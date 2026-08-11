@@ -1,47 +1,87 @@
-"""Seeds a demo project so the three Phase 1 screens have real data to render.
+"""Seeds a demo tenant so the three Phase 1 screens have real data to render.
 
 Usage (from backend/): python -m scripts.seed_demo
 
-Idempotent: re-running skips creation if the project code already exists.
+Idempotent: re-running skips creation if the tenant slug already exists.
 """
 
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from app.core.security import hash_password
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, set_rls_context
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
-from app.models.company import Company
 from app.models.project import Project
+from app.models.project_membership import ProjectMembership, ProjectPermission
+from app.models.project_scope import ProjectScope
+from app.models.subcontractor_organization import SubcontractorOrganization
+from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
+from app.models.tenant import Tenant, TenantStatus
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
-from app.models.user import User, UserRole
+from app.models.user import User
+from app.models.user_tenant_role import TenantRole, UserTenantRole
 
+TENANT_SLUG = "riverside-logistics"
 PROJECT_CODE = "RLP-P2"
 
 
 def main() -> None:
     db = SessionLocal()
     try:
-        if db.query(Project).filter(Project.code == PROJECT_CODE).first():
-            print(f"Project {PROJECT_CODE} already seeded — skipping.")
+        if db.query(Tenant).filter(Tenant.slug == TENANT_SLUG).first():
+            print(f"Tenant {TENANT_SLUG} already seeded — skipping.")
             return
 
-        project = Project(id=uuid.uuid4(), name="Riverside Logistics Park — Phase 2", code=PROJECT_CODE)
+        tenant = Tenant(
+            id=uuid.uuid4(),
+            name="Riverside Logistics Park GC",
+            slug=TENANT_SLUG,
+            status=TenantStatus.active,
+        )
+        db.add(tenant)
+        db.flush()
+
+        # Every insert below needs this tenant's RLS context set — this script
+        # uses the same RLS-bound poko_app connection a real request would, it
+        # just isn't going through a FastAPI dependency to get the context set.
+        set_rls_context(db, tenant.id)
+
+        project = Project(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            name="Riverside Logistics Park — Phase 2",
+            code=PROJECT_CODE,
+        )
         db.add(project)
 
-        structural = Company(id=uuid.uuid4(), name="Structural Concrete Co.", discipline="Structural")
-        mep = Company(id=uuid.uuid4(), name="MEP Systems Inc.", discipline="Mechanical/Electrical/Plumbing")
-        steel = Company(id=uuid.uuid4(), name="Steel Erectors LLC", discipline="Structural Steel")
-        db.add_all([structural, mep, steel])
+        structural_org = SubcontractorOrganization(
+            id=uuid.uuid4(), tenant_id=tenant.id, name="Structural Concrete Co.", discipline="Structural"
+        )
+        mep_org = SubcontractorOrganization(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            name="MEP Systems Inc.",
+            discipline="Mechanical/Electrical/Plumbing",
+        )
+        steel_org = SubcontractorOrganization(
+            id=uuid.uuid4(), tenant_id=tenant.id, name="Steel Erectors LLC", discipline="Structural Steel"
+        )
+        db.add_all([structural_org, mep_org, steel_org])
 
-        admin = User(
+        admin_user = User(
             id=uuid.uuid4(),
             email="admin@pokoena.com",
             hashed_password=hash_password("ChangeMe123!"),
             full_name="Jordan Diaz",
-            role=UserRole.admin,
+            is_active=True,
+        )
+        employee_user = User(
+            id=uuid.uuid4(),
+            email="employee@pokoena.com",
+            hashed_password=hash_password("ChangeMe123!"),
+            full_name="Sam Rivera",
             is_active=True,
         )
         sub_user = User(
@@ -49,22 +89,57 @@ def main() -> None:
             email="mep@pokoena.com",
             hashed_password=hash_password("ChangeMe123!"),
             full_name="Riley Kim",
-            role=UserRole.subcontractor,
-            company_id=mep.id,
             is_active=True,
         )
-        db.add_all([admin, sub_user])
+        db.add_all([admin_user, employee_user, sub_user])
 
-        # Flush the parent rows (project/companies/users) before anything that
+        # Flush every parent row (project/orgs/users) before anything that
         # references them by foreign key: none of these models declare an ORM
         # relationship() to each other (kept deliberately plain-column, see the
         # models), so the unit-of-work has no dependency graph to auto-order
-        # inserts by — without this, activities can get flushed before their
-        # own project row exists and the FK constraint rejects them.
+        # inserts by — without this, dependents can get flushed before their
+        # own parent row exists and the FK constraint rejects them.
         db.flush()
+
+        db.add_all(
+            [
+                UserTenantRole(
+                    id=uuid.uuid4(),
+                    user_id=admin_user.id,
+                    tenant_id=tenant.id,
+                    role=TenantRole.company_admin,
+                    is_active=True,
+                ),
+                UserTenantRole(
+                    id=uuid.uuid4(),
+                    user_id=employee_user.id,
+                    tenant_id=tenant.id,
+                    role=TenantRole.company_employee,
+                    is_active=True,
+                ),
+                UserTenantRole(
+                    id=uuid.uuid4(),
+                    user_id=sub_user.id,
+                    tenant_id=tenant.id,
+                    role=TenantRole.subcontractor,
+                    subcontractor_org_id=mep_org.id,
+                    is_active=True,
+                ),
+            ]
+        )
+        db.add(
+            ProjectMembership(
+                id=uuid.uuid4(),
+                tenant_id=tenant.id,
+                project_id=project.id,
+                user_id=employee_user.id,
+                permission=ProjectPermission.edit,
+            )
+        )
 
         period = UpdatePeriod(
             id=uuid.uuid4(),
+            tenant_id=tenant.id,
             project_id=project.id,
             period_number=14,
             label="Period 14",
@@ -74,11 +149,49 @@ def main() -> None:
         )
         db.add(period)
 
+        mep_scope = ProjectScope(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            project_id=project.id,
+            subcontractor_org_id=mep_org.id,
+            name="MEP",
+            discipline="MEP",
+        )
+        structural_scope = ProjectScope(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            project_id=project.id,
+            subcontractor_org_id=structural_org.id,
+            name="Structural",
+            discipline="Structural",
+        )
+        steel_scope = ProjectScope(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            project_id=project.id,
+            subcontractor_org_id=steel_org.id,
+            name="Structural Steel",
+            discipline="Structural Steel",
+        )
+        db.add_all([mep_scope, structural_scope, steel_scope])
+        db.flush()
+
+        db.add(
+            SubcontractorScopeAssignment(
+                id=uuid.uuid4(),
+                tenant_id=tenant.id,
+                user_id=sub_user.id,
+                project_scope_id=mep_scope.id,
+                assigned_by_user_id=admin_user.id,
+            )
+        )
+
         activities = [
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=mep.id,
+                project_scope_id=mep_scope.id,
                 external_id="MEP-2201",
                 name="Chilled Water Piping – Level 1",
                 discipline="MEP",
@@ -92,8 +205,9 @@ def main() -> None:
             ),
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=mep.id,
+                project_scope_id=mep_scope.id,
                 external_id="MEP-2205",
                 name="Electrical Rough-in – Level 2",
                 discipline="MEP",
@@ -106,8 +220,9 @@ def main() -> None:
             ),
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=mep.id,
+                project_scope_id=mep_scope.id,
                 external_id="MEP-2210",
                 name="Chiller Plant Rough-in",
                 discipline="MEP",
@@ -120,8 +235,9 @@ def main() -> None:
             ),
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=mep.id,
+                project_scope_id=mep_scope.id,
                 external_id="MEP-2214",
                 name="Ductwork – Level 3",
                 discipline="MEP",
@@ -133,8 +249,9 @@ def main() -> None:
             ),
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=structural.id,
+                project_scope_id=structural_scope.id,
                 external_id="STR-1042",
                 name="Zone C Slab Pour",
                 discipline="Structural",
@@ -148,8 +265,9 @@ def main() -> None:
             ),
             Activity(
                 id=uuid.uuid4(),
+                tenant_id=tenant.id,
                 project_id=project.id,
-                company_id=steel.id,
+                project_scope_id=steel_scope.id,
                 external_id="STL-1450",
                 name="Roof Truss Erection – Bay 4",
                 discipline="Structural Steel",
@@ -166,6 +284,7 @@ def main() -> None:
         by_ext_id = {a.external_id: a for a in activities}
         relationship = ActivityRelationship(
             id=uuid.uuid4(),
+            tenant_id=tenant.id,
             project_id=project.id,
             predecessor_id=by_ext_id["MEP-2201"].id,
             successor_id=by_ext_id["MEP-2205"].id,
@@ -177,6 +296,7 @@ def main() -> None:
 
         change_request = ChangeRequest(
             id=uuid.uuid4(),
+            tenant_id=tenant.id,
             update_period_id=period.id,
             activity_relationship_id=relationship.id,
             requested_by_user_id=sub_user.id,
@@ -190,9 +310,11 @@ def main() -> None:
         db.add(change_request)
 
         db.commit()
-        print("Seeded project", PROJECT_CODE)
-        print("Admin login:        admin@pokoena.com / ChangeMe123!")
-        print("Subcontractor login: mep@pokoena.com / ChangeMe123!")
+        print("Seeded tenant", TENANT_SLUG, "/ project", PROJECT_CODE)
+        print("Company admin login:    admin@pokoena.com / ChangeMe123!")
+        print("Company employee login: employee@pokoena.com / ChangeMe123!")
+        print("Subcontractor login:    mep@pokoena.com / ChangeMe123!")
+        print("(Create a platform admin separately with scripts.create_admin)")
     finally:
         db.close()
 

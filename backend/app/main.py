@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import activities, auth, change_requests, dashboard, projects, update_periods
+from app.api.routes import (
+    activities,
+    auth,
+    change_requests,
+    dashboard,
+    invites,
+    platform,
+    platform_auth,
+    projects,
+    team,
+    update_periods,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -17,6 +28,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(platform_auth.router)
+app.include_router(platform.router)
+app.include_router(invites.router)
+app.include_router(team.router)
 app.include_router(projects.router)
 app.include_router(update_periods.router)
 app.include_router(activities.router)
