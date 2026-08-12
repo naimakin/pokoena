@@ -3,18 +3,25 @@
 # Traefik itself lives in a separate stack (infra/traefik/traefik-stack.yml) and is
 # never touched by this file's redeploys.
 #
-# worker + redis are deliberately NOT deployed yet: the production droplet is a 1GB/1vCPU
-# box and nothing in Phase 1 enqueues a Celery task, so running an idle worker + broker
-# there would just compete for memory. Re-add them (see git history / infra/README.md)
-# once Phase 2's async analysis jobs need them, ideally alongside a droplet resize.
-# The internal-only "pokoena-internal" network goes with them — with no redis/worker
-# to talk to, backend has no need for a second, non-internet-routed network right now.
+# `redis` is deployed (small footprint, ~16-64MB) purely so `backend`'s login/invite
+# rate limiters have somewhere to keep counters — without it every request through
+# app/core/rate_limit.py fails to connect and the whole request 500s, which is what
+# broke login in production before this was added. It's reachable only over the
+# internal-only "pokoena-internal" overlay network, not traefik-public (nobody
+# outside this stack needs to talk to it, and it carries no Traefik labels).
+#
+# `worker` (Celery) is still NOT deployed: the production droplet is a 1GB/1vCPU box
+# and nothing in Phase 1 enqueues a Celery task, so running an idle worker there would
+# just compete for memory. Re-add it (see git history / infra/README.md) once Phase
+# 2's async analysis jobs need it, ideally alongside a droplet resize — at that point
+# it joins `pokoena-internal` too, to reach this same `redis`.
 
 version: "3.9"
 
 networks:
   traefik-public:
     external: true
+  pokoena-internal: {}
 
 secrets:
   # NOT db_url — that secret holds the doadmin superuser DSN, used only by the
@@ -77,8 +84,10 @@ services:
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       CORS_ORIGINS: "https://pokoena.com,https://www.pokoena.com"
       COOKIE_DOMAIN: ".pokoena.com"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     secrets: [db_url_app, db_url_bypass, jwt_secret]
-    networks: [traefik-public]
+    networks: [traefik-public, pokoena-internal]
     deploy:
       replicas: 1
       update_config:
@@ -99,3 +108,14 @@ services:
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=cfdns"
         - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "48mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    networks: [pokoena-internal]
+    deploy:
+      replicas: 1
+      restart_policy: { condition: on-failure, delay: 5s, max_attempts: 3, window: 120s }
+      resources:
+        limits: { cpus: "0.2", memory: 64M }
+        reservations: { cpus: "0.02", memory: 16M }
