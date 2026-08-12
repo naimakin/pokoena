@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.rate_limit import rate_limit
 from app.db.session import get_db
-from app.deps import AuthContext, require_role
+from app.deps import AuthContext, require_user_management
 from app.models.invite import Invite
 from app.models.tenant import Tenant
 from app.models.user_tenant_role import TenantRole, UserTenantRole
@@ -22,7 +22,7 @@ router = APIRouter(tags=["invites"])
 def create_tenant_invite(
     payload: InviteCreate,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(require_user_management),
 ) -> Invite:
     invite_payload: dict = {}
     if payload.role == TenantRole.subcontractor:
@@ -30,22 +30,26 @@ def create_tenant_invite(
         if payload.subcontractor_org_id:
             invite_payload["subcontractor_org_id"] = str(payload.subcontractor_org_id)
     elif payload.role == TenantRole.company_employee:
-        invite_payload["project_memberships"] = [
-            {"project_id": str(m.project_id), "permission": m.permission.value}
-            for m in payload.project_memberships
-        ]
+        invite_payload["project_ids"] = [str(p) for p in payload.project_ids]
     elif payload.role == TenantRole.company_admin:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Additional company admins aren't invited through this endpoint yet",
         )
 
+    if payload.role in (TenantRole.company_employee, TenantRole.subcontractor) and payload.project_role is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="project_role is required")
+
     tenant = db.get(Tenant, ctx.tenant_id)
     invite = create_invite(
         db=db,
         tenant_id=ctx.tenant_id,
         email=payload.email,
+        full_name=payload.full_name,
+        title=payload.title,
+        phone=payload.phone,
         role=payload.role,
+        project_role=payload.project_role,
         invited_by_user_id=ctx.user.id,
         tenant_name=tenant.name if tenant else None,
         payload=invite_payload,
@@ -64,7 +68,7 @@ def create_tenant_invite(
 @router.get("/invites", response_model=list[InviteOut])
 def list_tenant_invites(
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(require_user_management),
 ) -> list[Invite]:
     return (
         db.query(Invite)
@@ -83,7 +87,10 @@ def preview_invite(token: str, db: Session = Depends(get_db)) -> InvitePreview:
     tenant = db.get(Tenant, invite.tenant_id)
     return InvitePreview(
         email=invite.email,
+        full_name=invite.full_name,
+        title=invite.title,
         role=invite.role,
+        project_role=invite.project_role,
         tenant_name=tenant.name if tenant else "",
         expires_at=invite.expires_at,
     )
@@ -98,9 +105,7 @@ def accept_tenant_invite(
     token: str, payload: InviteAccept, response: Response, db: Session = Depends(get_db)
 ) -> UserOut:
     try:
-        user, invite = accept_invite(
-            db, raw_token=token, password=payload.password, full_name=payload.full_name
-        )
+        user, invite = accept_invite(db, raw_token=token, password=payload.password)
     except InviteError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

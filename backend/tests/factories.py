@@ -10,7 +10,7 @@ from app.models.project import Project
 from app.models.project_scope import ProjectScope
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 
 
 def create_tenant(db: Session, name: str = "Acme GC", slug: str | None = None) -> Tenant:
@@ -51,12 +51,14 @@ def add_membership(
     tenant: Tenant,
     role: TenantRole,
     subcontractor_org_id: uuid.UUID | None = None,
+    project_role: ProjectRole | None = None,
 ) -> UserTenantRole:
     membership = UserTenantRole(
         id=uuid.uuid4(),
         user_id=user.id,
         tenant_id=tenant.id,
         role=role,
+        project_role=project_role,
         subcontractor_org_id=subcontractor_org_id,
         is_active=True,
     )

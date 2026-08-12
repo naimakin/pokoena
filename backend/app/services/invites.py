@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db.session import set_rls_context
 from app.models.invite import Invite, InviteStatus
-from app.models.project_membership import ProjectMembership, ProjectPermission
+from app.models.project_membership import ProjectMembership
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 from app.worker.tasks import send_invite_email
 
 INVITE_EXPIRY = timedelta(hours=72)
@@ -40,15 +40,21 @@ def create_invite(
     email: str,
     role: TenantRole,
     invited_by_user_id: uuid.UUID,
+    full_name: str = "",
+    title: str | None = None,
+    phone: str | None = None,
+    project_role: ProjectRole | None = None,
     tenant_name: str | None = None,
     payload: dict | None = None,
 ) -> Invite:
     """`payload` carries what acceptance should materialize beyond the base
     UserTenantRole row: `{"project_scope_ids": [...]}` for subcontractors,
-    `{"project_memberships": [{"project_id": ..., "permission": ...}]}` for
-    company employees, `{"subcontractor_org_id": ...}` to attach a subcontractor
-    to a firm. Only the token's hash is ever stored — the raw value is handed
-    straight to the Celery task that emails it and is never persisted."""
+    `{"project_ids": [...]}` for company employees, `{"subcontractor_org_id": ...}`
+    to attach a subcontractor to a firm. Only the token's hash is ever stored —
+    the raw value is handed straight to the Celery task that emails it and is
+    never persisted. `full_name`/`title`/`phone`/`project_role` are entered by
+    the inviting admin, not the invitee — acceptance only ever collects a
+    password."""
     raw_token = secrets.token_urlsafe(32)
 
     # Explicit even when the caller's session already has this tenant's RLS
@@ -61,7 +67,11 @@ def create_invite(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
         email=email.lower(),
+        full_name=full_name,
+        title=title,
+        phone=phone,
         role=role,
+        project_role=project_role,
         token_hash=_hash_token(raw_token),
         invited_by_user_id=invited_by_user_id,
         status=InviteStatus.pending,
@@ -91,7 +101,7 @@ def get_invite_preview(db: Session, raw_token: str) -> Invite:
     return invite
 
 
-def accept_invite(db: Session, raw_token: str, password: str, full_name: str) -> tuple[User, Invite]:
+def accept_invite(db: Session, raw_token: str, password: str) -> tuple[User, Invite]:
     token_hash = _hash_token(raw_token)
     query = db.query(Invite).filter(Invite.token_hash == token_hash)
     # SQLite (the pytest suite's engine) can't compile FOR UPDATE at all — real
@@ -121,13 +131,18 @@ def accept_invite(db: Session, raw_token: str, password: str, full_name: str) ->
             id=uuid.uuid4(),
             email=invite.email,
             hashed_password=hash_password(password),
-            full_name=full_name,
+            full_name=invite.full_name,
+            title=invite.title,
+            phone=invite.phone,
             is_active=True,
         )
         db.add(user)
         db.flush()
     else:
         user.hashed_password = hash_password(password)
+        user.full_name = invite.full_name
+        user.title = invite.title
+        user.phone = invite.phone
         user.is_active = True
 
     subcontractor_org_id = invite.payload.get("subcontractor_org_id")
@@ -142,12 +157,14 @@ def accept_invite(db: Session, raw_token: str, password: str, full_name: str) ->
             user_id=user.id,
             tenant_id=invite.tenant_id,
             role=invite.role,
+            project_role=invite.project_role,
             subcontractor_org_id=uuid.UUID(subcontractor_org_id) if subcontractor_org_id else None,
             is_active=True,
         )
         db.add(membership)
     else:
         membership.role = invite.role
+        membership.project_role = invite.project_role
         membership.is_active = True
         if subcontractor_org_id:
             membership.subcontractor_org_id = uuid.UUID(subcontractor_org_id)
@@ -175,9 +192,8 @@ def accept_invite(db: Session, raw_token: str, password: str, full_name: str) ->
                     )
                 )
     elif invite.role == TenantRole.company_employee:
-        for entry in invite.payload.get("project_memberships", []):
-            project_id = uuid.UUID(entry["project_id"])
-            permission = ProjectPermission(entry.get("permission", "view"))
+        for project_id_str in invite.payload.get("project_ids", []):
+            project_id = uuid.UUID(project_id_str)
             existing = (
                 db.query(ProjectMembership)
                 .filter(ProjectMembership.user_id == user.id, ProjectMembership.project_id == project_id)
@@ -190,11 +206,8 @@ def accept_invite(db: Session, raw_token: str, password: str, full_name: str) ->
                         tenant_id=invite.tenant_id,
                         project_id=project_id,
                         user_id=user.id,
-                        permission=permission,
                     )
                 )
-            else:
-                existing.permission = permission
 
     invite.status = InviteStatus.accepted
     invite.accepted_at = datetime.now(timezone.utc)

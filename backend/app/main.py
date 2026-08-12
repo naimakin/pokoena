@@ -10,6 +10,7 @@ from app.api.routes import (
     platform,
     platform_auth,
     projects,
+    subcontractor_organizations,
     team,
     update_periods,
 )
@@ -32,6 +33,7 @@ app.include_router(platform_auth.router)
 app.include_router(platform.router)
 app.include_router(invites.router)
 app.include_router(team.router)
+app.include_router(subcontractor_organizations.router)
 app.include_router(projects.router)
 app.include_router(update_periods.router)
 app.include_router(activities.router)

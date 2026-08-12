@@ -1,8 +1,8 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole
 
 
 class UserOut(BaseModel):
@@ -15,9 +15,12 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
+    title: str | None = None
+    phone: str | None = None
     is_active: bool
     tenant_id: uuid.UUID
     role: TenantRole
+    project_role: ProjectRole | None = None
     scope_ids: list[uuid.UUID] = []
 
 
@@ -27,4 +30,14 @@ class PlatformAdminOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
+    title: str | None = None
+    phone: str | None = None
     is_active: bool
+
+
+class PlatformAdminCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    title: str | None = None
+    phone: str | None = None

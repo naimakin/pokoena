@@ -1,12 +1,30 @@
 export type TenantRole = "company_admin" | "company_employee" | "subcontractor";
 
+export type ProjectRole =
+  | "project_administrator"
+  | "all_access"
+  | "execution"
+  | "user_management"
+  | "activity_status_updater";
+
+export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
+  project_administrator: "Project Administrator",
+  all_access: "All Access (No Threshold Settings)",
+  execution: "Execution",
+  user_management: "User Management",
+  activity_status_updater: "Activity Status Updater",
+};
+
 export interface User {
   id: string;
   email: string;
   full_name: string;
+  title?: string | null;
+  phone?: string | null;
   is_active: boolean;
   tenant_id: string;
   role: TenantRole;
+  project_role?: ProjectRole | null;
   scope_ids: string[];
 }
 
@@ -14,7 +32,17 @@ export interface PlatformAdmin {
   id: string;
   email: string;
   full_name: string;
+  title?: string | null;
+  phone?: string | null;
   is_active: boolean;
+}
+
+export interface PlatformAdminCreatePayload {
+  email: string;
+  password: string;
+  full_name: string;
+  title?: string;
+  phone?: string;
 }
 
 export type TenantStatus = "active" | "suspended" | "deleted";
@@ -145,16 +173,14 @@ export interface DashboardSummary {
   scope_status: ScopeSubmissionStatus[];
 }
 
-export interface ProjectMembershipInput {
-  project_id: string;
-  permission: "view" | "edit";
-}
-
 export interface InviteCreatePayload {
   email: string;
+  full_name: string;
+  title?: string;
+  phone?: string;
   role: TenantRole;
-  full_name?: string;
-  project_memberships?: ProjectMembershipInput[];
+  project_role?: ProjectRole;
+  project_ids?: string[];
   project_scope_ids?: string[];
   subcontractor_org_id?: string | null;
 }
@@ -162,14 +188,19 @@ export interface InviteCreatePayload {
 export interface Invite {
   id: string;
   email: string;
+  full_name: string;
   role: TenantRole;
+  project_role?: ProjectRole | null;
   status: string;
   expires_at: string;
 }
 
 export interface InvitePreview {
   email: string;
+  full_name: string;
+  title?: string | null;
   role: TenantRole;
+  project_role?: ProjectRole | null;
   tenant_name: string;
   expires_at: string;
 }
@@ -179,7 +210,17 @@ export interface TeamMember {
   user_id: string;
   email: string;
   full_name: string;
+  title?: string | null;
+  phone?: string | null;
   role: TenantRole;
+  project_role?: ProjectRole | null;
   is_active: boolean;
   created_at: string;
+}
+
+export interface SubcontractorOrg {
+  id: string;
+  tenant_id: string;
+  name: string;
+  discipline: string;
 }

@@ -1,3 +1,6 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.models.user_tenant_role import TenantRole
 from tests.factories import add_membership, create_tenant, create_user
 
@@ -116,4 +119,65 @@ def test_non_platform_admin_cannot_manage_tenants(client, db_session):
     client.post("/auth/login", json={"email": "admin2@example.com", "password": "secret123"})
 
     response = client.get("/platform/tenants")
+    assert response.status_code == 401
+
+
+def test_platform_admin_can_create_and_deactivate_another_admin(client, db_session):
+    create_user(db_session, "founder@pokoena.com", "secret123", is_platform_admin=True)
+    client.post("/platform-auth/login", json={"email": "founder@pokoena.com", "password": "secret123"})
+
+    create_response = client.post(
+        "/platform/admins",
+        json={
+            "email": "second@pokoena.com",
+            "password": "secret456",
+            "full_name": "Second Admin",
+            "title": "Ops",
+            "phone": "+1 555-0000",
+        },
+    )
+    assert create_response.status_code == 201
+    new_admin_id = create_response.json()["id"]
+
+    # The new admin can log in on their own — via a second TestClient (same
+    # app, same dependency overrides as `client`) so its session cookie
+    # doesn't clobber the founder's session held by `client`.
+    with TestClient(app) as second_client:
+        other_client_login = second_client.post(
+            "/platform-auth/login", json={"email": "second@pokoena.com", "password": "secret456"}
+        )
+        assert other_client_login.status_code == 200
+
+    list_response = client.get("/platform/admins")
+    assert list_response.status_code == 200
+    assert any(a["id"] == new_admin_id for a in list_response.json())
+
+    deactivate_response = client.post(f"/platform/admins/{new_admin_id}/deactivate")
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+
+    relogin = client.post(
+        "/platform-auth/login", json={"email": "second@pokoena.com", "password": "secret456"}
+    )
+    assert relogin.status_code == 401
+
+
+def test_platform_admin_cannot_deactivate_self(client, db_session):
+    admin = create_user(db_session, "solo@pokoena.com", "secret123", is_platform_admin=True)
+    client.post("/platform-auth/login", json={"email": "solo@pokoena.com", "password": "secret123"})
+
+    response = client.post(f"/platform/admins/{admin.id}/deactivate")
+    assert response.status_code == 400
+
+
+def test_non_platform_admin_cannot_create_platform_admins(client, db_session):
+    tenant = create_tenant(db_session)
+    user = create_user(db_session, "admin3@example.com", "secret123")
+    add_membership(db_session, user, tenant, TenantRole.company_admin)
+    client.post("/auth/login", json={"email": "admin3@example.com", "password": "secret123"})
+
+    response = client.post(
+        "/platform/admins",
+        json={"email": "sneaky@pokoena.com", "password": "secret123", "full_name": "Sneaky"},
+    )
     assert response.status_code == 401

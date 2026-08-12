@@ -77,9 +77,12 @@ async function handleTenantArea(request: NextRequest, pathname: string): Promise
   if (role === "subcontractor" && !pathname.startsWith("/scope")) {
     return NextResponse.redirect(new URL(home, request.url));
   }
-  // Change-review and team management are company_admin actions; employees
-  // keep their (possibly view-only) dashboard access but not these.
-  if ((pathname.startsWith("/review-queue") || pathname.startsWith("/team")) && role === "company_employee") {
+  // Change-review is a company_admin-only action. User management is
+  // company_admin plus anyone whose project_role grants it — checked
+  // server-side by /team and /invites; the middleware only blocks the page
+  // for roles that can never have that project_role (subcontractors are
+  // already routed to /scope above and never reach this branch).
+  if (pathname.startsWith("/review-queue") && role === "company_employee") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

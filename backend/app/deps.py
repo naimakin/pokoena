@@ -8,9 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.security import PLATFORM_ACCESS, TENANT_ACCESS, decode_token
 from app.db.session import get_db, set_rls_context
-from app.models.project_membership import ProjectMembership, ProjectPermission
+from app.models.project_membership import ProjectMembership
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import (
+    EDIT_CAPABLE_PROJECT_ROLES,
+    USER_MANAGEMENT_CAPABLE_PROJECT_ROLES,
+    ProjectRole,
+    TenantRole,
+    UserTenantRole,
+)
 
 TENANT_SESSION_COOKIE = "poko_tenant_session"
 TENANT_REFRESH_COOKIE = "poko_tenant_refresh"
@@ -27,6 +33,7 @@ class AuthContext:
     user: User
     tenant_id: uuid.UUID
     role: TenantRole
+    project_role: ProjectRole | None = None
     scope_ids: list[uuid.UUID] = field(default_factory=list)
     subcontractor_org_id: uuid.UUID | None = None
 
@@ -89,6 +96,7 @@ def get_current_tenant_user(request: Request, db: Session = Depends(get_db)) -> 
         user=user,
         tenant_id=tenant_id,
         role=membership.role,
+        project_role=membership.project_role,
         scope_ids=scope_ids,
         subcontractor_org_id=membership.subcontractor_org_id,
     )
@@ -121,6 +129,18 @@ def require_role(*roles: TenantRole):
     return _check
 
 
+def require_user_management(ctx: AuthContext = Depends(get_current_tenant_user)) -> AuthContext:
+    """Company Admins always manage their tenant's team. A company_employee or
+    subcontractor can too, but only if they were explicitly granted the
+    User Management (or Project Administrator) project_role — everyone else
+    (e.g. plain Execution/Activity Status Updater) is 403'd."""
+    if ctx.role == TenantRole.company_admin:
+        return ctx
+    if ctx.project_role in USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
+        return ctx
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
+
+
 def require_tenant_access(resource_tenant_id: uuid.UUID, ctx: AuthContext) -> None:
     """The core cross-tenant guard: 403s — never a distinct 404, which would
     leak whether the resource exists at all — when a resource's tenant_id
@@ -146,13 +166,17 @@ def require_project_permission(
     db: Session, project_id: uuid.UUID, ctx: AuthContext, need_edit: bool = False
 ) -> None:
     """Company Admins have full tenant-wide project access. Company Employees
-    need a ProjectMembership row for this specific project — and, if
-    `need_edit`, one with edit (not view-only) permission — matching "sees
-    only their own company's projects, view-only vs edit, per project."
-    Subcontractors aren't gated by this at all: their access is scope-based
-    (require_scope_access), not project-membership-based.
+    need a ProjectMembership row for this specific project. Subcontractors
+    aren't gated by this at all: their access is scope-based
+    (require_scope_access), not project-membership-based. Whether the caller
+    may *edit* (as opposed to just view) is no longer per-project — it's
+    derived from their tenant-wide project_role via EDIT_CAPABLE_PROJECT_ROLES.
     """
-    if ctx.role in (TenantRole.company_admin, TenantRole.subcontractor):
+    if ctx.role == TenantRole.company_admin:
+        return
+    if need_edit and ctx.project_role not in EDIT_CAPABLE_PROJECT_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="View-only access to this project")
+    if ctx.role == TenantRole.subcontractor:
         return
     membership = (
         db.query(ProjectMembership)
@@ -161,8 +185,6 @@ def require_project_permission(
     )
     if membership is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted for this project")
-    if need_edit and membership.permission != ProjectPermission.edit:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="View-only access to this project")
 
 
 def get_tenant_scoped_or_404(

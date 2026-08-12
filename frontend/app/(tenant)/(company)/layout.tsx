@@ -9,6 +9,9 @@ import {
   BarChartIcon,
   BuildingIcon,
   CalendarIcon,
+  ClockIcon,
+  DatabaseIcon,
+  FlagIcon,
   GridIcon,
   LayersIcon,
   UploadCloudIcon,
@@ -17,13 +20,31 @@ import {
 } from "@/components/icons";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: GridIcon, adminOnly: false },
-  { href: "/review-queue", label: "Change Review Queue", icon: LayersIcon, adminOnly: true },
-  { href: "/team", label: "Team", icon: UsersIcon, adminOnly: true },
+  { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: () => true },
+  {
+    href: "/review-queue",
+    label: "Change Review Queue",
+    icon: LayersIcon,
+    visible: (user: User | null) => user?.role === "company_admin",
+  },
+  {
+    href: "/user-management",
+    label: "User Management",
+    icon: UsersIcon,
+    visible: (user: User | null) =>
+      user?.role === "company_admin" ||
+      user?.project_role === "user_management" ||
+      user?.project_role === "project_administrator",
+  },
+  { href: "/projects-overview", label: "Project Status Dashboard", icon: BarChartIcon, visible: () => true },
+  { href: "/activities", label: "Project Activities", icon: LayersIcon, visible: () => true },
+  { href: "/progress", label: "Progress", icon: ClockIcon, visible: () => true },
+  { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: () => true },
+  { href: "/datastore", label: "Datastore", icon: DatabaseIcon, visible: () => true },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  company_admin: "Project Controls",
+  company_admin: "Company Admin",
   company_employee: "Employee",
 };
 
@@ -54,7 +75,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         .toUpperCase()
     : "";
 
-  const visibleNav = NAV.filter((item) => !item.adminOnly || user?.role === "company_admin");
+  const visibleNav = NAV.filter((item) => item.visible(user));
 
   return (
     <div className="app-shell">

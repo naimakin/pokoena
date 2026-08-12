@@ -14,14 +14,14 @@ from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
 from app.models.project import Project
-from app.models.project_membership import ProjectMembership, ProjectPermission
+from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.tenant import Tenant, TenantStatus
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 
 TENANT_SLUG = "riverside-logistics"
 PROJECT_CODE = "RLP-P2"
@@ -82,6 +82,8 @@ def main() -> None:
             email="employee@pokoena.com",
             hashed_password=hash_password("ChangeMe123!"),
             full_name="Sam Rivera",
+            title="Project Controls Engineer",
+            phone="+1 555-0101",
             is_active=True,
         )
         sub_user = User(
@@ -89,6 +91,8 @@ def main() -> None:
             email="mep@pokoena.com",
             hashed_password=hash_password("ChangeMe123!"),
             full_name="Riley Kim",
+            title="MEP Superintendent",
+            phone="+1 555-0102",
             is_active=True,
         )
         db.add_all([admin_user, employee_user, sub_user])
@@ -115,6 +119,7 @@ def main() -> None:
                     user_id=employee_user.id,
                     tenant_id=tenant.id,
                     role=TenantRole.company_employee,
+                    project_role=ProjectRole.execution,
                     is_active=True,
                 ),
                 UserTenantRole(
@@ -122,6 +127,7 @@ def main() -> None:
                     user_id=sub_user.id,
                     tenant_id=tenant.id,
                     role=TenantRole.subcontractor,
+                    project_role=ProjectRole.activity_status_updater,
                     subcontractor_org_id=mep_org.id,
                     is_active=True,
                 ),
@@ -133,7 +139,6 @@ def main() -> None:
                 tenant_id=tenant.id,
                 project_id=project.id,
                 user_id=employee_user.id,
-                permission=ProjectPermission.edit,
             )
         )
 

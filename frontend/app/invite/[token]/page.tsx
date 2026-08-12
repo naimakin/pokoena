@@ -27,7 +27,6 @@ export default function InviteAcceptPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +44,7 @@ export default function InviteAcceptPage() {
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const user = await api.post<User>(`/invites/${token}/accept`, { full_name: fullName, password });
+      const user = await api.post<User>(`/invites/${token}/accept`, { password });
       router.push(ROLE_HOME[user.role] ?? "/login");
       router.refresh();
     } catch (err) {
@@ -80,25 +79,17 @@ export default function InviteAcceptPage() {
             <BuildingIcon className="icon" />
           </div>
           <div>
-            <div className="login-title">Join {preview.tenant_name}</div>
+            <div className="login-title">Welcome, {preview.full_name || preview.email}</div>
             <div className="login-sub">
               {preview.email} · {ROLE_LABEL[preview.role]}
+              {preview.title ? ` · ${preview.title}` : ""}
             </div>
+            <div className="login-sub">Join {preview.tenant_name}</div>
           </div>
         </div>
 
         {submitError && <div className="login-error">{submitError}</div>}
 
-        <div className="field">
-          <label htmlFor="full-name">Your name</label>
-          <input
-            id="full-name"
-            required
-            autoComplete="name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
-        </div>
         <div className="field">
           <label htmlFor="password">Set a password</label>
           <input

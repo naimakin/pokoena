@@ -68,8 +68,11 @@ def issue_tenant_session(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
+        title=user.title,
+        phone=user.phone,
         is_active=user.is_active,
         tenant_id=membership.tenant_id,
         role=membership.role,
+        project_role=membership.project_role,
         scope_ids=scope_ids,
     )

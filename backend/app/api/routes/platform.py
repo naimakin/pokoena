@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.db.session import BypassSessionLocal, get_db, set_rls_context
 from app.deps import get_current_platform_admin
 from app.models.activity import Activity
@@ -12,6 +13,7 @@ from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole, UserTenantRole
 from app.schemas.tenant import TenantCreate, TenantOut, UsageSummary
+from app.schemas.user import PlatformAdminCreate, PlatformAdminOut
 from app.services import audit
 from app.services.invites import create_invite
 
@@ -36,6 +38,7 @@ def create_tenant(
         db=db,
         tenant_id=tenant.id,
         email=payload.admin_email,
+        full_name=payload.admin_full_name,
         role=TenantRole.company_admin,
         invited_by_user_id=platform_admin.id,
         tenant_name=tenant.name,
@@ -187,3 +190,69 @@ def support_access(
         bypass_db.close()
 
     return SupportAccessResponse(tenant_id=tenant.id, tenant_name=tenant.name, projects=summaries)
+
+
+@router.post("/admins", response_model=PlatformAdminOut, status_code=status.HTTP_201_CREATED)
+def create_platform_admin(
+    payload: PlatformAdminCreate,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> User:
+    """Unlike tenant onboarding, this sets a password directly rather than
+    emailing an invite — platform admins are internal POKO staff the creating
+    admin already has an out-of-band way to hand credentials to."""
+    email = payload.email.lower()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    user = User(
+        id=uuid.uuid4(),
+        email=email,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
+        title=payload.title,
+        phone=payload.phone,
+        is_platform_admin=True,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    audit.log(
+        "platform_admin.created", tenant_id=None, actor_user_id=platform_admin.id,
+        target_type="user", target_id=user.id, event_metadata={"email": user.email},
+    )
+    return user
+
+
+@router.get("/admins", response_model=list[PlatformAdminOut])
+def list_platform_admins(
+    db: Session = Depends(get_db), _: User = Depends(get_current_platform_admin)
+) -> list[User]:
+    return (
+        db.query(User)
+        .filter(User.is_platform_admin.is_(True))
+        .order_by(User.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/admins/{admin_id}/deactivate", response_model=PlatformAdminOut)
+def deactivate_platform_admin(
+    admin_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> User:
+    if admin_id == platform_admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can't deactivate your own access")
+    target = db.query(User).filter(User.id == admin_id, User.is_platform_admin.is_(True)).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Platform admin not found")
+    target.is_active = False
+    db.commit()
+    db.refresh(target)
+    audit.log(
+        "platform_admin.deactivated", tenant_id=None, actor_user_id=platform_admin.id,
+        target_type="user", target_id=target.id,
+    )
+    return target

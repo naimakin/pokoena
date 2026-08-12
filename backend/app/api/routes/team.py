@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, require_role
+from app.deps import AuthContext, require_user_management
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import UserTenantRole
 from app.schemas.team import TeamMemberOut
 from app.services import audit
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/team", tags=["team"])
 @router.get("", response_model=list[TeamMemberOut])
 def list_team(
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_user_management),
 ) -> list[TeamMemberOut]:
     rows = (
         db.query(UserTenantRole, User)
@@ -31,7 +31,10 @@ def list_team(
             user_id=user.id,
             email=user.email,
             full_name=user.full_name,
+            title=user.title,
+            phone=user.phone,
             role=membership.role,
+            project_role=membership.project_role,
             is_active=membership.is_active,
             created_at=membership.created_at,
         )
@@ -43,7 +46,7 @@ def list_team(
 def remove_team_member(
     user_tenant_role_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(require_user_management),
 ) -> None:
     """Soft-revokes tenant access (is_active=False) rather than deleting the
     row — audit history and any prior activity attributed to this person stays

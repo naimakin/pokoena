@@ -2,11 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { auth } from "@/lib/auth";
-import { BuildingIcon, GridIcon, BarChartIcon } from "@/components/icons";
+import { BuildingIcon, GridIcon, BarChartIcon, UsersIcon } from "@/components/icons";
 import { PlatformSignOutButton } from "./PlatformSignOutButton";
 
 const NAV = [
   { href: "/platform-admin/tenants", label: "Tenants", icon: GridIcon },
+  { href: "/platform-admin/admins", label: "Admins", icon: UsersIcon },
   { href: "/platform-admin/usage", label: "Usage", icon: BarChartIcon },
 ];
 

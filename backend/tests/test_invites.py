@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.project_scope import ProjectScope
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 from tests.factories import add_membership, create_project, create_tenant, create_user
 
 
@@ -46,7 +46,9 @@ def test_company_admin_can_invite_subcontractor_and_they_can_accept(client, db_s
         "/invites",
         json={
             "email": "newsub@example.com",
+            "full_name": "New Sub",
             "role": "subcontractor",
+            "project_role": "activity_status_updater",
             "project_scope_ids": [str(scope.id)],
         },
     )
@@ -57,15 +59,18 @@ def test_company_admin_can_invite_subcontractor_and_they_can_accept(client, db_s
     preview_response = client.get(f"/invites/{raw_token}")
     assert preview_response.status_code == 200
     assert preview_response.json()["email"] == "newsub@example.com"
+    assert preview_response.json()["full_name"] == "New Sub"
 
     accept_response = client.post(
         f"/invites/{raw_token}/accept",
-        json={"full_name": "New Sub", "password": "newpassword123"},
+        json={"password": "newpassword123"},
     )
     assert accept_response.status_code == 200
     body = accept_response.json()
     assert body["email"] == "newsub@example.com"
+    assert body["full_name"] == "New Sub"
     assert body["role"] == "subcontractor"
+    assert body["project_role"] == "activity_status_updater"
     assert str(scope.id) in body["scope_ids"] or [str(s) for s in body["scope_ids"]] == [str(scope.id)]
 
     membership = (
@@ -88,17 +93,21 @@ def test_invite_cannot_be_accepted_twice(client, db_session, monkeypatch):
     _tenant, _admin = _setup_company_admin(db_session, "admin2@example.com")
     client.post("/auth/login", json={"email": "admin2@example.com", "password": "secret123"})
 
-    client.post("/invites", json={"email": "employee@example.com", "role": "company_employee"})
+    client.post(
+        "/invites",
+        json={
+            "email": "employee@example.com",
+            "full_name": "Employee One",
+            "role": "company_employee",
+            "project_role": "execution",
+        },
+    )
     raw_token = captured["invite_url"].rsplit("/", 1)[-1]
 
-    first = client.post(
-        f"/invites/{raw_token}/accept", json={"full_name": "Employee One", "password": "password123"}
-    )
+    first = client.post(f"/invites/{raw_token}/accept", json={"password": "password123"})
     assert first.status_code == 200
 
-    second = client.post(
-        f"/invites/{raw_token}/accept", json={"full_name": "Employee One", "password": "password123"}
-    )
+    second = client.post(f"/invites/{raw_token}/accept", json={"password": "password123"})
     assert second.status_code == 400
 
 
@@ -112,22 +121,22 @@ def test_expired_invite_is_rejected(client, db_session, monkeypatch):
         db=db_session,
         tenant_id=tenant.id,
         email="late@example.com",
+        full_name="Nobody",
         role=TenantRole.company_employee,
+        project_role=ProjectRole.execution,
         invited_by_user_id=admin.id,
     )
     invite.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
     db_session.commit()
     raw_token = captured["invite_url"].rsplit("/", 1)[-1]
 
-    response = client.post(
-        f"/invites/{raw_token}/accept", json={"full_name": "Nobody", "password": "password123"}
-    )
+    response = client.post(f"/invites/{raw_token}/accept", json={"password": "password123"})
     assert response.status_code == 400
 
 
 def test_invalid_invite_token_rejected(client, db_session):
     response = client.post(
-        "/invites/not-a-real-token/accept", json={"full_name": "Nobody", "password": "password123"}
+        "/invites/not-a-real-token/accept", json={"password": "password123"}
     )
     assert response.status_code == 400
 
@@ -138,5 +147,44 @@ def test_non_admin_cannot_create_invites(client, db_session):
     add_membership(db_session, employee, tenant, TenantRole.company_employee)
     client.post("/auth/login", json={"email": "employee@example.com", "password": "secret123"})
 
-    response = client.post("/invites", json={"email": "x@example.com", "role": "company_employee"})
+    response = client.post(
+        "/invites",
+        json={"email": "x@example.com", "full_name": "X", "role": "company_employee"},
+    )
     assert response.status_code == 403
+
+
+def test_invite_requires_project_role_for_employee(client, db_session, monkeypatch):
+    _capture_invite_url(monkeypatch)
+    _tenant, _admin = _setup_company_admin(db_session, "admin4@example.com")
+    client.post("/auth/login", json={"email": "admin4@example.com", "password": "secret123"})
+
+    response = client.post(
+        "/invites",
+        json={"email": "noRole@example.com", "full_name": "No Role", "role": "company_employee"},
+    )
+    assert response.status_code == 400
+
+
+def test_user_management_project_role_can_manage_team(client, db_session, monkeypatch):
+    """A company_employee holding the 'user_management' project_role can invite
+    and list team members even though they're not a company_admin."""
+    captured = _capture_invite_url(monkeypatch)
+    tenant, _admin = _setup_company_admin(db_session, "admin5@example.com")
+    manager = create_user(db_session, "manager@example.com", "secret123")
+    add_membership(
+        db_session, manager, tenant, TenantRole.company_employee, project_role=ProjectRole.user_management
+    )
+    client.post("/auth/login", json={"email": "manager@example.com", "password": "secret123"})
+
+    response = client.post(
+        "/invites",
+        json={
+            "email": "newhire@example.com",
+            "full_name": "New Hire",
+            "role": "company_employee",
+            "project_role": "execution",
+        },
+    )
+    assert response.status_code == 201
+    assert captured["to_email"] == "newhire@example.com"
