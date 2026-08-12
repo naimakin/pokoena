@@ -165,7 +165,7 @@ export default function UserManagementPage() {
           <div>
             <div className="page-title">User Management</div>
             <div className="page-desc">
-              Add employees and subcontractors, assign them to projects, and set what they're allowed to do.
+              Add employees and subcontractors, assign them to projects, and set what they&rsquo;re allowed to do.
             </div>
           </div>
         </div>
