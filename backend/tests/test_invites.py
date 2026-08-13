@@ -192,3 +192,34 @@ def test_user_management_project_role_can_manage_team(client, db_session, monkey
     )
     assert response.status_code == 201
     assert captured["to_email"] == "newhire@example.com"
+
+
+def test_cannot_invite_an_email_that_already_has_an_account(client, db_session, monkeypatch):
+    """Regression test: accept_invite resets whatever user matches the
+    invite's email to a password the accepter chooses, with no proof they
+    ever controlled that account. Without this rejection, any company_admin
+    could take over an existing account — including a platform admin's — just
+    by knowing its email and inviting it into their own tenant, then using
+    the invite link (which the UI hands straight back to them) themselves."""
+    _capture_invite_url(monkeypatch)
+    tenant, _admin = _setup_company_admin(db_session, "admin6@example.com")
+    victim = create_user(db_session, "victim@example.com", "victims-real-password")
+    other_tenant = create_tenant(db_session, name="Other Co")
+    add_membership(db_session, victim, other_tenant, TenantRole.company_admin)
+
+    client.post("/auth/login", json={"email": "admin6@example.com", "password": "secret123"})
+    response = client.post(
+        "/invites",
+        json={
+            "email": "victim@example.com",
+            "full_name": "Victim",
+            "role": "company_employee",
+            "project_role": "execution",
+        },
+    )
+    assert response.status_code == 400
+
+    db_session.refresh(victim)
+    from app.core.security import verify_password
+
+    assert verify_password("victims-real-password", victim.hashed_password)

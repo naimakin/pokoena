@@ -65,7 +65,22 @@ def create_invite(
     a `worker` process this deployment doesn't run — so a delivered email is
     not something an invite creator can rely on today. The URL is only ever
     obtainable here, at creation time, since only the token's hash is
-    persisted afterward."""
+    persisted afterward.
+
+    Rejects emails that already belong to an existing User: `accept_invite`
+    resets whatever user matches the invite's email to a password the
+    accepter chooses, with no proof they ever controlled that account (no
+    real email delivery exists to verify inbox ownership — see above). Since
+    `invite_url` is handed straight back to whoever creates the invite, an
+    unrestricted invite would let any company_admin/user_management member
+    take over *any* existing account — including a platform admin's — just by
+    knowing its email and inviting it into their own tenant. `users.email` is
+    global (not tenant-scoped), so this check is a simple existence lookup."""
+    if db.query(User).filter(User.email == email.lower()).first() is not None:
+        raise InviteError(
+            "An account with this email already exists — invites can only onboard new people right now."
+        )
+
     raw_token = secrets.token_urlsafe(32)
 
     # Explicit even when the caller's session already has this tenant's RLS

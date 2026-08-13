@@ -41,19 +41,22 @@ def create_tenant_invite(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="project_role is required")
 
     tenant = db.get(Tenant, ctx.tenant_id)
-    invite, invite_url = create_invite(
-        db=db,
-        tenant_id=ctx.tenant_id,
-        email=payload.email,
-        full_name=payload.full_name,
-        title=payload.title,
-        phone=payload.phone,
-        role=payload.role,
-        project_role=payload.project_role,
-        invited_by_user_id=ctx.user.id,
-        tenant_name=tenant.name if tenant else None,
-        payload=invite_payload,
-    )
+    try:
+        invite, invite_url = create_invite(
+            db=db,
+            tenant_id=ctx.tenant_id,
+            email=payload.email,
+            full_name=payload.full_name,
+            title=payload.title,
+            phone=payload.phone,
+            role=payload.role,
+            project_role=payload.project_role,
+            invited_by_user_id=ctx.user.id,
+            tenant_name=tenant.name if tenant else None,
+            payload=invite_payload,
+        )
+    except InviteError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     audit.log(
         "invite.created",
         tenant_id=ctx.tenant_id,

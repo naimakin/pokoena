@@ -114,6 +114,27 @@ def test_platform_admin_can_manage_tenants(client, db_session):
     assert suspend_response.json()["status"] == "suspended"
 
 
+def test_cannot_onboard_tenant_with_admin_email_that_already_has_an_account(client, db_session):
+    """Same account-takeover concern as test_invites.py's version of this,
+    for the tenant-onboarding path: onboarding must not be able to hijack an
+    existing account (e.g. another platform admin's) via its admin_email."""
+    create_user(db_session, "staff4@pokoena.com", "secret123", is_platform_admin=True)
+    client.post("/platform-auth/login", json={"email": "staff4@pokoena.com", "password": "secret123"})
+
+    response = client.post(
+        "/platform/tenants",
+        json={
+            "name": "Hijack Co",
+            "slug": "hijack-co",
+            "admin_email": "staff4@pokoena.com",
+            "admin_full_name": "Not Actually Staff",
+        },
+    )
+    assert response.status_code == 409
+    # No orphaned tenant left behind by the rejected onboarding attempt.
+    assert not any(t["slug"] == "hijack-co" for t in client.get("/platform/tenants").json())
+
+
 def test_non_platform_admin_cannot_manage_tenants(client, db_session):
     tenant = create_tenant(db_session)
     user = create_user(db_session, "admin2@example.com", "secret123")
