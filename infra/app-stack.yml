@@ -84,6 +84,7 @@ services:
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       CORS_ORIGINS: "https://pokoena.com,https://www.pokoena.com"
       COOKIE_DOMAIN: ".pokoena.com"
+      FRONTEND_URL: "https://pokoena.com"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
     secrets: [db_url_app, db_url_bypass, jwt_secret]
