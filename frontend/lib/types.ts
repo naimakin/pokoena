@@ -24,7 +24,7 @@ export interface User {
   is_active: boolean;
   tenant_id: string;
   role: TenantRole;
-  project_role?: ProjectRole | null;
+  project_roles: ProjectRole[];
   scope_ids: string[];
 }
 
@@ -82,6 +82,11 @@ export interface UsageSummary {
 export interface Project {
   id: string;
   tenant_id: string;
+  name: string;
+  code: string;
+}
+
+export interface ProjectCreatePayload {
   name: string;
   code: string;
 }
@@ -196,7 +201,7 @@ export interface InviteCreatePayload {
   title?: string;
   phone?: string;
   role: TenantRole;
-  project_role?: ProjectRole;
+  project_roles?: ProjectRole[];
   project_ids?: string[];
   project_scope_ids?: string[];
   subcontractor_org_id?: string | null;
@@ -207,7 +212,7 @@ export interface Invite {
   email: string;
   full_name: string;
   role: TenantRole;
-  project_role?: ProjectRole | null;
+  project_roles: ProjectRole[];
   status: string;
   expires_at: string;
   // Only present on the response to creating this invite — see
@@ -220,7 +225,7 @@ export interface InvitePreview {
   full_name: string;
   title?: string | null;
   role: TenantRole;
-  project_role?: ProjectRole | null;
+  project_roles: ProjectRole[];
   tenant_name: string;
   expires_at: string;
 }
@@ -233,7 +238,7 @@ export interface TeamMember {
   title?: string | null;
   phone?: string | null;
   role: TenantRole;
-  project_role?: ProjectRole | null;
+  project_roles: ProjectRole[];
   is_active: boolean;
   created_at: string;
 }

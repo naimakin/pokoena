@@ -3,13 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { CheckIcon, UsersIcon, XIcon } from "@/components/icons";
+import { CheckIcon, FolderPlusIcon, UsersIcon, XIcon } from "@/components/icons";
 import {
   PROJECT_ROLE_LABELS,
   type Invite,
   type InviteCreatePayload,
   type PasswordResetLink,
   type Project,
+  type ProjectCreatePayload,
   type ProjectRole,
   type ProjectScope,
   type SubcontractorOrg,
@@ -44,8 +45,12 @@ export default function UserManagementPage() {
   const [title, setTitle] = useState("");
   const [phone, setPhone] = useState("");
   const [memberType, setMemberType] = useState<MemberType>("employee");
-  const [projectRole, setProjectRole] = useState<ProjectRole>("execution");
+  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>(["execution"]);
   const [projectIds, setProjectIds] = useState<string[]>([]);
+
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectCode, setNewProjectCode] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
 
   const [orgId, setOrgId] = useState<string>("");
   const [newOrgName, setNewOrgName] = useState("");
@@ -91,7 +96,7 @@ export default function UserManagementPage() {
     setFullName("");
     setTitle("");
     setPhone("");
-    setProjectRole("execution");
+    setProjectRoles(["execution"]);
     setProjectIds([]);
     setOrgId("");
     setNewOrgName("");
@@ -124,7 +129,7 @@ export default function UserManagementPage() {
         title: title || undefined,
         phone: phone || undefined,
         role,
-        project_role: projectRole,
+        project_roles: projectRoles,
       };
       if (memberType === "employee") {
         payload.project_ids = projectIds;
@@ -172,6 +177,23 @@ export default function UserManagementPage() {
       setLastLink({ heading: `Password reset link for ${result.email}`, url: result.reset_url });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to generate a reset link.");
+    }
+  }
+
+  async function handleCreateProject(event: FormEvent) {
+    event.preventDefault();
+    setCreatingProject(true);
+    try {
+      const payload: ProjectCreatePayload = { name: newProjectName, code: newProjectCode };
+      const created = await api.post<Project>("/projects", payload);
+      setProjects((prev) => [...prev, created]);
+      showToast(`Project ${created.name} created`);
+      setNewProjectName("");
+      setNewProjectCode("");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to create project.");
+    } finally {
+      setCreatingProject(false);
     }
   }
 
@@ -228,6 +250,60 @@ export default function UserManagementPage() {
 
         <div className="card">
           <div className="card-head">
+            <div className="card-title">Projects</div>
+          </div>
+          <form className="form-grid" style={{ padding: "1rem 1.1rem" }} onSubmit={handleCreateProject}>
+            <div className="form-row">
+              <div className="field">
+                <label htmlFor="new-project-name">Project name</label>
+                <input
+                  id="new-project-name"
+                  required
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="new-project-code">Code</label>
+                <input
+                  id="new-project-code"
+                  required
+                  placeholder="RLP-P2"
+                  value={newProjectCode}
+                  onChange={(e) => setNewProjectCode(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-secondary" type="submit" disabled={creatingProject}>
+                <FolderPlusIcon className="icon" /> {creatingProject ? "Creating…" : "Create project"}
+              </button>
+            </div>
+          </form>
+          {projects.length > 0 && (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map((p) => (
+                    <tr key={p.id}>
+                      <td className="subname">{p.name}</td>
+                      <td className="mono">{p.code}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card-head">
             <div className="card-title">Add user</div>
           </div>
           <form className="form-grid" style={{ padding: "1rem 1.1rem" }} onSubmit={handleSubmit}>
@@ -266,12 +342,15 @@ export default function UserManagementPage() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="add-role">Role</label>
+                <label htmlFor="add-role">Role(s)</label>
                 <select
                   id="add-role"
-                  value={projectRole}
-                  onChange={(e) => setProjectRole(e.target.value as ProjectRole)}
-                  style={selectStyle}
+                  multiple
+                  value={projectRoles}
+                  onChange={(e) =>
+                    setProjectRoles(Array.from(e.target.selectedOptions, (o) => o.value as ProjectRole))
+                  }
+                  style={{ ...selectStyle, minHeight: 96 }}
                 >
                   {PROJECT_ROLE_OPTIONS.map(([value, label]) => (
                     <option key={value} value={value}>
@@ -426,7 +505,11 @@ export default function UserManagementPage() {
                       <td>
                         <span className="role-badge">{member.role.replace("_", " ")}</span>
                       </td>
-                      <td>{member.project_role ? PROJECT_ROLE_LABELS[member.project_role] : "—"}</td>
+                      <td>
+                        {member.project_roles.length > 0
+                          ? member.project_roles.map((r) => PROJECT_ROLE_LABELS[r]).join(", ")
+                          : "—"}
+                      </td>
                       <td>
                         <span className={`chip ${member.is_active ? "chip-good" : "chip-neutral"}`}>
                           {member.is_active ? "Active" : "Removed"}

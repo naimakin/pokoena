@@ -14,6 +14,6 @@ class TeamMemberOut(BaseModel):
     title: str | None = None
     phone: str | None = None
     role: TenantRole
-    project_role: ProjectRole | None = None
+    project_roles: list[ProjectRole] = []
     is_active: bool
     created_at: datetime

@@ -51,14 +51,14 @@ def add_membership(
     tenant: Tenant,
     role: TenantRole,
     subcontractor_org_id: uuid.UUID | None = None,
-    project_role: ProjectRole | None = None,
+    project_roles: list[ProjectRole] | None = None,
 ) -> UserTenantRole:
     membership = UserTenantRole(
         id=uuid.uuid4(),
         user_id=user.id,
         tenant_id=tenant.id,
         role=role,
-        project_role=project_role,
+        project_roles=[r.value for r in (project_roles or [])],
         subcontractor_org_id=subcontractor_org_id,
         is_active=True,
     )

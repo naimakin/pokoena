@@ -33,8 +33,8 @@ const NAV = [
     icon: UsersIcon,
     visible: (user: User | null) =>
       user?.role === "company_admin" ||
-      user?.project_role === "user_management" ||
-      user?.project_role === "project_administrator",
+      Boolean(user?.project_roles?.includes("user_management")) ||
+      Boolean(user?.project_roles?.includes("project_administrator")),
   },
   { href: "/projects-overview", label: "Project Status Dashboard", icon: BarChartIcon, visible: () => true },
   { href: "/activities", label: "Project Activities", icon: LayersIcon, visible: () => true },

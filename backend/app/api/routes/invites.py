@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, require_user_management
 from app.models.invite import Invite
 from app.models.tenant import Tenant
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 from app.schemas.invite import InviteAccept, InviteCreate, InviteOut, InvitePreview
 from app.schemas.user import UserOut
 from app.services import audit
@@ -37,8 +37,8 @@ def create_tenant_invite(
             detail="Additional company admins aren't invited through this endpoint yet",
         )
 
-    if payload.role in (TenantRole.company_employee, TenantRole.subcontractor) and payload.project_role is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="project_role is required")
+    if payload.role in (TenantRole.company_employee, TenantRole.subcontractor) and not payload.project_roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one project_role is required")
 
     tenant = db.get(Tenant, ctx.tenant_id)
     try:
@@ -50,7 +50,7 @@ def create_tenant_invite(
             title=payload.title,
             phone=payload.phone,
             role=payload.role,
-            project_role=payload.project_role,
+            project_roles=payload.project_roles,
             invited_by_user_id=ctx.user.id,
             tenant_name=tenant.name if tenant else None,
             payload=invite_payload,
@@ -67,8 +67,8 @@ def create_tenant_invite(
     )
     return InviteOut(
         id=invite.id, email=invite.email, full_name=invite.full_name, role=invite.role,
-        project_role=invite.project_role, status=invite.status, expires_at=invite.expires_at,
-        invite_url=invite_url,
+        project_roles=[ProjectRole(r) for r in invite.project_roles], status=invite.status,
+        expires_at=invite.expires_at, invite_url=invite_url,
     )
 
 
@@ -97,7 +97,7 @@ def preview_invite(token: str, db: Session = Depends(get_db)) -> InvitePreview:
         full_name=invite.full_name,
         title=invite.title,
         role=invite.role,
-        project_role=invite.project_role,
+        project_roles=[ProjectRole(r) for r in invite.project_roles],
         tenant_name=tenant.name if tenant else "",
         expires_at=invite.expires_at,
     )

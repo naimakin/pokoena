@@ -48,7 +48,7 @@ def test_company_admin_can_invite_subcontractor_and_they_can_accept(client, db_s
             "email": "newsub@example.com",
             "full_name": "New Sub",
             "role": "subcontractor",
-            "project_role": "activity_status_updater",
+            "project_roles": ["activity_status_updater"],
             "project_scope_ids": [str(scope.id)],
         },
     )
@@ -74,7 +74,7 @@ def test_company_admin_can_invite_subcontractor_and_they_can_accept(client, db_s
     assert body["email"] == "newsub@example.com"
     assert body["full_name"] == "New Sub"
     assert body["role"] == "subcontractor"
-    assert body["project_role"] == "activity_status_updater"
+    assert body["project_roles"] == ["activity_status_updater"]
     assert str(scope.id) in body["scope_ids"] or [str(s) for s in body["scope_ids"]] == [str(scope.id)]
 
     membership = (
@@ -103,7 +103,7 @@ def test_invite_cannot_be_accepted_twice(client, db_session, monkeypatch):
             "email": "employee@example.com",
             "full_name": "Employee One",
             "role": "company_employee",
-            "project_role": "execution",
+            "project_roles": ["execution"],
         },
     )
     raw_token = captured["invite_url"].rsplit("/", 1)[-1]
@@ -127,7 +127,7 @@ def test_expired_invite_is_rejected(client, db_session, monkeypatch):
         email="late@example.com",
         full_name="Nobody",
         role=TenantRole.company_employee,
-        project_role=ProjectRole.execution,
+        project_roles=[ProjectRole.execution],
         invited_by_user_id=admin.id,
     )
     invite.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -158,7 +158,7 @@ def test_non_admin_cannot_create_invites(client, db_session):
     assert response.status_code == 403
 
 
-def test_invite_requires_project_role_for_employee(client, db_session, monkeypatch):
+def test_invite_requires_project_roles_for_employee(client, db_session, monkeypatch):
     _capture_invite_url(monkeypatch)
     _tenant, _admin = _setup_company_admin(db_session, "admin4@example.com")
     client.post("/auth/login", json={"email": "admin4@example.com", "password": "secret123"})
@@ -177,7 +177,7 @@ def test_user_management_project_role_can_manage_team(client, db_session, monkey
     tenant, _admin = _setup_company_admin(db_session, "admin5@example.com")
     manager = create_user(db_session, "manager@example.com", "secret123")
     add_membership(
-        db_session, manager, tenant, TenantRole.company_employee, project_role=ProjectRole.user_management
+        db_session, manager, tenant, TenantRole.company_employee, project_roles=[ProjectRole.user_management]
     )
     client.post("/auth/login", json={"email": "manager@example.com", "password": "secret123"})
 
@@ -187,7 +187,7 @@ def test_user_management_project_role_can_manage_team(client, db_session, monkey
             "email": "newhire@example.com",
             "full_name": "New Hire",
             "role": "company_employee",
-            "project_role": "execution",
+            "project_roles": ["execution"],
         },
     )
     assert response.status_code == 201
@@ -214,7 +214,7 @@ def test_cannot_invite_an_email_that_already_has_an_account(client, db_session, 
             "email": "victim@example.com",
             "full_name": "Victim",
             "role": "company_employee",
-            "project_role": "execution",
+            "project_roles": ["execution"],
         },
     )
     assert response.status_code == 400

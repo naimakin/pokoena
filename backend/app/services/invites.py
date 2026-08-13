@@ -44,7 +44,7 @@ def create_invite(
     full_name: str = "",
     title: str | None = None,
     phone: str | None = None,
-    project_role: ProjectRole | None = None,
+    project_roles: list[ProjectRole] | None = None,
     tenant_name: str | None = None,
     payload: dict | None = None,
 ) -> tuple[Invite, str]:
@@ -53,7 +53,7 @@ def create_invite(
     `{"project_ids": [...]}` for company employees, `{"subcontractor_org_id": ...}`
     to attach a subcontractor to a firm. Only the token's hash is ever stored —
     the raw value is handed straight to the Celery task that emails it and is
-    never persisted. `full_name`/`title`/`phone`/`project_role` are entered by
+    never persisted. `full_name`/`title`/`phone`/`project_roles` are entered by
     the inviting admin, not the invitee — acceptance only ever collects a
     password.
 
@@ -97,7 +97,7 @@ def create_invite(
         title=title,
         phone=phone,
         role=role,
-        project_role=project_role,
+        project_roles=[r.value for r in (project_roles or [])],
         token_hash=_hash_token(raw_token),
         invited_by_user_id=invited_by_user_id,
         status=InviteStatus.pending,
@@ -214,14 +214,14 @@ def accept_invite(db: Session, raw_token: str, password: str) -> tuple[User, Inv
             user_id=user.id,
             tenant_id=invite.tenant_id,
             role=invite.role,
-            project_role=invite.project_role,
+            project_roles=invite.project_roles,
             subcontractor_org_id=uuid.UUID(subcontractor_org_id) if subcontractor_org_id else None,
             is_active=True,
         )
         db.add(membership)
     else:
         membership.role = invite.role
-        membership.project_role = invite.project_role
+        membership.project_roles = invite.project_roles
         membership.is_active = True
         if subcontractor_org_id:
             membership.subcontractor_org_id = uuid.UUID(subcontractor_org_id)

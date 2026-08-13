@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import AuthContext, require_user_management
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
 from app.schemas.password_reset import PasswordResetLinkOut
 from app.schemas.team import TeamMemberOut
 from app.services import audit
@@ -36,7 +36,7 @@ def list_team(
             title=user.title,
             phone=user.phone,
             role=membership.role,
-            project_role=membership.project_role,
+            project_roles=[ProjectRole(r) for r in membership.project_roles],
             is_active=membership.is_active,
             created_at=membership.created_at,
         )

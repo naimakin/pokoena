@@ -2,10 +2,15 @@ import enum
 import uuid
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, UniqueConstraint, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+# Generic JSON everywhere (needed for the SQLite test suite); real JSONB on Postgres.
+_JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
 
 
 class TenantRole(str, enum.Enum):
@@ -16,8 +21,10 @@ class TenantRole(str, enum.Enum):
 
 class ProjectRole(str, enum.Enum):
     """What a company_employee/subcontractor is allowed to do, tenant-wide
-    (not per-project — a person holds exactly one of these across every
-    project they're assigned to). company_admin rows never set this: their
+    (not per-project — a person can hold several of these at once, across
+    every project they're assigned to; stored as a JSON list of values
+    rather than a Postgres ARRAY-of-enum so SQLite, the pytest suite's
+    engine, can store it too). company_admin rows never set this: their
     TenantRole already implies unrestricted access, same reasoning as
     ProjectMembership skipping company admins entirely."""
 
@@ -68,11 +75,12 @@ class UserTenantRole(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     role: Mapped[TenantRole] = mapped_column(SAEnum(TenantRole, name="tenant_role"), nullable=False)
-    # Required (enforced in the invites route, not the DB) for company_employee
-    # and subcontractor; left null for company_admin.
-    project_role: Mapped[ProjectRole | None] = mapped_column(
-        SAEnum(ProjectRole, name="project_role"), nullable=True
-    )
+    # list[str] of ProjectRole values, not list[ProjectRole] — JSON round-trips
+    # plain strings; callers convert via [ProjectRole(r) for r in ...] (see
+    # deps.get_current_tenant_user). Required (enforced in the invites route,
+    # not the DB) to be non-empty for company_employee/subcontractor; left
+    # empty for company_admin.
+    project_roles: Mapped[list[str]] = mapped_column(_JSON, nullable=False, default=list)
     # Only set for role=subcontractor when the person belongs to a subcontractor firm.
     subcontractor_org_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("subcontractor_organizations.id"), nullable=True

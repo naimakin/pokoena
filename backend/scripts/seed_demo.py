@@ -119,7 +119,7 @@ def main() -> None:
                     user_id=employee_user.id,
                     tenant_id=tenant.id,
                     role=TenantRole.company_employee,
-                    project_role=ProjectRole.execution,
+                    project_roles=[ProjectRole.execution],
                     is_active=True,
                 ),
                 UserTenantRole(
@@ -127,7 +127,7 @@ def main() -> None:
                     user_id=sub_user.id,
                     tenant_id=tenant.id,
                     role=TenantRole.subcontractor,
-                    project_role=ProjectRole.activity_status_updater,
+                    project_roles=[ProjectRole.activity_status_updater],
                     subcontractor_org_id=mep_org.id,
                     is_active=True,
                 ),

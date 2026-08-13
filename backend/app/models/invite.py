@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.models.user_tenant_role import ProjectRole, TenantRole
+from app.models.user_tenant_role import TenantRole
 
 # Generic JSON everywhere (needed for the SQLite test suite); real JSONB on Postgres.
 _JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
@@ -26,7 +26,7 @@ class Invite(Base):
     the raw token is emailed once and never persisted. `payload` carries the
     intended project_scope_ids (subcontractor invites) or project_ids
     (company_employee invites) so acceptance can materialize the right rows.
-    `full_name`/`title`/`phone`/`project_role` are first-class columns (not
+    `full_name`/`title`/`phone`/`project_roles` are first-class columns (not
     payload) since every invite carries them, entered by the inviting admin —
     the invitee only ever sets a password when accepting."""
 
@@ -39,9 +39,8 @@ class Invite(Base):
     title: Mapped[str | None] = mapped_column(String(150), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     role: Mapped[TenantRole] = mapped_column(SAEnum(TenantRole, name="tenant_role"), nullable=False)
-    project_role: Mapped[ProjectRole | None] = mapped_column(
-        SAEnum(ProjectRole, name="project_role"), nullable=True
-    )
+    # list[str] of ProjectRole values — see UserTenantRole.project_roles for why.
+    project_roles: Mapped[list[str]] = mapped_column(_JSON, nullable=False, default=list)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     invited_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     status: Mapped[InviteStatus] = mapped_column(

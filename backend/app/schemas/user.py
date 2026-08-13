@@ -20,7 +20,7 @@ class UserOut(BaseModel):
     is_active: bool
     tenant_id: uuid.UUID
     role: TenantRole
-    project_role: ProjectRole | None = None
+    project_roles: list[ProjectRole] = []
     scope_ids: list[uuid.UUID] = []
 
 

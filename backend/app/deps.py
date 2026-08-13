@@ -34,7 +34,7 @@ class AuthContext:
     user: User
     tenant_id: uuid.UUID
     role: TenantRole
-    project_role: ProjectRole | None = None
+    project_roles: list[ProjectRole] = field(default_factory=list)
     scope_ids: list[uuid.UUID] = field(default_factory=list)
     subcontractor_org_id: uuid.UUID | None = None
 
@@ -109,7 +109,7 @@ def get_current_tenant_user(request: Request, db: Session = Depends(get_db)) -> 
         user=user,
         tenant_id=tenant_id,
         role=membership.role,
-        project_role=membership.project_role,
+        project_roles=[ProjectRole(r) for r in membership.project_roles],
         scope_ids=scope_ids,
         subcontractor_org_id=membership.subcontractor_org_id,
     )
@@ -144,12 +144,12 @@ def require_role(*roles: TenantRole):
 
 def require_user_management(ctx: AuthContext = Depends(get_current_tenant_user)) -> AuthContext:
     """Company Admins always manage their tenant's team. A company_employee or
-    subcontractor can too, but only if they were explicitly granted the
-    User Management (or Project Administrator) project_role — everyone else
-    (e.g. plain Execution/Activity Status Updater) is 403'd."""
+    subcontractor can too, but only if they hold at least one of the User
+    Management / Project Administrator project_roles — everyone else (e.g.
+    holding only Execution/Activity Status Updater) is 403'd."""
     if ctx.role == TenantRole.company_admin:
         return ctx
-    if ctx.project_role in USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
+    if set(ctx.project_roles) & USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
         return ctx
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
 
@@ -183,11 +183,11 @@ def require_project_permission(
     aren't gated by this at all: their access is scope-based
     (require_scope_access), not project-membership-based. Whether the caller
     may *edit* (as opposed to just view) is no longer per-project — it's
-    derived from their tenant-wide project_role via EDIT_CAPABLE_PROJECT_ROLES.
+    derived from their tenant-wide project_roles via EDIT_CAPABLE_PROJECT_ROLES.
     """
     if ctx.role == TenantRole.company_admin:
         return
-    if need_edit and ctx.project_role not in EDIT_CAPABLE_PROJECT_ROLES:
+    if need_edit and not (set(ctx.project_roles) & EDIT_CAPABLE_PROJECT_ROLES):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="View-only access to this project")
     if ctx.role == TenantRole.subcontractor:
         return

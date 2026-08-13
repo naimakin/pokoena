@@ -11,7 +11,7 @@ class ProjectMembership(Base):
     """Grants a Company Employee or Subcontractor access to one project.
     Company Admins never need a row here — their UserTenantRole already
     implies full tenant-wide access. What the member may actually do on the
-    project is governed by their tenant-wide UserTenantRole.project_role, not
+    project is governed by their tenant-wide UserTenantRole.project_roles, not
     by anything on this row — this table only records *which* projects."""
 
     __tablename__ = "project_memberships"

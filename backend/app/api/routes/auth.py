@@ -188,6 +188,6 @@ def me(ctx: AuthContext = Depends(get_current_tenant_user)) -> UserOut:
         is_active=ctx.user.is_active,
         tenant_id=ctx.tenant_id,
         role=ctx.role,
-        project_role=ctx.project_role,
+        project_roles=ctx.project_roles,
         scope_ids=ctx.scope_ids,
     )

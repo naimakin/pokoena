@@ -85,7 +85,7 @@ def test_company_admin_can_reset_a_team_members_password(client, db_session):
     add_membership(db_session, admin, tenant, TenantRole.company_admin)
     employee = create_user(db_session, "employee@example.com", "old-password")
     membership = add_membership(
-        db_session, employee, tenant, TenantRole.company_employee, project_role=ProjectRole.execution
+        db_session, employee, tenant, TenantRole.company_employee, project_roles=[ProjectRole.execution]
     )
     client.post("/auth/login", json={"email": "admin@example.com", "password": "secret123"})
 
@@ -105,7 +105,7 @@ def test_user_management_employee_cannot_reset_a_company_admins_password(client,
     admin_membership = add_membership(db_session, admin, tenant, TenantRole.company_admin)
     manager = create_user(db_session, "manager@example.com", "secret123")
     add_membership(
-        db_session, manager, tenant, TenantRole.company_employee, project_role=ProjectRole.user_management
+        db_session, manager, tenant, TenantRole.company_employee, project_roles=[ProjectRole.user_management]
     )
     client.post("/auth/login", json={"email": "manager@example.com", "password": "secret123"})
 
