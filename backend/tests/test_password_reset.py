@@ -1,5 +1,5 @@
 from app.core.security import verify_password
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole
 from tests.factories import add_membership, create_tenant, create_user
 
 
@@ -77,3 +77,37 @@ def test_non_platform_admin_cannot_generate_reset_links(client, db_session):
 
     response = client.post(f"/platform/tenants/{tenant.id}/admin-reset-link")
     assert response.status_code == 401
+
+
+def test_company_admin_can_reset_a_team_members_password(client, db_session):
+    tenant = create_tenant(db_session)
+    admin = create_user(db_session, "admin@example.com", "secret123")
+    add_membership(db_session, admin, tenant, TenantRole.company_admin)
+    employee = create_user(db_session, "employee@example.com", "old-password")
+    membership = add_membership(
+        db_session, employee, tenant, TenantRole.company_employee, project_role=ProjectRole.execution
+    )
+    client.post("/auth/login", json={"email": "admin@example.com", "password": "secret123"})
+
+    response = client.post(f"/team/{membership.id}/reset-password-link")
+    assert response.status_code == 200
+    raw_token = response.json()["reset_url"].rsplit("/", 1)[-1]
+
+    submit_response = client.post(f"/reset-password/{raw_token}", json={"password": "fresh-password"})
+    assert submit_response.status_code == 200
+    db_session.refresh(employee)
+    assert verify_password("fresh-password", employee.hashed_password)
+
+
+def test_user_management_employee_cannot_reset_a_company_admins_password(client, db_session):
+    tenant = create_tenant(db_session)
+    admin = create_user(db_session, "admin2@example.com", "secret123")
+    admin_membership = add_membership(db_session, admin, tenant, TenantRole.company_admin)
+    manager = create_user(db_session, "manager@example.com", "secret123")
+    add_membership(
+        db_session, manager, tenant, TenantRole.company_employee, project_role=ProjectRole.user_management
+    )
+    client.post("/auth/login", json={"email": "manager@example.com", "password": "secret123"})
+
+    response = client.post(f"/team/{admin_membership.id}/reset-password-link")
+    assert response.status_code == 403

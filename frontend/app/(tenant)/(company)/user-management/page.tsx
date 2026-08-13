@@ -8,6 +8,7 @@ import {
   PROJECT_ROLE_LABELS,
   type Invite,
   type InviteCreatePayload,
+  type PasswordResetLink,
   type Project,
   type ProjectRole,
   type ProjectScope,
@@ -36,7 +37,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [lastInvite, setLastInvite] = useState<{ name: string; url: string } | null>(null);
+  const [lastLink, setLastLink] = useState<{ heading: string; url: string } | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -133,7 +134,7 @@ export default function UserManagementPage() {
       }
       const invite = await api.post<Invite>("/invites", payload);
       if (invite.invite_url) {
-        setLastInvite({ name: fullName || email, url: invite.invite_url });
+        setLastLink({ heading: `Invite link for ${fullName || email}`, url: invite.invite_url });
       }
       showToast(`Invite created for ${email}`);
       resetForm();
@@ -145,22 +146,32 @@ export default function UserManagementPage() {
     }
   }
 
-  async function handleCopyInvite(url: string) {
+  async function handleCopyLink(url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      showToast("Invite link copied");
+      showToast("Link copied");
     } catch {
       showToast("Couldn't copy — select and copy the link manually.");
     }
   }
 
   async function handleRemove(member: TeamMember) {
+    if (!window.confirm(`Remove ${member.full_name}'s access? They won't be able to sign in anymore.`)) return;
     try {
       await api.delete(`/team/${member.user_tenant_role_id}`);
       showToast(`Removed ${member.full_name}`);
       load();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to remove team member.");
+    }
+  }
+
+  async function handleResetLink(member: TeamMember) {
+    try {
+      const result = await api.post<PasswordResetLink>(`/team/${member.user_tenant_role_id}/reset-password-link`);
+      setLastLink({ heading: `Password reset link for ${result.email}`, url: result.reset_url });
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to generate a reset link.");
     }
   }
 
@@ -184,10 +195,10 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        {lastInvite && (
+        {lastLink && (
           <div className="card">
             <div className="card-head">
-              <div className="card-title">Invite link for {lastInvite.name}</div>
+              <div className="card-title">{lastLink.heading}</div>
             </div>
             <div style={{ padding: "1rem 1.1rem" }}>
               <p className="page-desc" style={{ marginBottom: ".6rem" }}>
@@ -199,14 +210,14 @@ export default function UserManagementPage() {
                   <input
                     type="text"
                     readOnly
-                    value={lastInvite.url}
+                    value={lastLink.url}
                     onFocus={(e) => e.target.select()}
                   />
                 </div>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => handleCopyInvite(lastInvite.url)}
+                  onClick={() => handleCopyLink(lastLink.url)}
                 >
                   <CheckIcon className="icon" /> Copy
                 </button>
@@ -422,15 +433,25 @@ export default function UserManagementPage() {
                         </span>
                       </td>
                       <td>
-                        {member.is_active && member.role !== "company_admin" && (
-                          <button
-                            className="act-btn act-reject"
-                            title="Remove access"
-                            onClick={() => handleRemove(member)}
-                          >
-                            <XIcon className="icon" />
-                          </button>
-                        )}
+                        <div className="actions">
+                          {member.is_active && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleResetLink(member)}
+                            >
+                              Reset password
+                            </button>
+                          )}
+                          {member.is_active && member.role !== "company_admin" && (
+                            <button
+                              className="act-btn act-reject"
+                              title="Remove access"
+                              onClick={() => handleRemove(member)}
+                            >
+                              <XIcon className="icon" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

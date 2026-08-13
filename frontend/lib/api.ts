@@ -1,5 +1,11 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Endpoints that are inherently about establishing/renewing a session
+// themselves — a 401 from one of these must never trigger the refresh-and-
+// retry logic below (that would either loop or paper over a genuine bad
+// login attempt as if it were an expired session).
+const SESSION_ENDPOINTS = ["/auth/login", "/auth/refresh", "/platform-auth/login", "/platform-auth/refresh"];
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -8,7 +14,21 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function isPlatformArea(): boolean {
+  return typeof window !== "undefined" && window.location.pathname.startsWith("/platform-admin");
+}
+
+async function tryRefreshSession(): Promise<boolean> {
+  const refreshPath = isPlatformArea() ? "/platform-auth/refresh" : "/auth/refresh";
+  try {
+    const response = await fetch(`${API_URL}${refreshPath}`, { method: "POST", credentials: "include" });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     credentials: "include",
@@ -17,6 +37,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers,
     },
   });
+
+  // A 15-minute access token expiring mid-session shouldn't surface as a raw
+  // error on whatever the person happened to be doing — try once, silently,
+  // to renew it from the (longer-lived) refresh cookie before giving up.
+  if (response.status === 401 && !isRetry && !SESSION_ENDPOINTS.includes(path)) {
+    if (await tryRefreshSession()) {
+      return request<T>(path, options, true);
+    }
+    // Refresh cookie is gone or invalid too — the session is genuinely over.
+    // A toast on a page nobody can act on isn't useful; send them back to
+    // sign in instead of leaving every subsequent action failing silently.
+    if (typeof window !== "undefined") {
+      window.location.href = isPlatformArea() ? "/platform-admin/login" : "/login";
+    }
+  }
 
   if (!response.ok) {
     let detail = response.statusText;
