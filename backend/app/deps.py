@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.security import PLATFORM_ACCESS, TENANT_ACCESS, decode_token
 from app.db.session import get_db, set_rls_context
 from app.models.project_membership import ProjectMembership
+from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import (
     EDIT_CAPABLE_PROJECT_ROLES,
@@ -73,6 +74,19 @@ def get_current_tenant_user(request: Request, db: Session = Depends(get_db)) -> 
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
+    # Set before the very first RLS-protected query on this session (below),
+    # not after: user_tenant_roles has RLS FORCEd, so querying it with no
+    # tenant context set returns zero rows on real Postgres regardless of
+    # what's actually there — every tenant request would 401 as "no access"
+    # even for a legitimate member. tenant_id here comes from the (already
+    # signature-verified) token, so this is safe to set before re-deriving
+    # the membership from the DB below.
+    set_rls_context(db, tenant_id)
+
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None or tenant.status != TenantStatus.active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+
     # Re-derived from the DB, not trusted from the token claim: a role change or
     # tenant-access revocation takes effect on the next request, not only after
     # the (short-lived) access token happens to expire.
@@ -91,7 +105,6 @@ def get_current_tenant_user(request: Request, db: Session = Depends(get_db)) -> 
         )
 
     scope_ids = [uuid.UUID(s) for s in payload.get("scope_ids", [])]
-    set_rls_context(db, tenant_id)
     return AuthContext(
         user=user,
         tenant_id=tenant_id,

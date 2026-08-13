@@ -15,13 +15,14 @@ from app.core.security import (
     revoke_refresh_token,
     verify_password,
 )
-from app.db.session import get_db
+from app.db.session import BypassSessionLocal, get_db, set_rls_context
 from app.deps import (
     TENANT_REFRESH_COOKIE,
     TENANT_SESSION_COOKIE,
     AuthContext,
     get_current_tenant_user,
 )
+from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import UserTenantRole
 from app.schemas.auth import LoginRequest
@@ -31,6 +32,27 @@ from app.services.tenant_session import issue_tenant_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _active_tenant_id_for_user(user_id: uuid.UUID) -> uuid.UUID | None:
+    """Which tenant(s) a user belongs to is exactly what RLS on
+    user_tenant_roles needs already-known context to answer — a
+    chicken-and-egg the ordinary RLS-bound session can't resolve at login,
+    before any tenant is established yet. The caller has already verified
+    the account's password by this point, so reading across tenants for
+    this one user is safe — same reasoning as the platform support-access
+    path and the invite-lookup bootstrap in services/invites.py."""
+    bypass_db = BypassSessionLocal()
+    try:
+        row = (
+            bypass_db.query(UserTenantRole.tenant_id)
+            .filter(UserTenantRole.user_id == user_id, UserTenantRole.is_active.is_(True))
+            .order_by(UserTenantRole.created_at.asc())
+            .first()
+        )
+        return row[0] if row else None
+    finally:
+        bypass_db.close()
 
 
 @router.post(
@@ -49,14 +71,35 @@ def login(
         audit.log("login.failed", tenant_id=None, actor_user_id=user.id, ip_address=client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+    tenant_id = _active_tenant_id_for_user(user.id)
+    if tenant_id is None:
+        audit.log("login.failed", tenant_id=None, actor_user_id=user.id, ip_address=client_ip)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No active tenant access")
+
+    # Must be set before this — and every later — query on `db` this request
+    # makes: user_tenant_roles has RLS FORCEd, so it (and every other
+    # tenant-scoped table `issue_tenant_session` below touches) is invisible
+    # to this session until its tenant context is set.
+    set_rls_context(db, tenant_id)
+
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None or tenant.status != TenantStatus.active:
+        audit.log("login.failed", tenant_id=tenant_id, actor_user_id=user.id, ip_address=client_ip)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This company's account is not active")
+
     membership = (
         db.query(UserTenantRole)
-        .filter(UserTenantRole.user_id == user.id, UserTenantRole.is_active.is_(True))
-        .order_by(UserTenantRole.created_at.asc())
+        .filter(
+            UserTenantRole.user_id == user.id,
+            UserTenantRole.tenant_id == tenant_id,
+            UserTenantRole.is_active.is_(True),
+        )
         .first()
     )
     if membership is None:
-        audit.log("login.failed", tenant_id=None, actor_user_id=user.id, ip_address=client_ip)
+        # Only reachable via an extremely unlikely race (revoked between the
+        # two lookups above) — same response as the "no membership" case.
+        audit.log("login.failed", tenant_id=tenant_id, actor_user_id=user.id, ip_address=client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No active tenant access")
 
     result = issue_tenant_session(response, db, user, membership)
@@ -89,6 +132,14 @@ def refresh(
     user = db.get(User, uuid.UUID(payload["sub"]))
     tenant_id = uuid.UUID(payload["tenant_id"])
     if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+
+    # See get_current_tenant_user's identical comment: must be set before the
+    # first RLS-protected query below, not after.
+    set_rls_context(db, tenant_id)
+
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None or tenant.status != TenantStatus.active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
     membership = (

@@ -1,3 +1,4 @@
+from app.models.tenant import TenantStatus
 from app.models.user_tenant_role import TenantRole
 from tests.factories import add_membership, create_tenant, create_user
 
@@ -72,6 +73,31 @@ def test_refresh_rotates_session(client, db_session):
 
     assert response.status_code == 200
     assert response.json()["email"] == "admin5@example.com"
+
+
+def test_login_rejected_for_suspended_tenant(client, db_session):
+    tenant, _user = _setup_company_admin(db_session, "admin7@example.com", "secret123")
+    tenant.status = TenantStatus.suspended
+    db_session.commit()
+
+    response = client.post("/auth/login", json={"email": "admin7@example.com", "password": "secret123"})
+    assert response.status_code == 401
+
+
+def test_suspending_a_tenant_kills_an_existing_session(client, db_session):
+    """A session established while the tenant was active must stop working
+    the moment it's suspended — not just block future logins."""
+    tenant, _user = _setup_company_admin(db_session, "admin8@example.com", "secret123")
+    client.post("/auth/login", json={"email": "admin8@example.com", "password": "secret123"})
+    assert client.get("/auth/me").status_code == 200
+
+    tenant.status = TenantStatus.suspended
+    db_session.commit()
+
+    assert client.get("/auth/me").status_code == 401
+
+    refresh_response = client.post("/auth/refresh")
+    assert refresh_response.status_code == 401
 
 
 def test_login_rate_limited_after_repeated_attempts(client, db_session):
