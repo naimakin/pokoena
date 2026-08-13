@@ -1,11 +1,14 @@
 import os
 
-# All three DB URLs point at SQLite: this guarantees that if any code path
-# (e.g. the platform support-access route) ever tries to open the bypass or
-# migrate engine during a test, it fails fast against a schema-less in-memory
-# DB instead of hanging on a real network connection to a Postgres that isn't
-# running in this environment. RLS itself is Postgres-only and is exercised by
-# a separate, explicitly-gated test module — not this suite.
+# All three DB URLs point at SQLite so nothing ever opens a real network
+# connection to a Postgres that isn't running in this environment. The
+# bypass engine's module-level SQLite `:memory:` DB (created from
+# DATABASE_URL_BYPASS below) is schema-less and unused in practice — the
+# `db_session` fixture below redirects every legitimate BypassSessionLocal()
+# caller to the same per-test database as everything else instead, so this
+# URL only matters as a safe fallback for any *other* code path that opens it
+# without going through that redirect. RLS itself is Postgres-only and is
+# exercised by a separate, explicitly-gated test module — not this suite.
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("DATABASE_URL_BYPASS", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("DATABASE_URL_MIGRATE", "sqlite+pysqlite:///:memory:")
@@ -28,7 +31,7 @@ from app.main import app
 
 
 @pytest.fixture()
-def db_session():
+def db_session(monkeypatch):
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -36,6 +39,18 @@ def db_session():
     )
     Base.metadata.create_all(engine)
     testing_session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    # A few code paths open BypassSessionLocal() directly instead of taking a
+    # Session via Depends(get_db) — the RLS-bootstrap invite lookup in
+    # services/invites.py, and the platform support-access route — so
+    # overriding the get_db dependency alone (see the `client` fixture below)
+    # doesn't reach them. Point every module that imported BypassSessionLocal
+    # by name at this same test database instead of the schema-less
+    # DATABASE_URL_BYPASS one above, so those paths exercise real behavior
+    # (schema and shared data) rather than always failing on a missing table.
+    monkeypatch.setattr("app.services.invites.BypassSessionLocal", testing_session_local)
+    monkeypatch.setattr("app.api.routes.platform.BypassSessionLocal", testing_session_local)
+
     session = testing_session_local()
     try:
         yield session

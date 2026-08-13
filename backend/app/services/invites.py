@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.db.session import set_rls_context
+from app.db.session import BypassSessionLocal, set_rls_context
 from app.models.invite import Invite, InviteStatus
 from app.models.project_membership import ProjectMembership
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
@@ -100,9 +100,33 @@ def create_invite(
     return invite, invite_url
 
 
+def _invite_tenant_id_for_token(raw_token: str) -> uuid.UUID | None:
+    """Bootstrap lookup: which tenant a token belongs to is exactly what's
+    still unknown at this point, but RLS on `invites` requires
+    app.current_tenant_id to already be set to the right value — a
+    chicken-and-egg an ordinary RLS-bound session can't resolve on its own.
+    The unguessable token itself is the authorization for this one read, same
+    reasoning as the platform support-access path, so it goes through the
+    BYPASSRLS connection rather than the caller's session."""
+    bypass_db = BypassSessionLocal()
+    try:
+        row = (
+            bypass_db.query(Invite.tenant_id)
+            .filter(Invite.token_hash == _hash_token(raw_token))
+            .first()
+        )
+        return row[0] if row else None
+    finally:
+        bypass_db.close()
+
+
 def get_invite_preview(db: Session, raw_token: str) -> Invite:
-    """Used by the public `GET /invites/{token}` preview — no session/tenant
-    context needed since it's a read the invite token itself already justifies."""
+    """Used by the public `GET /invites/{token}` preview."""
+    tenant_id = _invite_tenant_id_for_token(raw_token)
+    if tenant_id is None:
+        raise InviteError("Invalid invite link")
+    set_rls_context(db, tenant_id)
+
     invite = db.query(Invite).filter(Invite.token_hash == _hash_token(raw_token)).first()
     if invite is None:
         raise InviteError("Invalid invite link")
@@ -115,6 +139,18 @@ def get_invite_preview(db: Session, raw_token: str) -> Invite:
 
 def accept_invite(db: Session, raw_token: str, password: str) -> tuple[User, Invite]:
     token_hash = _hash_token(raw_token)
+    tenant_id = _invite_tenant_id_for_token(raw_token)
+    if tenant_id is None:
+        raise InviteError("Invalid invite link")
+
+    # The invite itself is the authorization for everything below — it's a
+    # valid, unexpired, single-use token scoped to exactly one tenant — so
+    # it's safe to set RLS context to that tenant even though the person
+    # accepting it isn't authenticated as a member of it yet. Setting it here
+    # (rather than after the lookup below) is what makes that lookup, and its
+    # row lock, possible at all under RLS.
+    set_rls_context(db, tenant_id)
+
     query = db.query(Invite).filter(Invite.token_hash == token_hash)
     # SQLite (the pytest suite's engine) can't compile FOR UPDATE at all — real
     # row locking against a concurrent double-accept only matters, and is only
@@ -130,12 +166,6 @@ def accept_invite(db: Session, raw_token: str, password: str) -> tuple[User, Inv
         invite.status = InviteStatus.expired
         db.commit()
         raise InviteError("This invite has expired")
-
-    # The invite itself is the authorization for everything below — it's a
-    # valid, unexpired, single-use token scoped to exactly one tenant — so it's
-    # safe to set RLS context to that tenant even though the person accepting
-    # it isn't authenticated as a member of it yet.
-    set_rls_context(db, invite.tenant_id)
 
     user = db.query(User).filter(User.email == invite.email).first()
     if user is None:
