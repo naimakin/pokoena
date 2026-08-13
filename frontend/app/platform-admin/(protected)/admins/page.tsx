@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { UsersIcon, XIcon } from "@/components/icons";
+import { CheckIcon, UsersIcon, XIcon } from "@/components/icons";
 import type { PlatformAdmin, PlatformAdminCreatePayload } from "@/lib/types";
 
 export default function PlatformAdminsPage() {
@@ -63,12 +63,23 @@ export default function PlatformAdminsPage() {
   }
 
   async function handleDeactivate(admin: PlatformAdmin) {
+    if (!window.confirm(`Deactivate ${admin.full_name}? They won't be able to sign in until reactivated.`)) return;
     try {
       await api.post(`/platform/admins/${admin.id}/deactivate`);
       showToast(`${admin.full_name} deactivated`);
       load();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to deactivate admin.");
+    }
+  }
+
+  async function handleActivate(admin: PlatformAdmin) {
+    try {
+      await api.post(`/platform/admins/${admin.id}/activate`);
+      showToast(`${admin.full_name} activated`);
+      load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to activate admin.");
     }
   }
 
@@ -181,13 +192,21 @@ export default function PlatformAdminsPage() {
                         </span>
                       </td>
                       <td>
-                        {admin.is_active && (
+                        {admin.is_active ? (
                           <button
                             className="act-btn act-reject"
                             title="Deactivate"
                             onClick={() => handleDeactivate(admin)}
                           >
                             <XIcon className="icon" />
+                          </button>
+                        ) : (
+                          <button
+                            className="act-btn act-approve"
+                            title="Activate"
+                            onClick={() => handleActivate(admin)}
+                          >
+                            <CheckIcon className="icon" />
                           </button>
                         )}
                       </td>

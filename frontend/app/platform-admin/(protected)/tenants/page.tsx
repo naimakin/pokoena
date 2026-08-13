@@ -70,6 +70,7 @@ export default function PlatformTenantsPage() {
   }
 
   async function handleSuspend(tenant: Tenant) {
+    if (!window.confirm(`Suspend ${tenant.name}? Its users won't be able to sign in until reactivated.`)) return;
     try {
       await api.post(`/platform/tenants/${tenant.id}/suspend`);
       showToast(`${tenant.name} suspended`);
@@ -79,7 +80,18 @@ export default function PlatformTenantsPage() {
     }
   }
 
+  async function handleActivate(tenant: Tenant) {
+    try {
+      await api.post(`/platform/tenants/${tenant.id}/activate`);
+      showToast(`${tenant.name} activated`);
+      load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to activate tenant.");
+    }
+  }
+
   async function handleDelete(tenant: Tenant) {
+    if (!window.confirm(`Delete ${tenant.name}? This can be undone by activating it again later.`)) return;
     try {
       await api.delete(`/platform/tenants/${tenant.id}`);
       showToast(`${tenant.name} deleted`);
@@ -236,9 +248,13 @@ export default function PlatformTenantsPage() {
                       <td>{new Date(tenant.created_at).toLocaleDateString()}</td>
                       <td>
                         <div className="actions">
-                          {tenant.status === "active" && (
+                          {tenant.status === "active" ? (
                             <button className="btn btn-secondary btn-sm" onClick={() => handleSuspend(tenant)}>
                               Suspend
+                            </button>
+                          ) : (
+                            <button className="btn btn-secondary btn-sm" onClick={() => handleActivate(tenant)}>
+                              Activate
                             </button>
                           )}
                           {tenant.status !== "deleted" && (

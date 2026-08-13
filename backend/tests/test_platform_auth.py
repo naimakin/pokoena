@@ -113,6 +113,21 @@ def test_platform_admin_can_manage_tenants(client, db_session):
     assert suspend_response.status_code == 200
     assert suspend_response.json()["status"] == "suspended"
 
+    already_active = client.post(f"/platform/tenants/{tenant_id}/activate")
+    assert already_active.status_code == 200
+    assert already_active.json()["status"] == "active"
+
+    redundant_activate = client.post(f"/platform/tenants/{tenant_id}/activate")
+    assert redundant_activate.status_code == 400
+
+    delete_response = client.delete(f"/platform/tenants/{tenant_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["status"] == "deleted"
+
+    restore_response = client.post(f"/platform/tenants/{tenant_id}/activate")
+    assert restore_response.status_code == 200
+    assert restore_response.json()["status"] == "active"
+
 
 def test_cannot_onboard_tenant_with_admin_email_that_already_has_an_account(client, db_session):
     """Same account-takeover concern as test_invites.py's version of this,
@@ -183,6 +198,18 @@ def test_platform_admin_can_create_and_deactivate_another_admin(client, db_sessi
         "/platform-auth/login", json={"email": "second@pokoena.com", "password": "secret456"}
     )
     assert relogin.status_code == 401
+
+    already_active = client.post(f"/platform/admins/{new_admin_id}/activate")
+    assert already_active.status_code == 200
+    assert already_active.json()["is_active"] is True
+
+    redundant_activate = client.post(f"/platform/admins/{new_admin_id}/activate")
+    assert redundant_activate.status_code == 400
+
+    restored_login = client.post(
+        "/platform-auth/login", json={"email": "second@pokoena.com", "password": "secret456"}
+    )
+    assert restored_login.status_code == 200
 
 
 def test_platform_admin_cannot_deactivate_self(client, db_session):

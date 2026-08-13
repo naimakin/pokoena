@@ -89,6 +89,30 @@ def suspend_tenant(
     return tenant
 
 
+@router.post("/tenants/{tenant_id}/activate", response_model=TenantOut)
+def activate_tenant(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> Tenant:
+    """Reverses suspend or (soft) delete — the tenant's business data was
+    never touched by either, so flipping status back to active is all this
+    needs to do."""
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    if tenant.status == TenantStatus.active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant is already active")
+    tenant.status = TenantStatus.active
+    db.commit()
+    db.refresh(tenant)
+    audit.log(
+        "tenant.activated", tenant_id=tenant.id, actor_user_id=platform_admin.id,
+        target_type="tenant", target_id=tenant.id,
+    )
+    return tenant
+
+
 @router.delete("/tenants/{tenant_id}", response_model=TenantOut)
 def delete_tenant(
     tenant_id: uuid.UUID,
@@ -266,6 +290,27 @@ def deactivate_platform_admin(
     db.refresh(target)
     audit.log(
         "platform_admin.deactivated", tenant_id=None, actor_user_id=platform_admin.id,
+        target_type="user", target_id=target.id,
+    )
+    return target
+
+
+@router.post("/admins/{admin_id}/activate", response_model=PlatformAdminOut)
+def activate_platform_admin(
+    admin_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> User:
+    target = db.query(User).filter(User.id == admin_id, User.is_platform_admin.is_(True)).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Platform admin not found")
+    if target.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin is already active")
+    target.is_active = True
+    db.commit()
+    db.refresh(target)
+    audit.log(
+        "platform_admin.activated", tenant_id=None, actor_user_id=platform_admin.id,
         target_type="user", target_id=target.id,
     )
     return target
