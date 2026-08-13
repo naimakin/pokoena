@@ -44,7 +44,7 @@ async function handlePlatformArea(request: NextRequest, pathname: string): Promi
 }
 
 async function handleTenantArea(request: NextRequest, pathname: string): Promise<NextResponse> {
-  if (pathname.startsWith("/invite/")) {
+  if (pathname.startsWith("/invite/") || pathname.startsWith("/reset-password/")) {
     // Public, single-use-token-gated — no session required or checked.
     return NextResponse.next();
   }

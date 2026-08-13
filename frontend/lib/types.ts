@@ -53,12 +53,23 @@ export interface Tenant {
   slug: string;
   status: TenantStatus;
   created_at: string;
+  admin_email: string | null;
 }
 
 export interface TenantCreateResult extends Tenant {
   // One-time invite link for the first company admin — no email provider is
   // wired up yet, so this is the only place it's ever recoverable.
   admin_invite_url: string;
+}
+
+export interface PasswordResetLink {
+  email: string;
+  reset_url: string;
+}
+
+export interface PasswordResetPreview {
+  email: string;
+  is_platform_admin: boolean;
 }
 
 export interface UsageSummary {

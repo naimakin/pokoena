@@ -104,10 +104,13 @@ def test_platform_admin_can_manage_tenants(client, db_session):
     tenant_id = create_response.json()["id"]
     invite_url = create_response.json()["admin_invite_url"]
     assert "/invite/" in invite_url and len(invite_url.rsplit("/", 1)[-1]) > 10
+    assert create_response.json()["admin_email"] == "founder@newco.com"
 
     list_response = client.get("/platform/tenants")
     assert list_response.status_code == 200
-    assert any(t["id"] == tenant_id for t in list_response.json())
+    listed = next(t for t in list_response.json() if t["id"] == tenant_id)
+    # Not yet accepted — falls back to the pending invite's email.
+    assert listed["admin_email"] == "founder@newco.com"
 
     suspend_response = client.post(f"/platform/tenants/{tenant_id}/suspend")
     assert suspend_response.status_code == 200

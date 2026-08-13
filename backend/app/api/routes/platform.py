@@ -8,16 +8,52 @@ from app.core.security import hash_password
 from app.db.session import BypassSessionLocal, get_db, set_rls_context
 from app.deps import get_current_platform_admin
 from app.models.activity import Activity
+from app.models.invite import Invite, InviteStatus
 from app.models.project import Project
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole, UserTenantRole
+from app.schemas.password_reset import PasswordResetLinkOut
 from app.schemas.tenant import TenantCreate, TenantCreateOut, TenantOut, UsageSummary
 from app.schemas.user import PlatformAdminCreate, PlatformAdminOut
 from app.services import audit
 from app.services.invites import InviteError, create_invite
+from app.services.password_reset import create_password_reset
 
 router = APIRouter(prefix="/platform", tags=["platform"])
+
+
+def _admin_emails_by_tenant(tenant_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Cross-tenant by nature (one row per tenant, read from the platform
+    admin's own list page) — uses the BYPASSRLS connection like the other
+    platform-wide aggregates in this file, never row-level tenant business
+    data. Prefers an accepted company_admin; falls back to the still-pending
+    invite's email so a freshly-onboarded tenant shows something immediately."""
+    if not tenant_ids:
+        return {}
+    bypass_db = BypassSessionLocal()
+    try:
+        emails: dict[uuid.UUID, str] = {}
+        for tenant_id, email in (
+            bypass_db.query(Invite.tenant_id, Invite.email)
+            .filter(Invite.tenant_id.in_(tenant_ids), Invite.role == TenantRole.company_admin, Invite.status == InviteStatus.pending)
+            .all()
+        ):
+            emails[tenant_id] = email
+        for tenant_id, email in (
+            bypass_db.query(UserTenantRole.tenant_id, User.email)
+            .join(User, User.id == UserTenantRole.user_id)
+            .filter(
+                UserTenantRole.tenant_id.in_(tenant_ids),
+                UserTenantRole.role == TenantRole.company_admin,
+                UserTenantRole.is_active.is_(True),
+            )
+            .all()
+        ):
+            emails[tenant_id] = email  # accepted membership wins over a stale pending invite
+        return emails
+    finally:
+        bypass_db.close()
 
 
 @router.post("/tenants", response_model=TenantCreateOut, status_code=status.HTTP_201_CREATED)
@@ -59,15 +95,23 @@ def create_tenant(
     )
     return TenantCreateOut(
         id=tenant.id, name=tenant.name, slug=tenant.slug, status=tenant.status,
-        created_at=tenant.created_at, admin_invite_url=invite_url,
+        created_at=tenant.created_at, admin_invite_url=invite_url, admin_email=payload.admin_email,
     )
 
 
 @router.get("/tenants", response_model=list[TenantOut])
 def list_tenants(
     db: Session = Depends(get_db), _: User = Depends(get_current_platform_admin)
-) -> list[Tenant]:
-    return db.query(Tenant).order_by(Tenant.created_at.desc()).all()
+) -> list[TenantOut]:
+    tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
+    admin_emails = _admin_emails_by_tenant([t.id for t in tenants])
+    return [
+        TenantOut(
+            id=t.id, name=t.name, slug=t.slug, status=t.status, created_at=t.created_at,
+            admin_email=admin_emails.get(t.id),
+        )
+        for t in tenants
+    ]
 
 
 @router.post("/tenants/{tenant_id}/suspend", response_model=TenantOut)
@@ -87,6 +131,51 @@ def suspend_tenant(
         target_type="tenant", target_id=tenant.id,
     )
     return tenant
+
+
+@router.post("/tenants/{tenant_id}/admin-reset-link", response_model=PasswordResetLinkOut)
+def create_tenant_admin_reset_link(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> PasswordResetLinkOut:
+    """Lets a platform admin hand a tenant's company_admin a way back into
+    their account without needing a real email provider — same "surface the
+    link directly" reasoning as onboarding invites. Only works once that
+    admin has actually accepted their invite (there's no password to reset
+    before then; re-sending the invite link is the right move at that
+    stage, not this)."""
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    bypass_db = BypassSessionLocal()
+    try:
+        row = (
+            bypass_db.query(UserTenantRole.user_id, User.email)
+            .join(User, User.id == UserTenantRole.user_id)
+            .filter(
+                UserTenantRole.tenant_id == tenant_id,
+                UserTenantRole.role == TenantRole.company_admin,
+                UserTenantRole.is_active.is_(True),
+            )
+            .first()
+        )
+    finally:
+        bypass_db.close()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This tenant's admin hasn't accepted their invite yet — there's no account to reset",
+        )
+    admin_user_id, admin_email = row
+
+    _reset, reset_url = create_password_reset(db, user_id=admin_user_id, created_by_user_id=platform_admin.id)
+    audit.log(
+        "password_reset.created", tenant_id=tenant_id, actor_user_id=platform_admin.id,
+        target_type="user", target_id=admin_user_id,
+    )
+    return PasswordResetLinkOut(email=admin_email, reset_url=reset_url)
 
 
 @router.post("/tenants/{tenant_id}/activate", response_model=TenantOut)

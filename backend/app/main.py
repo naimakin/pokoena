@@ -7,6 +7,7 @@ from app.api.routes import (
     change_requests,
     dashboard,
     invites,
+    password_reset,
     platform,
     platform_auth,
     projects,
@@ -32,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(platform_auth.router)
 app.include_router(platform.router)
 app.include_router(invites.router)
+app.include_router(password_reset.router)
 app.include_router(team.router)
 app.include_router(subcontractor_organizations.router)
 app.include_router(projects.router)

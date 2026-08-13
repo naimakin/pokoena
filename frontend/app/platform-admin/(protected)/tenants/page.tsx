@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { BuildingIcon, CheckIcon } from "@/components/icons";
-import type { Tenant, TenantCreateResult } from "@/lib/types";
+import type { PasswordResetLink, Tenant, TenantCreateResult } from "@/lib/types";
 
 export default function PlatformTenantsPage() {
   const { showToast } = useToast();
@@ -17,7 +17,7 @@ export default function PlatformTenantsPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFullName, setAdminFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [lastInvite, setLastInvite] = useState<{ company: string; url: string } | null>(null);
+  const [lastLink, setLastLink] = useState<{ heading: string; url: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -46,7 +46,7 @@ export default function PlatformTenantsPage() {
         admin_email: adminEmail,
         admin_full_name: adminFullName,
       });
-      setLastInvite({ company: created.name, url: created.admin_invite_url });
+      setLastLink({ heading: `Invite link for ${created.name}`, url: created.admin_invite_url });
       showToast(`${name} created`);
       setName("");
       setSlug("");
@@ -60,12 +60,25 @@ export default function PlatformTenantsPage() {
     }
   }
 
-  async function handleCopyInvite(url: string) {
+  async function handleCopyLink(url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      showToast("Invite link copied");
+      showToast("Link copied");
     } catch {
       showToast("Couldn't copy — select and copy the link manually.");
+    }
+  }
+
+  async function handleResetLink(tenant: Tenant) {
+    try {
+      const result = await api.post<PasswordResetLink>(`/platform/tenants/${tenant.id}/admin-reset-link`);
+      setLastLink({ heading: `Password reset link for ${result.email}`, url: result.reset_url });
+    } catch (err) {
+      showToast(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to generate a reset link.",
+      );
     }
   }
 
@@ -117,29 +130,29 @@ export default function PlatformTenantsPage() {
           </div>
         </div>
 
-        {lastInvite && (
+        {lastLink && (
           <div className="card">
             <div className="card-head">
-              <div className="card-title">Invite link for {lastInvite.company}</div>
+              <div className="card-title">{lastLink.heading}</div>
             </div>
             <div style={{ padding: "1rem 1.1rem" }}>
               <p className="page-desc" style={{ marginBottom: ".6rem" }}>
-                No email provider is connected yet — copy this link and send it to the company&rsquo;s first
-                admin yourself (it only works once and only shows here, right now).
+                No email provider is connected yet — copy this link and send it yourself (it only works
+                once and only shows here, right now).
               </p>
               <div className="form-row" style={{ alignItems: "center" }}>
                 <div className="field">
                   <input
                     type="text"
                     readOnly
-                    value={lastInvite.url}
+                    value={lastLink.url}
                     onFocus={(e) => e.target.select()}
                   />
                 </div>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => handleCopyInvite(lastInvite.url)}
+                  onClick={() => handleCopyLink(lastLink.url)}
                 >
                   <CheckIcon className="icon" /> Copy
                 </button>
@@ -215,6 +228,7 @@ export default function PlatformTenantsPage() {
                   <tr>
                     <th>Name</th>
                     <th>Slug</th>
+                    <th>Admin</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th></th>
@@ -223,7 +237,7 @@ export default function PlatformTenantsPage() {
                 <tbody>
                   {tenants.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="empty-state">
+                      <td colSpan={6} className="empty-state">
                         No tenants yet.
                       </td>
                     </tr>
@@ -232,6 +246,7 @@ export default function PlatformTenantsPage() {
                     <tr key={tenant.id}>
                       <td className="subname">{tenant.name}</td>
                       <td className="mono">{tenant.slug}</td>
+                      <td>{tenant.admin_email ?? "—"}</td>
                       <td>
                         <span
                           className={`chip ${
@@ -255,6 +270,11 @@ export default function PlatformTenantsPage() {
                           ) : (
                             <button className="btn btn-secondary btn-sm" onClick={() => handleActivate(tenant)}>
                               Activate
+                            </button>
+                          )}
+                          {tenant.admin_email && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => handleResetLink(tenant)}>
+                              Reset password
                             </button>
                           )}
                           {tenant.status !== "deleted" && (

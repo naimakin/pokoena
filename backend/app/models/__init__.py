@@ -6,6 +6,7 @@ from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.audit_log import AuditLog
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
 from app.models.invite import Invite, InviteStatus
+from app.models.password_reset import PasswordReset
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
@@ -36,6 +37,7 @@ __all__ = [
     "RiskLevel",
     "Invite",
     "InviteStatus",
+    "PasswordReset",
     "Project",
     "ProjectMembership",
     "ProjectScope",

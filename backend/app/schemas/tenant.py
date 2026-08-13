@@ -14,6 +14,11 @@ class TenantOut(BaseModel):
     slug: str
     status: TenantStatus
     created_at: datetime
+    # Not on the Tenant row itself — populated by list_tenants/create_tenant
+    # from a UserTenantRole lookup. None if the admin invite was never
+    # accepted yet (no User row exists for that email until then), or in the
+    # rare case a tenant somehow has no company_admin.
+    admin_email: str | None = None
 
 
 class TenantCreate(BaseModel):
