@@ -54,6 +54,10 @@ def test_company_admin_can_invite_subcontractor_and_they_can_accept(client, db_s
     )
     assert invite_response.status_code == 201
     assert captured["to_email"] == "newsub@example.com"
+    # The response itself carries the invite link (no email provider is wired
+    # up in this deployment — see services/invites.create_invite) — and it's
+    # the same token that would have been emailed.
+    assert invite_response.json()["invite_url"] == captured["invite_url"]
     raw_token = captured["invite_url"].rsplit("/", 1)[-1]
 
     preview_response = client.get(f"/invites/{raw_token}")
@@ -117,7 +121,7 @@ def test_expired_invite_is_rejected(client, db_session, monkeypatch):
 
     from app.services.invites import create_invite
 
-    invite = create_invite(
+    invite, _invite_url = create_invite(
         db=db_session,
         tenant_id=tenant.id,
         email="late@example.com",

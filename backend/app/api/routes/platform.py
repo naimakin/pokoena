@@ -12,7 +12,7 @@ from app.models.project import Project
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole, UserTenantRole
-from app.schemas.tenant import TenantCreate, TenantOut, UsageSummary
+from app.schemas.tenant import TenantCreate, TenantCreateOut, TenantOut, UsageSummary
 from app.schemas.user import PlatformAdminCreate, PlatformAdminOut
 from app.services import audit
 from app.services.invites import create_invite
@@ -20,12 +20,12 @@ from app.services.invites import create_invite
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 
-@router.post("/tenants", response_model=TenantOut, status_code=status.HTTP_201_CREATED)
+@router.post("/tenants", response_model=TenantCreateOut, status_code=status.HTTP_201_CREATED)
 def create_tenant(
     payload: TenantCreate,
     db: Session = Depends(get_db),
     platform_admin: User = Depends(get_current_platform_admin),
-) -> Tenant:
+) -> TenantCreateOut:
     if db.query(Tenant).filter(Tenant.slug == payload.slug).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slug already in use")
 
@@ -34,7 +34,7 @@ def create_tenant(
     db.commit()
     db.refresh(tenant)
 
-    create_invite(
+    _invite, invite_url = create_invite(
         db=db,
         tenant_id=tenant.id,
         email=payload.admin_email,
@@ -47,7 +47,10 @@ def create_tenant(
         "tenant.created", tenant_id=tenant.id, actor_user_id=platform_admin.id,
         target_type="tenant", target_id=tenant.id, event_metadata={"name": tenant.name},
     )
-    return tenant
+    return TenantCreateOut(
+        id=tenant.id, name=tenant.name, slug=tenant.slug, status=tenant.status,
+        created_at=tenant.created_at, admin_invite_url=invite_url,
+    )
 
 
 @router.get("/tenants", response_model=list[TenantOut])

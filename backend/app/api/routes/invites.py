@@ -23,7 +23,7 @@ def create_tenant_invite(
     payload: InviteCreate,
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_user_management),
-) -> Invite:
+) -> InviteOut:
     invite_payload: dict = {}
     if payload.role == TenantRole.subcontractor:
         invite_payload["project_scope_ids"] = [str(s) for s in payload.project_scope_ids]
@@ -41,7 +41,7 @@ def create_tenant_invite(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="project_role is required")
 
     tenant = db.get(Tenant, ctx.tenant_id)
-    invite = create_invite(
+    invite, invite_url = create_invite(
         db=db,
         tenant_id=ctx.tenant_id,
         email=payload.email,
@@ -62,7 +62,11 @@ def create_tenant_invite(
         target_id=invite.id,
         event_metadata={"email": invite.email, "role": invite.role.value},
     )
-    return invite
+    return InviteOut(
+        id=invite.id, email=invite.email, full_name=invite.full_name, role=invite.role,
+        project_role=invite.project_role, status=invite.status, expires_at=invite.expires_at,
+        invite_url=invite_url,
+    )
 
 
 @router.get("/invites", response_model=list[InviteOut])

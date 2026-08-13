@@ -102,6 +102,8 @@ def test_platform_admin_can_manage_tenants(client, db_session):
     )
     assert create_response.status_code == 201
     tenant_id = create_response.json()["id"]
+    invite_url = create_response.json()["admin_invite_url"]
+    assert "/invite/" in invite_url and len(invite_url.rsplit("/", 1)[-1]) > 10
 
     list_response = client.get("/platform/tenants")
     assert list_response.status_code == 200

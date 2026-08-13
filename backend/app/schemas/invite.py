@@ -34,6 +34,10 @@ class InviteOut(BaseModel):
     project_role: ProjectRole | None = None
     status: str
     expires_at: datetime
+    # Only ever populated on the response to POST /invites, right after
+    # creation — see services/invites.create_invite. GET /invites (the list)
+    # can't reconstruct it: only the token's hash is persisted.
+    invite_url: str | None = None
 
 
 class InvitePreview(BaseModel):

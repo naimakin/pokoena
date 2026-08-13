@@ -3,8 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { BuildingIcon } from "@/components/icons";
-import type { Tenant } from "@/lib/types";
+import { BuildingIcon, CheckIcon } from "@/components/icons";
+import type { Tenant, TenantCreateResult } from "@/lib/types";
 
 export default function PlatformTenantsPage() {
   const { showToast } = useToast();
@@ -17,6 +17,7 @@ export default function PlatformTenantsPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFullName, setAdminFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [lastInvite, setLastInvite] = useState<{ company: string; url: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -39,13 +40,14 @@ export default function PlatformTenantsPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/platform/tenants", {
+      const created = await api.post<TenantCreateResult>("/platform/tenants", {
         name,
         slug,
         admin_email: adminEmail,
         admin_full_name: adminFullName,
       });
-      showToast(`${name} created — invite sent to ${adminEmail}`);
+      setLastInvite({ company: created.name, url: created.admin_invite_url });
+      showToast(`${name} created`);
       setName("");
       setSlug("");
       setAdminEmail("");
@@ -55,6 +57,15 @@ export default function PlatformTenantsPage() {
       showToast(err instanceof ApiError ? err.message : "Failed to create tenant.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCopyInvite(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Invite link copied");
+    } catch {
+      showToast("Couldn't copy — select and copy the link manually.");
     }
   }
 
@@ -93,6 +104,37 @@ export default function PlatformTenantsPage() {
             <div className="page-desc">Onboard a new company or manage an existing one.</div>
           </div>
         </div>
+
+        {lastInvite && (
+          <div className="card">
+            <div className="card-head">
+              <div className="card-title">Invite link for {lastInvite.company}</div>
+            </div>
+            <div style={{ padding: "1rem 1.1rem" }}>
+              <p className="page-desc" style={{ marginBottom: ".6rem" }}>
+                No email provider is connected yet — copy this link and send it to the company&rsquo;s first
+                admin yourself (it only works once and only shows here, right now).
+              </p>
+              <div className="form-row" style={{ alignItems: "center" }}>
+                <div className="field">
+                  <input
+                    type="text"
+                    readOnly
+                    value={lastInvite.url}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleCopyInvite(lastInvite.url)}
+                >
+                  <CheckIcon className="icon" /> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <div className="card-head">

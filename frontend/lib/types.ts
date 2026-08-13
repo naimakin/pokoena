@@ -55,6 +55,12 @@ export interface Tenant {
   created_at: string;
 }
 
+export interface TenantCreateResult extends Tenant {
+  // One-time invite link for the first company admin — no email provider is
+  // wired up yet, so this is the only place it's ever recoverable.
+  admin_invite_url: string;
+}
+
 export interface UsageSummary {
   tenant_count: number;
   active_tenant_count: number;
@@ -193,6 +199,9 @@ export interface Invite {
   project_role?: ProjectRole | null;
   status: string;
   expires_at: string;
+  // Only present on the response to creating this invite — see
+  // TenantCreateResult for why.
+  invite_url?: string | null;
 }
 
 export interface InvitePreview {

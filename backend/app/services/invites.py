@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import set_rls_context
 from app.models.invite import Invite, InviteStatus
@@ -46,7 +47,7 @@ def create_invite(
     project_role: ProjectRole | None = None,
     tenant_name: str | None = None,
     payload: dict | None = None,
-) -> Invite:
+) -> tuple[Invite, str]:
     """`payload` carries what acceptance should materialize beyond the base
     UserTenantRole row: `{"project_scope_ids": [...]}` for subcontractors,
     `{"project_ids": [...]}` for company employees, `{"subcontractor_org_id": ...}`
@@ -54,7 +55,17 @@ def create_invite(
     the raw value is handed straight to the Celery task that emails it and is
     never persisted. `full_name`/`title`/`phone`/`project_role` are entered by
     the inviting admin, not the invitee — acceptance only ever collects a
-    password."""
+    password.
+
+    Returns `(invite, invite_url)` — the caller (an API route) is expected to
+    hand `invite_url` straight back in its response so whoever created the
+    invite can copy/paste it themselves. This is deliberately not email-only:
+    no transactional email provider is wired up yet (see
+    app/core/notifications.py), and the Celery task that *would* send it needs
+    a `worker` process this deployment doesn't run — so a delivered email is
+    not something an invite creator can rely on today. The URL is only ever
+    obtainable here, at creation time, since only the token's hash is
+    persisted afterward."""
     raw_token = secrets.token_urlsafe(32)
 
     # Explicit even when the caller's session already has this tenant's RLS
@@ -85,7 +96,8 @@ def create_invite(
     send_invite_email.delay(
         to_email=invite.email, raw_token=raw_token, role=role.value, tenant_name=tenant_name
     )
-    return invite
+    invite_url = f"{get_settings().frontend_url}/invite/{raw_token}"
+    return invite, invite_url
 
 
 def get_invite_preview(db: Session, raw_token: str) -> Invite:

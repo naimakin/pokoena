@@ -23,6 +23,14 @@ class TenantCreate(BaseModel):
     admin_full_name: str
 
 
+class TenantCreateOut(TenantOut):
+    """Same shape as TenantOut plus the one-time invite link for the first
+    company admin — see services/invites.create_invite for why this is the
+    only place that link is ever recoverable."""
+
+    admin_invite_url: str
+
+
 class UsageSummary(BaseModel):
     """Aggregate, anonymized counts only — never row-level tenant business data.
     See app/api/routes/platform.py for how these are computed (per-tenant RLS

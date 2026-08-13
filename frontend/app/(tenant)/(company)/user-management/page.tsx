@@ -3,9 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { UsersIcon, XIcon } from "@/components/icons";
+import { CheckIcon, UsersIcon, XIcon } from "@/components/icons";
 import {
   PROJECT_ROLE_LABELS,
+  type Invite,
   type InviteCreatePayload,
   type Project,
   type ProjectRole,
@@ -35,6 +36,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [lastInvite, setLastInvite] = useState<{ name: string; url: string } | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -129,14 +131,26 @@ export default function UserManagementPage() {
         payload.project_scope_ids = scopeIds;
         payload.subcontractor_org_id = await resolveOrgId();
       }
-      await api.post("/invites", payload);
-      showToast(`Invite sent to ${email}`);
+      const invite = await api.post<Invite>("/invites", payload);
+      if (invite.invite_url) {
+        setLastInvite({ name: fullName || email, url: invite.invite_url });
+      }
+      showToast(`Invite created for ${email}`);
       resetForm();
       load();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to send invite.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCopyInvite(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Invite link copied");
+    } catch {
+      showToast("Couldn't copy — select and copy the link manually.");
     }
   }
 
@@ -169,6 +183,37 @@ export default function UserManagementPage() {
             </div>
           </div>
         </div>
+
+        {lastInvite && (
+          <div className="card">
+            <div className="card-head">
+              <div className="card-title">Invite link for {lastInvite.name}</div>
+            </div>
+            <div style={{ padding: "1rem 1.1rem" }}>
+              <p className="page-desc" style={{ marginBottom: ".6rem" }}>
+                No email provider is connected yet — copy this link and send it to them yourself (it only
+                works once and only shows here, right now).
+              </p>
+              <div className="form-row" style={{ alignItems: "center" }}>
+                <div className="field">
+                  <input
+                    type="text"
+                    readOnly
+                    value={lastInvite.url}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleCopyInvite(lastInvite.url)}
+                >
+                  <CheckIcon className="icon" /> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <div className="card-head">
