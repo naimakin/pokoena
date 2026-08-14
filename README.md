@@ -88,20 +88,9 @@ docker compose up
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000 (docs at `/docs`, health at `/healthz`)
 
-Migrations apply automatically on `backend` startup. Seed data and the first admin use
-the same scripts as production, just without `docker service create`/secrets:
-
-```bash
-docker compose exec backend python -m scripts.seed_demo
-docker compose exec backend python -m scripts.create_admin \
-  --email you@pokoena.com --password 'change-me' --name "Your Name"
-```
-
-`seed_demo` creates tenant **Riverside Logistics Park GC** / project **Phase 2** with:
-
-- Company admin login: `admin@pokoena.com` / `ChangeMe123!`
-- Company employee login: `employee@pokoena.com` / `ChangeMe123!`
-- Subcontractor login (MEP Systems Inc.): `mep@pokoena.com` / `ChangeMe123!`
+Migrations apply automatically on `backend` startup. Same scripts as production, just
+without `docker service create`/secrets — e.g. `docker compose exec backend python -m
+scripts.create_admin --email you@pokoena.com --password change-me --name "Your Name"`.
 
 Running the backend outside Docker: copy `backend/.env.example` to `backend/.env`,
 `pip install -r backend/requirements-dev.txt`, then `uvicorn app.main:app --reload`
