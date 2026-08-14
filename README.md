@@ -24,9 +24,62 @@ infra/          Docker Swarm stack files, Traefik config, server bootstrap runbo
 .github/        CI (lint+test on PRs) and CD (build → GHCR → deploy on push to main)
 ```
 
-## Local development
+## Deployment
 
-Requires Docker Desktop.
+**There is no local deployment.** POKO runs as a single-node Docker Swarm stack on a
+DigitalOcean droplet — `pokoena.com` (frontend) / `api.pokoena.com` (backend), Cloudflare
+DNS, DigitalOcean Managed Postgres. GitHub Actions builds images, pushes them to GHCR,
+and rolls them out on every push to `main`:
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). One-time server setup,
+secrets, and DNS/Cloudflare configuration: see [`infra/README.md`](infra/README.md).
+
+A push to `main` is a real production deploy — there's no staging environment in front
+of it. `backend/app/main.py`'s `/healthz` and the CI run itself are the fastest way to
+confirm a deploy landed; `docker service ls` on the droplet shows which image tag
+(`<12-char commit sha>` or `latest`) each service is currently running.
+
+### Operating the live deployment
+
+One-off admin scripts (`backend/scripts/`) run as a scheduled Docker Swarm task against
+the running `backend` image, using the `db_url` secret (table-owner rights, bypasses
+RLS) fed into `DATABASE_URL_FILE` — see [`infra/README.md`](infra/README.md) for the
+full secrets/runbook. The three that come up in day-to-day operation:
+
+```bash
+# Create or reset a Platform Super Admin's password
+docker service create --name pokoena-admin --network traefik-public \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
+  ghcr.io/naimakin/pokoena-backend:latest \
+  python -m scripts.create_admin --email you@pokoena.com --password 'change-me' --name "Your Name"
+docker service logs pokoena-admin -f
+docker service rm pokoena-admin
+
+# Seed the demo tenant (Riverside Logistics Park GC) — safe to skip in production
+docker service create --name pokoena-seed --network traefik-public \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
+  ghcr.io/naimakin/pokoena-backend:latest python -m scripts.seed_demo
+docker service logs pokoena-seed -f
+docker service rm pokoena-seed
+
+# Hard-delete every tenant and all its data (dev-stage cleanup only — irreversible,
+# never touches platform admins)
+docker service create --name pokoena-wipe --network traefik-public \
+  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --restart-condition none --with-registry-auth \
+  ghcr.io/naimakin/pokoena-backend:latest python -m scripts.wipe_tenants --yes
+docker service logs pokoena-wipe -f
+docker service rm pokoena-wipe
+```
+
+Platform admins sign in at `https://pokoena.com/platform-admin/login`; everyone else at
+`https://pokoena.com/login`.
+
+## Local testing (optional)
+
+Not how the project is deployed — useful only for testing backend/frontend changes
+against a real Postgres+Redis before pushing. Requires Docker Desktop.
 
 ```bash
 docker compose up
@@ -35,40 +88,27 @@ docker compose up
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000 (docs at `/docs`, health at `/healthz`)
 
-First run — migrations apply automatically on `backend` startup (see
-`docker-compose.yml`); seed a demo tenant/project:
+Migrations apply automatically on `backend` startup. Seed data and the first admin use
+the same scripts as production, just without `docker service create`/secrets:
 
 ```bash
 docker compose exec backend python -m scripts.seed_demo
+docker compose exec backend python -m scripts.create_admin \
+  --email you@pokoena.com --password 'change-me' --name "Your Name"
 ```
 
-This creates tenant **Riverside Logistics Park GC** / project **Phase 2** with:
+`seed_demo` creates tenant **Riverside Logistics Park GC** / project **Phase 2** with:
 
 - Company admin login: `admin@pokoena.com` / `ChangeMe123!`
 - Company employee login: `employee@pokoena.com` / `ChangeMe123!`
 - Subcontractor login (MEP Systems Inc.): `mep@pokoena.com` / `ChangeMe123!`
 
-`seed_demo` does **not** create a Platform Super Admin — that's a separate, one-time
-step (POKO staff, not tied to any tenant):
-
-```bash
-docker compose exec backend python -m scripts.create_admin \
-  --email you@pokoena.com --password 'change-me' --name "Your Name"
-```
-Platform admins sign in at `/platform-admin/login`; everyone else at `/login`.
-
 Running the backend outside Docker: copy `backend/.env.example` to `backend/.env`,
 `pip install -r backend/requirements-dev.txt`, then `uvicorn app.main:app --reload`
 from `backend/`. Tests: `pytest` (uses an in-memory SQLite DB, no services required —
-RLS itself is Postgres-only and is exercised separately, see `backend/tests/`).
-
-## Production
-
-Single-node Docker Swarm on a DigitalOcean droplet, `pokoena.com` on Cloudflare DNS,
-images built by GitHub Actions and pushed to GHCR. One-time server setup, secrets, and
-DNS/Cloudflare configuration: see [`infra/README.md`](infra/README.md). Once that's
-done, every push to `main` builds, migrates, and rolls out automatically via
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+RLS itself is Postgres-only, and several bugs upstream only ever surfaced against real
+Postgres in production; see `backend/tests/conftest.py` for how the suite works around
+that, and be skeptical of "passes in SQLite" as proof anything RLS-related works).
 
 ## Status
 
