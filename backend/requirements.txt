@@ -11,3 +11,4 @@ celery==5.4.0
 redis==5.0.8
 python-multipart==0.0.9
 python-dotenv==1.0.1
+openpyxl==3.1.5

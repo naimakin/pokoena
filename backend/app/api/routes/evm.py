@@ -1,17 +1,44 @@
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
+from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission, require_role
 from app.engine.evm.evm_engine import calculate_evm
+from app.engine.evm.excel_export import build_evm_excel
+from app.engine.evm.scurve_engine import (
+    aggregate_granularity,
+    compute_current_ev,
+    compute_evm_series,
+    find_out_of_sequence_activities,
+    generate_pv_curve,
+)
 from app.models.activity import Activity
+from app.models.activity_relationship import ActivityRelationship
+from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve, BaselineStatus
 from app.models.calendar import Calendar
+from app.models.evm_snapshot import EvmSnapshot
+from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
-from app.schemas.evm import QuickEvmOut
+from app.models.user_tenant_role import TenantRole
+from app.schemas.evm import (
+    BaselineOut,
+    BaselineStatusOut,
+    EvmScurveOut,
+    EvmScurvePointOut,
+    EvmSummaryOut,
+    LockBaselineRequest,
+    LockBaselineResultOut,
+    ProgressBatchIn,
+    ProgressEntryOut,
+    ProgressSubmitResultOut,
+    QuickEvmOut,
+)
 
 router = APIRouter(prefix="/projects/{project_id}/evm", tags=["evm"])
 
@@ -45,3 +72,478 @@ def get_quick_evm(
 
     result = calculate_evm(activities, assignments, calendars, data_date)
     return QuickEvmOut.model_validate(result)
+
+
+# ---------------------------------------------------------------------------
+# Phase B: baseline lock + S-curve time series
+#
+# "Vance Baseline Mandate" (reference project's term for at-most-one-active-
+# baseline immutability) is enforced here at the application layer instead of
+# a DB trigger — see app/models/baseline.py's docstring for why. The only
+# routes that ever mutate a `baselines` row are lock (INSERT) and supersede
+# (a single status flip); nothing exposes a generic update, so the guarantee
+# holds without trigger machinery this codebase doesn't use anywhere else.
+#
+# PV-curve generation and EVM-snapshot recalculation run synchronously in the
+# request instead of the reference's FastAPI BackgroundTasks — same
+# simplification already made for Monte Carlo/DCMA at this project's scale.
+# ---------------------------------------------------------------------------
+
+
+def _require_active_baseline(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> Baseline:
+    baseline = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
+        .first()
+    )
+    if baseline is None:
+        raise HTTPException(
+            status_code=423,
+            detail={
+                "code": "BASELINE_NOT_ACTIVE",
+                "message": "No active Performance Measurement Baseline exists for this project. "
+                "Lock a baseline before accessing EVM metrics.",
+                "action_required": "lock_baseline",
+            },
+        )
+    return baseline
+
+
+def _load_pv_ac_series(db: Session, project_id: uuid.UUID, baseline_id: uuid.UUID):
+    pv_rows = db.query(BaselinePvCurve).filter(BaselinePvCurve.baseline_id == baseline_id).all()
+    pv_series = {r.curve_date: r.pv_cumulative for r in pv_rows}
+
+    ac_rows = (
+        db.query(ProgressEntry.entry_date, func.sum(ProgressEntry.burned_manhours_daily))
+        .filter(
+            ProgressEntry.project_id == project_id,
+            ProgressEntry.entry_type.in_([ProgressEntryType.actual, ProgressEntryType.correction]),
+        )
+        .group_by(ProgressEntry.entry_date)
+        .order_by(ProgressEntry.entry_date)
+        .all()
+    )
+    running = 0.0
+    ac_series: dict = {}
+    for entry_date, daily in ac_rows:
+        running += float(daily)
+        ac_series[entry_date] = round(running, 4)
+
+    return pv_series, ac_series
+
+
+def _recalculate_evm_snapshots(db: Session, ctx: AuthContext, project_id: uuid.UUID, baseline: Baseline) -> None:
+    pv_series, ac_series = _load_pv_ac_series(db, project_id, baseline.id)
+    activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    current_ev = compute_current_ev(activities)
+
+    points = compute_evm_series(pv_series, ac_series, baseline.total_budget_manhours, current_ev)
+
+    existing_by_date = {
+        row.snapshot_date: row
+        for row in db.query(EvmSnapshot)
+        .filter(EvmSnapshot.project_id == project_id, EvmSnapshot.baseline_id == baseline.id)
+        .all()
+    }
+    for p in points:
+        row = existing_by_date.get(p.snapshot_date)
+        if row is None:
+            row = EvmSnapshot(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id, baseline_id=baseline.id,
+                snapshot_date=p.snapshot_date,
+            )
+            db.add(row)
+        row.pv_cumulative = p.pv_cumulative
+        row.ev_cumulative = p.ev_cumulative
+        row.ac_cumulative = p.ac_cumulative
+        row.spi = p.spi
+        row.cpi = p.cpi
+        row.sv = p.sv
+        row.cv = p.cv
+        row.bac = p.bac
+        row.eac = p.eac
+        row.etc = p.etc
+        row.tcpi = p.tcpi
+        row.percent_complete_planned = p.percent_complete_planned
+        row.percent_complete_earned = p.percent_complete_earned
+    db.flush()
+
+
+@router.get("/baseline", response_model=BaselineStatusOut)
+def get_baseline_status(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> BaselineStatusOut:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+
+    baselines = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.project_id == project_id)
+        .order_by(Baseline.created_at.desc())
+        .all()
+    )
+    active = next((b for b in baselines if b.status == BaselineStatus.active), None)
+    return BaselineStatusOut(
+        project_id=project_id,
+        has_active=active is not None,
+        active_baseline=BaselineOut.model_validate(active) if active else None,
+        all_baselines=[BaselineOut.model_validate(b) for b in baselines],
+    )
+
+
+@router.post("/baseline", response_model=LockBaselineResultOut, status_code=201)
+def lock_baseline(
+    project_id: uuid.UUID,
+    payload: LockBaselineRequest,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> LockBaselineResultOut:
+    """Locks the project's CURRENT schedule as a baseline — we don't keep
+    versioned historical schedule snapshots (see services/xer_import.py), so
+    unlike the reference (which locks a specific named snapshot), this always
+    locks "now". `total_budget_manhours` (BAC) comes from each eligible
+    activity's `target_duration_hours`, matching the reference's own choice —
+    see engine/evm/scurve_engine.py's module docstring for why that's not a
+    resource-quantity-based BAC."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+
+    last_import = (
+        db.query(ScheduleImport)
+        .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
+        .order_by(ScheduleImport.imported_at.desc())
+        .first()
+    )
+    if last_import is None:
+        raise HTTPException(status_code=422, detail="No schedule has been imported for this project yet.")
+
+    activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    eligible = [a for a in activities if (a.target_duration_hours or 0) > 0]
+
+    bac = sum(a.target_duration_hours or 0.0 for a in eligible)
+    if bac <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Snapshot has no duration-loaded activities (BAC = 0). Ensure activities have a target duration.",
+        )
+
+    # Prefer P6's own baseline dates (planned_start/planned_finish); fall back
+    # to our CPM-computed early dates when a file didn't carry target_start/
+    # target_end_date — same fallback engine/evm/evm_engine.py already uses
+    # for its own planned-% calculation, kept consistent here.
+    starts = [a.planned_start or a.early_start for a in eligible]
+    starts = [s for s in starts if s]
+    ends = [a.planned_finish or a.early_finish for a in eligible]
+    ends = [e for e in ends if e]
+    if not starts or not ends:
+        raise HTTPException(status_code=422, detail="Activities have no planned dates. Run CPM (import a scheduled .xer) first.")
+    target_start_date = min(starts)
+    target_end_date = max(ends)
+
+    existing_active = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
+        .first()
+    )
+    if existing_active:
+        raise HTTPException(
+            status_code=409, detail=f"Active baseline '{existing_active.version_label}' already exists. Supersede it first."
+        )
+    dup = (
+        db.query(Baseline)
+        .filter(Baseline.project_id == project_id, Baseline.version_label == payload.version_label)
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=409, detail=f"Version label '{payload.version_label}' already used.")
+
+    baseline_id = uuid.uuid4()
+    db.add(
+        Baseline(
+            id=baseline_id, tenant_id=ctx.tenant_id, project_id=project_id, schedule_import_id=last_import.id,
+            version_label=payload.version_label, locked_at=datetime.utcnow(), locked_by_user_id=ctx.user.id,
+            total_budget_manhours=round(bac, 4), target_start_date=target_start_date, target_end_date=target_end_date,
+            distribution_method="linear", status=BaselineStatus.active, activity_count=len(eligible), notes=payload.notes,
+        )
+    )
+
+    curve_input = []
+    for a in eligible:
+        a_start = a.planned_start or a.early_start
+        a_end = a.planned_finish or a.early_finish
+        db.add(
+            BaselineActivity(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, baseline_id=baseline_id, activity_id=a.id,
+                planned_manhours=a.target_duration_hours or 0.0, baseline_start=a_start,
+                baseline_end=a_end, wbs_code=a.wbs_path,
+            )
+        )
+        curve_input.append({"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end})
+
+    for curve_date, pv_daily, pv_cumulative in generate_pv_curve(curve_input, bac):
+        db.add(
+            BaselinePvCurve(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, baseline_id=baseline_id,
+                curve_date=curve_date, pv_daily=pv_daily, pv_cumulative=pv_cumulative,
+            )
+        )
+
+    db.commit()
+
+    return LockBaselineResultOut(
+        status="locked", baseline_id=baseline_id, version_label=payload.version_label, bac=round(bac, 2),
+        activity_count=len(eligible), target_start=target_start_date, target_end=target_end_date,
+    )
+
+
+@router.delete("/baseline/{baseline_id}")
+def supersede_baseline(
+    project_id: uuid.UUID,
+    baseline_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> dict:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    baseline = get_tenant_scoped_or_404(db, Baseline, baseline_id, ctx)
+    if baseline.project_id != project_id:
+        raise HTTPException(status_code=400, detail="Baseline does not belong to this project")
+    if baseline.status != BaselineStatus.active:
+        raise HTTPException(status_code=409, detail=f"Baseline is not active (status={baseline.status.value}).")
+
+    baseline.status = BaselineStatus.superseded
+    db.commit()
+    return {"status": "superseded", "baseline_id": str(baseline_id)}
+
+
+@router.post("/progress", response_model=ProgressSubmitResultOut)
+def submit_progress(
+    project_id: uuid.UUID,
+    payload: ProgressBatchIn,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> ProgressSubmitResultOut:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, need_edit=True)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    project_activity_ids = {
+        row.id for row in db.query(Activity.id).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    }
+
+    written = 0
+    for entry in payload.entries:
+        if entry.activity_id not in project_activity_ids:
+            raise HTTPException(status_code=400, detail=f"Activity {entry.activity_id} does not belong to this project")
+
+        existing = (
+            db.query(ProgressEntry)
+            .filter(
+                ProgressEntry.project_id == project_id,
+                ProgressEntry.activity_id == entry.activity_id,
+                ProgressEntry.entry_date == entry.entry_date,
+            )
+            .first()
+        )
+        if existing:
+            existing.burned_manhours_daily = entry.burned_manhours_daily
+            existing.physical_pct_snapshot = entry.physical_pct_snapshot
+            existing.crew_size = entry.crew_size
+            existing.notes = entry.notes
+            existing.entry_type = ProgressEntryType.correction
+        else:
+            db.add(
+                ProgressEntry(
+                    id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id, activity_id=entry.activity_id,
+                    entry_date=entry.entry_date, burned_manhours_daily=entry.burned_manhours_daily,
+                    physical_pct_snapshot=entry.physical_pct_snapshot, crew_size=entry.crew_size, notes=entry.notes,
+                    created_by_user_id=ctx.user.id,
+                )
+            )
+        written += 1
+    db.flush()
+
+    activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    relationships = (
+        db.query(ActivityRelationship)
+        .filter(ActivityRelationship.tenant_id == ctx.tenant_id, ActivityRelationship.project_id == project_id)
+        .all()
+    )
+    reported_ids = {
+        row.activity_id
+        for row in db.query(ProgressEntry.activity_id).filter(ProgressEntry.project_id == project_id).all()
+    }
+    out_of_sequence_ids = find_out_of_sequence_activities(activities, relationships, reported_ids)
+    if out_of_sequence_ids:
+        db.query(ProgressEntry).filter(
+            ProgressEntry.project_id == project_id, ProgressEntry.activity_id.in_(out_of_sequence_ids)
+        ).update({"is_out_of_sequence": True}, synchronize_session=False)
+
+    _recalculate_evm_snapshots(db, ctx, project_id, baseline)
+
+    db.commit()
+    return ProgressSubmitResultOut(status="accepted", written=written, out_of_sequence_count=len(out_of_sequence_ids))
+
+
+@router.get("/progress", response_model=list[ProgressEntryOut])
+def list_progress(
+    project_id: uuid.UUID,
+    activity_id: uuid.UUID | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[ProgressEntry]:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+
+    query = db.query(ProgressEntry).filter(ProgressEntry.tenant_id == ctx.tenant_id, ProgressEntry.project_id == project_id)
+    if activity_id:
+        query = query.filter(ProgressEntry.activity_id == activity_id)
+    return query.order_by(ProgressEntry.entry_date.desc()).limit(limit).all()
+
+
+@router.get("/scurve", response_model=EvmScurveOut)
+def get_scurve(
+    project_id: uuid.UUID,
+    granularity: str = "weekly",
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> EvmScurveOut:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    pv_series, ac_series = _load_pv_ac_series(db, project_id, baseline.id)
+    activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    current_ev = compute_current_ev(activities)
+
+    points = compute_evm_series(pv_series, ac_series, baseline.total_budget_manhours, current_ev)
+    series = aggregate_granularity(points, granularity)
+
+    return EvmScurveOut(
+        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label,
+        bac=round(baseline.total_budget_manhours, 2), granularity=granularity, points=len(series),
+        series=[
+            EvmScurvePointOut(
+                date=p.snapshot_date.isoformat(), pv=p.pv_cumulative, ev=p.ev_cumulative, ac=p.ac_cumulative, bac=p.bac,
+                spi=p.spi, cpi=p.cpi, sv=p.sv, cv=p.cv, eac=p.eac, etc=p.etc, tcpi=p.tcpi,
+                pct_planned=p.percent_complete_planned, pct_earned=p.percent_complete_earned, tcpi_critical=p.tcpi_critical,
+            )
+            for p in series
+        ],
+    )
+
+
+@router.get("/summary", response_model=EvmSummaryOut)
+def get_evm_summary(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> EvmSummaryOut:
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    latest = (
+        db.query(EvmSnapshot)
+        .filter(EvmSnapshot.project_id == project_id, EvmSnapshot.baseline_id == baseline.id)
+        .order_by(EvmSnapshot.snapshot_date.desc())
+        .first()
+    )
+    total_ac = (
+        db.query(func.coalesce(func.sum(ProgressEntry.burned_manhours_daily), 0.0))
+        .filter(
+            ProgressEntry.project_id == project_id,
+            ProgressEntry.entry_type.in_([ProgressEntryType.actual, ProgressEntryType.correction]),
+        )
+        .scalar()
+    )
+    entry_count = db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).count()
+    bac = round(baseline.total_budget_manhours, 2)
+
+    if latest is None:
+        # Baseline locked but no progress submitted yet. Per PMI Practice
+        # Standard for EVM: at project inception, before any work is
+        # performed, SPI=1.0 and CPI=1.0 — no deviation exists to measure.
+        return EvmSummaryOut(
+            project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label,
+            status="baseline_initialized",
+            message="Baseline locked. No progress entries yet — indices start at 1.0 (PMI standard).",
+            bac=bac, pv_cumulative=0.0, ev_cumulative=0.0, ac_cumulative=0.0, spi=1.0, cpi=1.0, sv=0.0, cv=0.0,
+            eac=bac, etc=bac, tcpi=1.0, tcpi_critical=False, pct_planned=0.0, pct_earned=0.0,
+            total_ac_raw=round(float(total_ac or 0), 2), entry_count=entry_count,
+        )
+
+    return EvmSummaryOut(
+        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label, status="active",
+        as_of_date=latest.snapshot_date, bac=bac,
+        pv_cumulative=latest.pv_cumulative or 0.0, ev_cumulative=latest.ev_cumulative or 0.0, ac_cumulative=latest.ac_cumulative or 0.0,
+        spi=latest.spi, cpi=latest.cpi, sv=latest.sv or 0.0, cv=latest.cv or 0.0, eac=latest.eac, etc=latest.etc, tcpi=latest.tcpi,
+        tcpi_critical=(latest.tcpi or 0) > 1.10, pct_planned=latest.percent_complete_planned or 0.0,
+        pct_earned=latest.percent_complete_earned or 0.0, total_ac_raw=round(float(total_ac or 0), 2), entry_count=entry_count,
+    )
+
+
+@router.get("/export")
+def export_evm_excel(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> Response:
+    project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    snapshot_rows = (
+        db.query(EvmSnapshot)
+        .filter(EvmSnapshot.project_id == project_id, EvmSnapshot.baseline_id == baseline.id)
+        .order_by(EvmSnapshot.snapshot_date.asc())
+        .all()
+    )
+    snapshots = [
+        {
+            "snapshot_date": s.snapshot_date.isoformat(),
+            "pv_cumulative": s.pv_cumulative,
+            "ev_cumulative": s.ev_cumulative,
+            "ac_cumulative": s.ac_cumulative,
+            "sv": s.sv,
+            "cv": s.cv,
+            "percent_complete_planned": s.percent_complete_planned,
+            "percent_complete_earned": s.percent_complete_earned,
+            "eac": s.eac,
+            "tcpi": s.tcpi,
+            "spi": s.spi,
+            "cpi": s.cpi,
+        }
+        for s in snapshot_rows
+    ]
+
+    baseline_activity_rows = (
+        db.query(BaselineActivity, Activity)
+        .join(Activity, Activity.id == BaselineActivity.activity_id)
+        .filter(BaselineActivity.baseline_id == baseline.id)
+        .all()
+    )
+    activities = [
+        {
+            "task_code": act.external_id,
+            "task_name": act.name,
+            "wbs_code": ba.wbs_code,
+            "planned_manhours": ba.planned_manhours,
+            "baseline_start": ba.baseline_start.isoformat() if ba.baseline_start else "",
+            "baseline_end": ba.baseline_end.isoformat() if ba.baseline_end else "",
+        }
+        for ba, act in baseline_activity_rows
+    ]
+
+    project_info = {
+        "name": project.name,
+        "baseline_version": baseline.version_label,
+        "bac": round(baseline.total_budget_manhours, 2),
+        "target_start": baseline.target_start_date.isoformat(),
+        "target_end": baseline.target_end_date.isoformat(),
+        "locked_at": baseline.locked_at.isoformat() if baseline.locked_at else "",
+    }
+
+    xlsx_bytes = build_evm_excel(project_info, snapshots, activities)
+    filename = f"Poko_EVM_{project.code}_{datetime.utcnow().date().isoformat()}.xlsx"
+
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
