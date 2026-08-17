@@ -55,6 +55,16 @@ export function UploadCloudIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function DownloadIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+      <polyline points="8 11 12 15 16 11" />
+      <line x1="12" y1="4" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 export function BellIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

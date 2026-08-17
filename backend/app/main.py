@@ -7,6 +7,7 @@ from app.api.routes import (
     change_requests,
     dashboard,
     dcma,
+    export,
     invites,
     logic_diff,
     password_reset,
@@ -47,6 +48,7 @@ app.include_router(schedule_imports.router)
 app.include_router(dcma.router)
 app.include_router(risk.router)
 app.include_router(logic_diff.router)
+app.include_router(export.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 

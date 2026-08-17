@@ -27,6 +27,7 @@ from app.models.user_tenant_role import (
     TenantRole,
     UserTenantRole,
 )
+from app.models.wbs_node import WbsNode
 
 __all__ = [
     "Activity",
@@ -61,4 +62,5 @@ __all__ = [
     "PROJECT_ROLE_LABELS",
     "EDIT_CAPABLE_PROJECT_ROLES",
     "USER_MANAGEMENT_CAPABLE_PROJECT_ROLES",
+    "WbsNode",
 ]

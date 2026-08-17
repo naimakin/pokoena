@@ -69,3 +69,9 @@ class Activity(Base):
     last_import_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("schedule_imports.id"), nullable=True, index=True
     )
+    # P6's own internal task_id (distinct from `external_id`/task_code, the
+    # human-readable activity ID). Used as-is on XER export
+    # (engine/export/xer_writer.py) so re-importing into the SAME P6 project
+    # updates these activities rather than creating duplicates. None for
+    # activities that originated in Poko rather than an .xer import.
+    p6_task_id: Mapped[str | None] = mapped_column(String(50), nullable=True)

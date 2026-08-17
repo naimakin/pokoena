@@ -103,11 +103,44 @@ async function requestFile<T>(path: string, formData: FormData, isRetry = false)
   return (await response.json()) as T;
 }
 
+// File download — the response body is a raw file (XER export), not JSON, so
+// this bypasses `request()` entirely but reuses the same 401-refresh-and-
+// retry / error-shape handling via a raw fetch. Returns the blob plus the
+// filename the server suggested via Content-Disposition, if any.
+async function requestBlob(path: string, isRetry = false): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
+
+  if (response.status === 401 && !isRetry) {
+    if (await tryRefreshSession()) {
+      return requestBlob(path, true);
+    }
+    if (typeof window !== "undefined") {
+      window.location.href = isPlatformArea() ? "/platform-admin/login" : "/login";
+    }
+  }
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // no JSON body on this error response — fall back to statusText
+    }
+    throw new ApiError(response.status, detail);
+  }
+
+  const disposition = response.headers.get("Content-Disposition");
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  return { blob: await response.blob(), filename: match?.[1] ?? null };
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   postFile: <T>(path: string, formData: FormData) => requestFile<T>(path, formData),
+  getBlob: (path: string) => requestBlob(path),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),

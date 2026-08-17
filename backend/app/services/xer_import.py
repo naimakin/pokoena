@@ -40,7 +40,9 @@ from app.engine.cpm.scheduler import schedule
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar as CalendarModel
+from app.models.project import Project
 from app.models.schedule_import import ScheduleImport
+from app.models.wbs_node import WbsNode
 from app.parser.xer_models import ParsedSchedule
 from app.parser.xer_parser import parse_xer
 
@@ -122,6 +124,28 @@ def import_xer(
         next(iter(clndr_id_to_row_id.values())) if clndr_id_to_row_id else None
     )
 
+    # --- P6 project identity: needed to write a re-importable PROJECT row on
+    # export (engine/export/xer_writer.py) — see that module for why matching
+    # P6's own proj_id matters for the download-F9-reupload workflow. ---
+    project = db.get(Project, project_id)
+    project.p6_proj_id = parsed.meta.proj_id or project.p6_proj_id
+    project.p6_proj_short_name = parsed.meta.proj_short_name or project.p6_proj_short_name
+
+    # --- WBS nodes: upsert by (project_id, wbs_id) — small, stable trees, no
+    # need for the delete-and-reinsert approach relationships use below. ---
+    existing_wbs = {n.wbs_id: n for n in db.query(WbsNode).filter(WbsNode.project_id == project_id).all()}
+    for node in parsed.wbs_nodes:
+        wbs_row = existing_wbs.get(node.wbs_id)
+        if wbs_row is None:
+            wbs_row = WbsNode(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id, wbs_id=node.wbs_id
+            )
+            db.add(wbs_row)
+        wbs_row.parent_wbs_id = node.parent_wbs_id
+        wbs_row.wbs_short_name = node.wbs_short_name
+        wbs_row.wbs_name = node.wbs_name
+        wbs_row.seq_num = node.seq_num
+
     # --- activities: upsert by (project_id, external_id==task_code) ---
     existing_activities = {a.external_id: a for a in db.query(Activity).filter(Activity.project_id == project_id).all()}
     task_id_to_row_id: dict[str, uuid.UUID] = {}
@@ -164,6 +188,7 @@ def import_xer(
         row.constraint_date_2 = _to_date(act.cstr_date2)
         row.is_longest_path = act.lp_critical
         row.last_import_id = import_id
+        row.p6_task_id = act.task_id
 
         if is_critical:
             critical_count += 1
