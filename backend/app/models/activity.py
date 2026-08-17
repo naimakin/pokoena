@@ -57,6 +57,15 @@ class Activity(Base):
     is_critical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     constraint_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     constraint_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # P6's secondary constraint (cstr_type2/cstr_date2) — a task can carry two
+    # simultaneous constraints (e.g. "Start On" + "Mandatory Finish"). Needed for
+    # DCMA check #5 (hard constraints) to be fully faithful.
+    constraint_type_2: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    constraint_date_2: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # True longest-path criticality (scheduler.py's BFS-backward `lp_critical`),
+    # distinct from `is_critical` (TF<=0) — DCMA check #13 flags activities that
+    # are TF=0 but NOT on the longest path ("artificial" criticality).
+    is_longest_path: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_import_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("schedule_imports.id"), nullable=True, index=True
     )

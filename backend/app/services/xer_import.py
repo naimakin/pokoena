@@ -156,6 +156,9 @@ def import_xer(
         row.is_critical = is_critical
         row.constraint_type = act.cstr_type
         row.constraint_date = _to_date(act.cstr_date)
+        row.constraint_type_2 = act.cstr_type2
+        row.constraint_date_2 = _to_date(act.cstr_date2)
+        row.is_longest_path = act.lp_critical
         row.last_import_id = import_id
 
         if is_critical:

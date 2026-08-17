@@ -147,6 +147,29 @@ export interface Activity {
   is_critical?: boolean;
   constraint_type?: string | null;
   constraint_date?: string | null;
+  constraint_type_2?: string | null;
+  constraint_date_2?: string | null;
+  is_longest_path?: boolean;
+}
+
+export interface DcmaCheckResult {
+  id: number;
+  name: string;
+  status: "pass" | "warn" | "fail" | "not_tracked";
+  value: number;
+  threshold: number;
+  pct: number;
+  unit: string;
+  details: string[];
+}
+
+export interface DcmaReport {
+  computed_at: string;
+  total_activities: number;
+  in_scope: number;
+  overall_score: number;
+  overall_status: "pass" | "warn" | "fail";
+  checks: DcmaCheckResult[];
 }
 
 export interface ScheduleImport {

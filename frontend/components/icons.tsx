@@ -137,6 +137,22 @@ export function ArrowRightIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function ChevronDownIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+export function ChevronUpIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
+  );
+}
+
 export function FolderPlusIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

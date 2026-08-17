@@ -41,6 +41,9 @@ class ActivityOut(BaseModel):
     is_critical: bool = False
     constraint_type: str | None = None
     constraint_date: date | None = None
+    constraint_type_2: str | None = None
+    constraint_date_2: date | None = None
+    is_longest_path: bool = False
 
 
 class ActivityUpdate(BaseModel):
