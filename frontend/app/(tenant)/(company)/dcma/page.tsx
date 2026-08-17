@@ -1,18 +1,16 @@
-export default function ProgressPage() {
+export default function DcmaPage() {
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>Progress Input</b>
+          <b>DCMA 14-Point</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress Input</div>
-            <div className="page-desc">
-              Entering activity progress and burned manhours against the current schedule will live here.
-            </div>
+            <div className="page-title">DCMA 14-Point</div>
+            <div className="page-desc">The DCMA 14-point schedule health assessment will live here.</div>
           </div>
         </div>
         <div className="card">

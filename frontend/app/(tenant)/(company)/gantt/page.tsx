@@ -1,18 +1,16 @@
-export default function ProgressPage() {
+export default function GanttPage() {
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>Progress Input</b>
+          <b>Gantt</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress Input</div>
-            <div className="page-desc">
-              Entering activity progress and burned manhours against the current schedule will live here.
-            </div>
+            <div className="page-title">Gantt</div>
+            <div className="page-desc">A visual timeline of the schedule, critical path highlighted, will live here.</div>
           </div>
         </div>
         <div className="card">

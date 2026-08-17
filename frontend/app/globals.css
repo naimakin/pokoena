@@ -5,62 +5,69 @@ button,input,textarea{font:inherit;color:inherit}
 ul{list-style:none}
 a{color:inherit}
 
-/* ---------- tokens : light (default) ---------- */
+/* ---------- tokens : light (default) ----------
+   Palette/type from the reference Poko design system (DESIGN.md): warm
+   parchment canvas + deep-navy ink + amber as the single chromatic accent.
+   Aptos isn't an open/Google font, so Outfit (their own documented
+   fallback) is loaded as the primary body face instead. */
 :root{
-  --bg:#F4F6F8;
-  --surface:#FFFFFF;
-  --surface-2:#EEF1F4;
-  --surface-3:#E3E8EC;
-  --border:#DBE1E7;
-  --border-strong:#C3CCD4;
-  --text-primary:#16212B;
-  --text-secondary:#51606E;
-  --text-muted:#8695A3;
-  --accent:#1C8479;
-  --accent-strong:#146B62;
-  --accent-soft:#E1F2EF;
-  --accent-contrast:#FFFFFF;
-  --good:#1E9E52;
-  --good-soft:#E4F6EA;
-  --warn:#AD7209;
-  --warn-soft:#FBF0D9;
-  --crit:#D02A31;
-  --crit-soft:#FBE7E7;
-  --info:#2F6FE0;
-  --info-soft:#E7EEFC;
-  --shadow-sm:0 1px 2px rgba(20,30,40,.07);
-  --shadow-md:0 8px 24px rgba(20,30,40,.10);
-  --focus:#1C8479;
+  --bg:#f7f5f1;
+  --surface:#ffffff;
+  --surface-2:#fafaf9;
+  --surface-3:#f5f5f4;
+  --border:#d6d3d1;
+  --border-strong:#a8a29e;
+  --text-primary:#0F1A2A;
+  --text-secondary:#44403c;
+  --text-muted:#78716c;
+  --accent:#f59e0b;
+  --accent-strong:#d97706;
+  --accent-soft:rgba(245,158,11,.10);
+  --accent-contrast:#ffffff;
+  --good:#16A34A;
+  --good-soft:rgba(22,163,74,.10);
+  --warn:#EA580C;
+  --warn-soft:rgba(234,88,12,.10);
+  --crit:#C0130A;
+  --crit-soft:rgba(192,19,10,.06);
+  --info:#0F6B8A;
+  --info-soft:rgba(15,107,138,.10);
+  --shadow-sm:0 1px 3px rgba(15,26,42,.08),0 1px 2px rgba(15,26,42,.04);
+  --shadow-md:0 8px 24px rgba(15,26,42,.15);
+  --focus:#f59e0b;
 
-  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --font-mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --font-display:var(--font-barlow),"Barlow Condensed",-apple-system,sans-serif;
+  --font-ui:var(--font-outfit),Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:var(--font-space-mono),"Space Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
+/* Dark variant: not defined by the (light-only) reference DESIGN.md — derived
+   to keep the same ink/amber identity rather than dropping dark-mode support. */
 @media (prefers-color-scheme:dark){
   :root{
-    --bg:#0C1116;
-    --surface:#131A21;
-    --surface-2:#19212A;
-    --surface-3:#212B35;
-    --border:#26313C;
-    --border-strong:#37444F;
-    --text-primary:#E8EDF1;
-    --text-secondary:#8FA0AF;
-    --text-muted:#5E6D7B;
-    --accent:#4FBFB3;
-    --accent-strong:#6ECFC4;
-    --accent-soft:rgba(79,191,179,.13);
-    --accent-contrast:#04211D;
-    --good:#3FC172;
-    --good-soft:rgba(63,193,114,.13);
-    --warn:#E3A83A;
-    --warn-soft:rgba(227,168,58,.13);
-    --crit:#F0555C;
-    --crit-soft:rgba(240,85,92,.13);
-    --info:#5B93FF;
-    --info-soft:rgba(91,147,255,.13);
+    --bg:#0F1A2A;
+    --surface:#16233A;
+    --surface-2:#1C2C47;
+    --surface-3:#243652;
+    --border:#2C3D5C;
+    --border-strong:#3D5178;
+    --text-primary:#F2EFE9;
+    --text-secondary:#B9C2D0;
+    --text-muted:#8493A8;
+    --accent:#f59e0b;
+    --accent-strong:#fbbf24;
+    --accent-soft:rgba(245,158,11,.16);
+    --accent-contrast:#1a1206;
+    --good:#4ADE80;
+    --good-soft:rgba(74,222,128,.14);
+    --warn:#FB923C;
+    --warn-soft:rgba(251,146,60,.14);
+    --crit:#F87171;
+    --crit-soft:rgba(248,113,113,.14);
+    --info:#38BDF8;
+    --info-soft:rgba(56,189,248,.14);
     --shadow-sm:0 1px 2px rgba(0,0,0,.5);
-    --shadow-md:0 12px 32px rgba(0,0,0,.45);
-    --focus:#4FBFB3;
+    --shadow-md:0 12px 32px rgba(0,0,0,.5);
+    --focus:#f59e0b;
   }
 }
 
@@ -74,6 +81,10 @@ body{
 }
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 h1,h2,h3{text-wrap:balance;font-weight:600;letter-spacing:-.01em}
+.page-title,.card-title,.brand-name,.kpi-value,.login-title{
+  font-family:var(--font-display);font-weight:700;letter-spacing:-.01em;
+}
+.nav-group-label{font-family:var(--font-display);font-weight:700}
 button{cursor:pointer;background:none;border:none}
 button:disabled{cursor:not-allowed}
 button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{

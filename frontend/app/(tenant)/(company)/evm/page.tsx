@@ -1,17 +1,17 @@
-export default function ProgressPage() {
+export default function EvmPage() {
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>Progress Input</b>
+          <b>EVM / S-Curve</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress Input</div>
+            <div className="page-title">EVM / S-Curve</div>
             <div className="page-desc">
-              Entering activity progress and burned manhours against the current schedule will live here.
+              Earned value (PV/EV/AC, SPI/CPI, EAC) and the S-curve against a locked baseline will live here.
             </div>
           </div>
         </div>

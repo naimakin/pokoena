@@ -156,6 +156,61 @@ export function DatabaseIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function GanttIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <line x1="4" y1="6" x2="12" y2="6" />
+      <line x1="4" y1="12" x2="18" y2="12" />
+      <line x1="4" y1="18" x2="14" y2="18" />
+      <circle cx="15" cy="6" r="1.6" />
+      <circle cx="21" cy="12" r="1.6" />
+      <circle cx="17" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
+export function TrendingUpIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <polyline points="3 17 9 11 13 15 21 6" />
+      <polyline points="15 6 21 6 21 12" />
+    </svg>
+  );
+}
+
+export function ShieldCheckIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M12 2 4 5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V5l-8-3Z" />
+      <polyline points="8.5 12 11 14.5 15.5 9.5" />
+    </svg>
+  );
+}
+
+export function DiceIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="8" cy="8" r="1.3" />
+      <circle cx="16" cy="8" r="1.3" />
+      <circle cx="8" cy="16" r="1.3" />
+      <circle cx="16" cy="16" r="1.3" />
+      <circle cx="12" cy="12" r="1.3" />
+    </svg>
+  );
+}
+
+export function CompareIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M8 4v14a2 2 0 0 0 2 2h8" />
+      <path d="M16 20V6a2 2 0 0 0-2-2H6" />
+      <polyline points="5 7 8 4 11 7" />
+      <polyline points="19 17 16 20 13 17" />
+    </svg>
+  );
+}
+
 export function BuildingIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

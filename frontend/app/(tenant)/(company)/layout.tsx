@@ -6,41 +6,81 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
 import {
-  BarChartIcon,
   BuildingIcon,
   CalendarIcon,
   ClockIcon,
+  CompareIcon,
   DatabaseIcon,
+  DiceIcon,
   FlagIcon,
+  GanttIcon,
   GridIcon,
   LayersIcon,
+  ShieldCheckIcon,
+  TrendingUpIcon,
   UploadCloudIcon,
   UsersIcon,
   XIcon,
 } from "@/components/icons";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: () => true },
+const NAV_GROUPS = [
   {
-    href: "/review-queue",
-    label: "Change Review Queue",
-    icon: LayersIcon,
-    visible: (user: User | null) => user?.role === "company_admin",
+    label: "Analyze",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: (_user: User | null) => true },
+      { href: "/schedule", label: "Schedule", icon: LayersIcon, visible: (_user: User | null) => true },
+      { href: "/gantt", label: "Gantt", icon: GanttIcon, visible: (_user: User | null) => true },
+      { href: "/evm", label: "EVM / S-Curve", icon: TrendingUpIcon, visible: (_user: User | null) => true },
+    ],
   },
   {
-    href: "/user-management",
-    label: "User Management",
-    icon: UsersIcon,
-    visible: (user: User | null) =>
-      user?.role === "company_admin" ||
-      Boolean(user?.project_roles?.includes("user_management")) ||
-      Boolean(user?.project_roles?.includes("project_administrator")),
+    label: "Validate",
+    items: [
+      { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: (_user: User | null) => true },
+      { href: "/risk", label: "Risk Analysis", icon: DiceIcon, visible: (_user: User | null) => true },
+      { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: (_user: User | null) => true },
+    ],
   },
-  { href: "/projects-overview", label: "Project Status Dashboard", icon: BarChartIcon, visible: () => true },
-  { href: "/activities", label: "Project Activities", icon: LayersIcon, visible: () => true },
-  { href: "/progress", label: "Progress", icon: ClockIcon, visible: () => true },
-  { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: () => true },
-  { href: "/datastore", label: "Datastore", icon: DatabaseIcon, visible: () => true },
+  {
+    label: "Manage",
+    items: [
+      { href: "/progress", label: "Progress Input", icon: ClockIcon, visible: (_user: User | null) => true },
+      { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: (_user: User | null) => true },
+      { href: "/project-files", label: "Project Files", icon: DatabaseIcon, visible: (_user: User | null) => true },
+      {
+        href: "/update-period-control",
+        label: "Update Period Control",
+        icon: CalendarIcon,
+        visible: (_user: User | null) => true,
+      },
+      {
+        href: "/export-sync-p6",
+        label: "Export / Sync to P6",
+        icon: UploadCloudIcon,
+        visible: (_user: User | null) => true,
+      },
+    ],
+  },
+  {
+    label: "Team",
+    items: [
+      {
+        href: "/user-management",
+        label: "User Management",
+        icon: UsersIcon,
+        visible: (user: User | null) =>
+          user?.role === "company_admin" ||
+          Boolean(user?.project_roles?.includes("user_management")) ||
+          Boolean(user?.project_roles?.includes("project_administrator")),
+      },
+      {
+        href: "/review-queue",
+        label: "Change Review Queue",
+        icon: LayersIcon,
+        visible: (user: User | null) => user?.role === "company_admin",
+      },
+    ],
+  },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -75,8 +115,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         .toUpperCase()
     : "";
 
-  const visibleNav = NAV.filter((item) => item.visible(user));
-
   return (
     <div className="app-shell">
       <aside className="a-sidebar">
@@ -92,29 +130,21 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
 
         <nav>
           <div className="nav-group-label">Riverside Logistics Park</div>
-          <div className="navlist">
-            {visibleNav.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href} className={`navitem${pathname?.startsWith(href) ? " active" : ""}`}>
-                <Icon className="icon" />
-                <span>{label}</span>
-              </Link>
-            ))}
-            <span className="navitem disabled">
-              <CalendarIcon className="icon" />
-              <span>Update Period Control</span>
-              <span className="soon">Next</span>
-            </span>
-            <span className="navitem disabled">
-              <BarChartIcon className="icon" />
-              <span>Analysis Results</span>
-              <span className="soon">Next</span>
-            </span>
-            <span className="navitem disabled">
-              <UploadCloudIcon className="icon" />
-              <span>Export / Sync to P6</span>
-              <span className="soon">Next</span>
-            </span>
-          </div>
+          {NAV_GROUPS.map((group) => {
+            const items = group.items.filter((item) => item.visible(user));
+            if (items.length === 0) return null;
+            return (
+              <div key={group.label} className="navlist" style={{ marginBottom: ".75rem" }}>
+                <div className="nav-group-label">{group.label}</div>
+                {items.map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href} className={`navitem${pathname?.startsWith(href) ? " active" : ""}`}>
+                    <Icon className="icon" />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="a-foot">

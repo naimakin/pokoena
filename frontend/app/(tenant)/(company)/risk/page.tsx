@@ -1,18 +1,16 @@
-export default function ProgressPage() {
+export default function RiskAnalysisPage() {
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>Progress Input</b>
+          <b>Risk Analysis</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress Input</div>
-            <div className="page-desc">
-              Entering activity progress and burned manhours against the current schedule will live here.
-            </div>
+            <div className="page-title">Risk Analysis</div>
+            <div className="page-desc">Monte Carlo schedule-risk simulation will live here.</div>
           </div>
         </div>
         <div className="card">
