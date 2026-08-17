@@ -11,6 +11,7 @@ from app.api.routes import (
     platform,
     platform_auth,
     projects,
+    schedule_imports,
     subcontractor_organizations,
     team,
     update_periods,
@@ -39,6 +40,7 @@ app.include_router(subcontractor_organizations.router)
 app.include_router(projects.router)
 app.include_router(update_periods.router)
 app.include_router(activities.router)
+app.include_router(schedule_imports.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 

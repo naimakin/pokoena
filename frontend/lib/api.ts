@@ -70,10 +70,44 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
   return (await response.json()) as T;
 }
 
+// Multipart upload — deliberately bypasses `request()`'s JSON Content-Type
+// header (the browser needs to set its own multipart boundary) but reuses
+// the same 401-refresh-and-retry / error-shape handling via a raw fetch.
+async function requestFile<T>(path: string, formData: FormData, isRetry = false): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (response.status === 401 && !isRetry) {
+    if (await tryRefreshSession()) {
+      return requestFile<T>(path, formData, true);
+    }
+    if (typeof window !== "undefined") {
+      window.location.href = isPlatformArea() ? "/platform-admin/login" : "/login";
+    }
+  }
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // no JSON body on this error response — fall back to statusText
+    }
+    throw new ApiError(response.status, detail);
+  }
+
+  return (await response.json()) as T;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
+  postFile: <T>(path: string, formData: FormData) => requestFile<T>(path, formData),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),

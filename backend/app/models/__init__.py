@@ -4,12 +4,14 @@ by Alembic autogenerate and by tests that call Base.metadata.create_all()."""
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.audit_log import AuditLog
+from app.models.calendar import Calendar
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
 from app.models.invite import Invite, InviteStatus
 from app.models.password_reset import PasswordReset
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.schedule_import import ScheduleImport
 from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
@@ -32,6 +34,8 @@ __all__ = [
     "ActivityRelationship",
     "LinkType",
     "AuditLog",
+    "Calendar",
+    "ScheduleImport",
     "ChangeRequest",
     "ChangeRequestStatus",
     "RiskLevel",

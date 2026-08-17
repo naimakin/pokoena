@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,23 @@ class ActivityOut(BaseModel):
     remaining_duration_days: int
     status: ActivityStatus
 
+    # --- P6/CPM fields, populated by .xer import — None until a schedule has
+    # been imported for this project. See services/xer_import.py. ---
+    wbs_path: str | None = None
+    task_type: str | None = None
+    status_code: str | None = None
+    target_duration_hours: float | None = None
+    remaining_duration_hours: float | None = None
+    early_start: date | None = None
+    early_finish: date | None = None
+    late_start: date | None = None
+    late_finish: date | None = None
+    total_float_hours: float | None = None
+    free_float_hours: float | None = None
+    is_critical: bool = False
+    constraint_type: str | None = None
+    constraint_date: date | None = None
+
 
 class ActivityUpdate(BaseModel):
     """Only the fields a subcontractor may edit directly, without admin review."""
@@ -43,7 +60,22 @@ class ActivityRelationshipOut(BaseModel):
     successor_id: uuid.UUID
     link_type: LinkType
     lag_days: int
+    lag_hours: int | None = None
     # Populated by the route (transient, not a mapped column) so the UI can show
     # "FS ← MEP-2140" instead of a bare UUID.
     predecessor_external_id: str | None = None
     successor_external_id: str | None = None
+
+
+class ScheduleImportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    filename: str
+    data_date: datetime | None
+    imported_by_user_id: uuid.UUID
+    imported_at: datetime
+    activity_count: int
+    critical_count: int
+    warnings: list[str]

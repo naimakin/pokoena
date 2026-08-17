@@ -26,3 +26,4 @@ class ActivityRelationship(Base):
         SAEnum(LinkType, name="link_type"), nullable=False, default=LinkType.FS
     )
     lag_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lag_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)

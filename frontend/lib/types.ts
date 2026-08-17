@@ -130,6 +130,35 @@ export interface Activity {
   percent_complete: number;
   remaining_duration_days: number;
   status: ActivityStatus;
+
+  // P6/CPM fields, populated by .xer import — null until a schedule has been
+  // imported for this project. See ScheduleImport.
+  wbs_path?: string | null;
+  task_type?: string | null;
+  status_code?: string | null;
+  target_duration_hours?: number | null;
+  remaining_duration_hours?: number | null;
+  early_start?: string | null;
+  early_finish?: string | null;
+  late_start?: string | null;
+  late_finish?: string | null;
+  total_float_hours?: number | null;
+  free_float_hours?: number | null;
+  is_critical?: boolean;
+  constraint_type?: string | null;
+  constraint_date?: string | null;
+}
+
+export interface ScheduleImport {
+  id: string;
+  project_id: string;
+  filename: string;
+  data_date: string | null;
+  imported_by_user_id: string;
+  imported_at: string;
+  activity_count: number;
+  critical_count: number;
+  warnings: string[];
 }
 
 export interface ActivityUpdatePayload {

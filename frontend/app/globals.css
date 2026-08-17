@@ -331,6 +331,19 @@ tr.resolved{opacity:.45}
 .checkbox-row{display:flex;align-items:center;gap:.4rem;font-size:.8125rem}
 .checkbox-row input{width:auto}
 
+/* ---------- xer upload dropzone ---------- */
+.dropzone{
+  border:1px dashed var(--border-strong);border-radius:10px;padding:2rem 1rem;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:.5rem;color:var(--text-secondary);
+  background:var(--surface-2);cursor:pointer;transition:border-color .15s,background .15s;
+}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:var(--surface)}
+.dropzone .icon{width:28px;height:28px;color:var(--text-muted)}
+.dropzone-title{font-size:.875rem;font-weight:700;color:var(--text-primary)}
+.dropzone-sub{font-size:.75rem;color:var(--text-muted)}
+.dropzone input[type="file"]{display:none}
+.import-warnings{max-height:160px;overflow-y:auto;background:var(--surface-2);border-radius:7px;padding:.6rem .75rem;font-family:var(--font-mono);font-size:.6875rem;color:var(--text-secondary);white-space:pre-wrap}
+
 /* ---------- responsive ---------- */
 @media (max-width:900px){
   .kpi-row{grid-template-columns:repeat(2,1fr)}
