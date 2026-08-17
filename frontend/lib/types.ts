@@ -172,6 +172,28 @@ export interface DcmaReport {
   checks: DcmaCheckResult[];
 }
 
+export interface MonteCarloRequest {
+  iterations?: number;
+  spread?: number;
+}
+
+export interface MonteCarloHistogramBin {
+  date: string;
+  count: number;
+  cumulative_pct: number;
+}
+
+export interface MonteCarloResult {
+  iterations: number;
+  project_finish_p10: string;
+  project_finish_p50: string;
+  project_finish_p80: string;
+  project_finish_p90: string;
+  mean_finish: string;
+  histogram: MonteCarloHistogramBin[];
+  critical_activities: string[];
+}
+
 export interface ScheduleImport {
   id: string;
   project_id: string;
