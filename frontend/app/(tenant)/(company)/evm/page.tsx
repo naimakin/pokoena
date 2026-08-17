@@ -1,24 +1,361 @@
+"use client";
+
+import { useEffect, useState, type CSSProperties } from "react";
+import { api, ApiError } from "@/lib/api";
+import type { BaselineStatus, EvmScurve, EvmSummary, Project } from "@/lib/types";
+import { CheckIcon, DownloadIcon, LockIcon, TrendingUpIcon } from "@/components/icons";
+
+const GRANULARITIES = ["daily", "weekly", "monthly"] as const;
+type Granularity = (typeof GRANULARITIES)[number];
+
+function fmt(v: number | null | undefined, digits = 2): string {
+  return v === null || v === undefined ? "—" : v.toFixed(digits);
+}
+
+function indexColor(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "var(--text-muted)";
+  if (v >= 0.95) return "var(--good)";
+  if (v >= 0.85) return "var(--warn)";
+  return "var(--crit)";
+}
+
 export default function EvmPage() {
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [baselineStatus, setBaselineStatus] = useState<BaselineStatus | null>(null);
+  const [summary, setSummary] = useState<EvmSummary | null>(null);
+  const [scurve, setScurve] = useState<EvmScurve | null>(null);
+  const [granularity, setGranularity] = useState<Granularity>("weekly");
+
+  const [versionLabel, setVersionLabel] = useState("Target-1");
+  const [locking, setLocking] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [superseding, setSuperseding] = useState(false);
+
+  async function loadAll(p: Project) {
+    const status = await api.get<BaselineStatus>(`/projects/${p.id}/evm/baseline`);
+    setBaselineStatus(status);
+    if (status.has_active) {
+      const [summaryRes, scurveRes] = await Promise.all([
+        api.get<EvmSummary>(`/projects/${p.id}/evm/summary`),
+        api.get<EvmScurve>(`/projects/${p.id}/evm/scurve?granularity=${granularity}`),
+      ]);
+      setSummary(summaryRes);
+      setScurve(scurveRes);
+    } else {
+      setSummary(null);
+      setScurve(null);
+    }
+  }
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const projects = await api.get<Project[]>("/projects");
+        const active = projects[0] ?? null;
+        setProject(active);
+        if (!active) return;
+        await loadAll(active);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to load EVM data.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!project || !baselineStatus?.has_active) return;
+    api.get<EvmScurve>(`/projects/${project.id}/evm/scurve?granularity=${granularity}`).then(setScurve);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [granularity]);
+
+  async function lockBaseline() {
+    if (!project) return;
+    setLocking(true);
+    setLockError(null);
+    try {
+      await api.post(`/projects/${project.id}/evm/baseline`, { version_label: versionLabel });
+      await loadAll(project);
+    } catch (err) {
+      setLockError(err instanceof ApiError ? err.message : "Failed to lock the baseline.");
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  async function supersedeBaseline() {
+    if (!project || !baselineStatus?.active_baseline) return;
+    setSuperseding(true);
+    try {
+      await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
+      await loadAll(project);
+    } catch (err) {
+      setLockError(err instanceof ApiError ? err.message : "Failed to supersede the baseline.");
+    } finally {
+      setSuperseding(false);
+    }
+  }
+
+  async function exportExcel() {
+    if (!project) return;
+    setExporting(true);
+    try {
+      const { blob, filename } = await api.getBlob(`/projects/${project.id}/evm/export`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename ?? `EVM_${project.code}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setLockError(err instanceof ApiError ? err.message : "Failed to export the workbook.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="a-content">
+        <p className="page-desc">Loading…</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="a-content">
+        <p className="login-error" style={{ maxWidth: 420 }}>
+          {error}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>EVM / S-Curve</b>
+          {project?.name ?? "—"} / <b>EVM / S-Curve</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
             <div className="page-title">EVM / S-Curve</div>
-            <div className="page-desc">
-              Earned value (PV/EV/AC, SPI/CPI, EAC) and the S-curve against a locked baseline will live here.
-            </div>
+            <div className="page-desc">Earned Value Management against a locked Performance Measurement Baseline</div>
           </div>
         </div>
-        <div className="card">
-          <p className="empty-state">Coming soon.</p>
-        </div>
+
+        {!project ? (
+          <div className="card">
+            <p className="empty-state">No project yet.</p>
+          </div>
+        ) : !baselineStatus?.has_active ? (
+          <div className="card" style={{ padding: "1.25rem 1.1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: ".85rem", maxWidth: 480 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+                <LockIcon className="icon" />
+                <span style={{ fontWeight: 700, fontSize: ".9375rem" }}>No baseline locked yet</span>
+              </div>
+              <p style={{ fontSize: ".8125rem", color: "var(--text-secondary)" }}>
+                Locking a baseline freezes the current schedule&rsquo;s planned duration and dates as the plan — EVM
+                metrics are measured against it from that point on. Import a scheduled .xer first if you haven&rsquo;t.
+              </p>
+              <div className="form-row" style={{ alignItems: "flex-end" }}>
+                <div className="field">
+                  <label htmlFor="version-label">Version label</label>
+                  <input id="version-label" type="text" value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} />
+                </div>
+                <button className="btn btn-primary" onClick={lockBaseline} disabled={locking}>
+                  <LockIcon className="icon" /> {locking ? "Locking…" : "Lock Baseline"}
+                </button>
+              </div>
+              {lockError && <p className="login-error">{lockError}</p>}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="banner" style={{ marginBottom: "1rem", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+                <CheckIcon className="icon" style={{ color: "var(--good)" }} />
+                <span style={{ fontSize: ".8125rem" }}>
+                  Baseline <b>{baselineStatus.active_baseline?.version_label}</b> locked{" "}
+                  {baselineStatus.active_baseline?.locked_at && new Date(baselineStatus.active_baseline.locked_at).toLocaleDateString()}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: ".5rem" }}>
+                <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={exporting}>
+                  <DownloadIcon className="icon" /> {exporting ? "Exporting…" : "Export Excel"}
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={supersedeBaseline} disabled={superseding}>
+                  {superseding ? "Superseding…" : "Supersede"}
+                </button>
+              </div>
+            </div>
+            {lockError && (
+              <p className="login-error" style={{ marginBottom: "1rem" }}>
+                {lockError}
+              </p>
+            )}
+
+            {summary && (
+              <div className="kpi-row">
+                {[
+                  { label: "SPI", value: summary.spi, colored: true },
+                  { label: "CPI", value: summary.cpi, colored: true },
+                  { label: "EV (MH)", value: summary.ev_cumulative, colored: false },
+                  { label: "AC (MH)", value: summary.ac_cumulative, colored: false },
+                  { label: "PV (MH)", value: summary.pv_cumulative, colored: false },
+                  { label: "EAC (MH)", value: summary.eac, colored: false },
+                  { label: "TCPI", value: summary.tcpi, colored: true },
+                  { label: "CV (MH)", value: summary.cv, colored: false },
+                ].map((kpi) => (
+                  <div className="card" key={kpi.label} style={{ padding: ".9rem 1rem" }}>
+                    <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                      {kpi.label}
+                    </div>
+                    <div
+                      className="num"
+                      style={{ fontSize: "1.25rem", fontWeight: 700, marginTop: ".3rem", color: kpi.colored ? indexColor(kpi.value) : "var(--text-primary)" }}
+                    >
+                      {fmt(kpi.value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="card" style={{ marginTop: "1rem" }}>
+              <div className="card-head">
+                <div>
+                  <div className="card-title">
+                    <TrendingUpIcon className="icon" style={{ marginRight: ".35rem" }} />
+                    S-Curve
+                  </div>
+                  <div className="card-title-sub">Planned vs. Earned vs. Actual (cumulative manhours)</div>
+                </div>
+                <select style={selectStyle} value={granularity} onChange={(e) => setGranularity(e.target.value as Granularity)}>
+                  {GRANULARITIES.map((g) => (
+                    <option key={g} value={g}>
+                      {g[0].toUpperCase() + g.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ padding: "1rem 1.1rem" }}>
+                {scurve && scurve.series.length > 0 ? (
+                  <ScurveChart series={scurve.series} />
+                ) : (
+                  <p className="empty-state">No progress entries yet — submit progress from the Progress Input page.</p>
+                )}
+              </div>
+            </div>
+
+            {baselineStatus.all_baselines.filter((b) => b.status !== "active").length > 0 && (
+              <div className="card" style={{ marginTop: "1rem" }}>
+                <div className="card-head">
+                  <div className="card-title">Baseline History</div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>BAC (MH)</th>
+                        <th>Locked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {baselineStatus.all_baselines
+                        .filter((b) => b.status !== "active")
+                        .map((b) => (
+                          <tr key={b.id}>
+                            <td>{b.version_label}</td>
+                            <td>
+                              <span className="chip chip-neutral">{b.status}</span>
+                            </td>
+                            <td className="num">{b.total_budget_manhours.toFixed(1)}</td>
+                            <td>{b.locked_at ? new Date(b.locked_at).toLocaleDateString() : "—"}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   );
 }
+
+function ScurveChart({ series }: { series: EvmScurve["series"] }) {
+  const width = 900;
+  const height = 220;
+  const padding = 32;
+  const maxValue = Math.max(...series.map((p) => Math.max(p.pv, p.ev, p.ac)), 1);
+
+  function xAt(i: number): number {
+    return padding + (i / Math.max(series.length - 1, 1)) * (width - padding * 2);
+  }
+  function yAt(v: number): number {
+    return height - padding - (v / maxValue) * (height - padding * 2);
+  }
+  function toPoints(key: "pv" | "ev" | "ac"): string {
+    return series.map((p, i) => `${xAt(i)},${yAt(p[key])}`).join(" ");
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", minWidth: 480 }}>
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--border)" />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--border)" />
+        <polyline points={toPoints("pv")} fill="none" stroke="var(--info)" strokeWidth={2} />
+        <polyline points={toPoints("ev")} fill="none" stroke="var(--good)" strokeWidth={2} />
+        <polyline points={toPoints("ac")} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        <text x={padding} y={padding - 10} fontSize="10" fill="var(--text-muted)">
+          {maxValue.toFixed(0)} MH
+        </text>
+        <text x={padding} y={height - padding + 16} fontSize="10" fill="var(--text-muted)">
+          {series[0]?.date}
+        </text>
+        <text x={width - padding} y={height - padding + 16} fontSize="10" fill="var(--text-muted)" textAnchor="end">
+          {series[series.length - 1]?.date}
+        </text>
+      </svg>
+      <div style={{ display: "flex", gap: "1rem", fontSize: ".6875rem", color: "var(--text-muted)", marginTop: ".5rem" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--info)" }} /> Planned Value
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--good)" }} /> Earned Value
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--accent)" }} /> Actual Cost
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const selectStyle: CSSProperties = {
+  fontSize: ".8125rem",
+  height: 32,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};

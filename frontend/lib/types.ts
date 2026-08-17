@@ -225,6 +225,169 @@ export interface LogicDiffReport {
   changes: LogicDiffChange[];
 }
 
+export interface ActivityEvm {
+  activity_id: string;
+  external_id: string;
+  name: string;
+  status_code: string | null;
+  percent_complete: number;
+  bac: number;
+  pv: number | null;
+  ev: number;
+  ac: number;
+  cpi: number | null;
+  spi: number | null;
+  sv: number | null;
+  cv: number;
+  eac_cpi: number | null;
+  eac_pf: number | null;
+  vac: number | null;
+  remaining_manhour: number;
+  remaining_qty: number;
+}
+
+export interface QuickEvmResult {
+  data_date: string | null;
+  bac: number;
+  pv: number | null;
+  ev: number;
+  ac: number;
+  cpi: number | null;
+  spi: number | null;
+  sv: number | null;
+  cv: number;
+  eac_cpi: number | null;
+  eac_pf: number | null;
+  vac: number | null;
+  activity_results: ActivityEvm[];
+}
+
+export type BaselineStatusValue = "draft" | "active" | "superseded";
+
+export interface Baseline {
+  id: string;
+  project_id: string;
+  schedule_import_id: string;
+  version_label: string;
+  locked_at: string | null;
+  locked_by_user_id: string | null;
+  total_budget_manhours: number;
+  target_start_date: string;
+  target_end_date: string;
+  distribution_method: string;
+  status: BaselineStatusValue;
+  activity_count: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface BaselineStatus {
+  project_id: string;
+  has_active: boolean;
+  active_baseline: Baseline | null;
+  all_baselines: Baseline[];
+}
+
+export interface LockBaselinePayload {
+  version_label?: string;
+  notes?: string | null;
+}
+
+export interface LockBaselineResult {
+  status: string;
+  baseline_id: string;
+  version_label: string;
+  bac: number;
+  activity_count: number;
+  target_start: string;
+  target_end: string;
+}
+
+export interface ProgressEntryPayload {
+  activity_id: string;
+  entry_date: string;
+  burned_manhours_daily: number;
+  physical_pct_snapshot?: number | null;
+  crew_size?: number | null;
+  notes?: string | null;
+}
+
+export interface ProgressEntry {
+  id: string;
+  activity_id: string;
+  entry_date: string;
+  burned_manhours_daily: number;
+  physical_pct_snapshot: number | null;
+  entry_type: "actual" | "correction" | "forecast";
+  crew_size: number | null;
+  notes: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  is_out_of_sequence: boolean;
+}
+
+export interface EvmScurvePoint {
+  date: string;
+  pv: number;
+  ev: number;
+  ac: number;
+  bac: number;
+  spi: number | null;
+  cpi: number | null;
+  sv: number;
+  cv: number;
+  eac: number | null;
+  etc: number | null;
+  tcpi: number | null;
+  pct_planned: number;
+  pct_earned: number;
+  tcpi_critical: boolean;
+}
+
+export interface EvmScurve {
+  project_id: string;
+  baseline_id: string;
+  version_label: string;
+  bac: number;
+  granularity: string;
+  points: number;
+  series: EvmScurvePoint[];
+}
+
+export interface EvmSummary {
+  project_id: string;
+  baseline_id: string | null;
+  version_label: string | null;
+  status: string;
+  message?: string | null;
+  as_of_date?: string | null;
+  bac: number;
+  pv_cumulative: number;
+  ev_cumulative: number;
+  ac_cumulative: number;
+  spi: number | null;
+  cpi: number | null;
+  sv: number;
+  cv: number;
+  eac: number | null;
+  etc: number | null;
+  tcpi: number | null;
+  tcpi_critical: boolean;
+  pct_planned: number;
+  pct_earned: number;
+  total_ac_raw: number;
+  entry_count: number;
+}
+
+export interface WbsNode {
+  id: string;
+  wbs_id: string;
+  parent_wbs_id: string | null;
+  wbs_short_name: string;
+  wbs_name: string;
+  seq_num: number | null;
+}
+
 export interface ScheduleImport {
   id: string;
   project_id: string;
