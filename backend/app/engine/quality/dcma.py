@@ -5,10 +5,13 @@ the reference's in-memory parsed-snapshot dataclasses. Our `ActivityRelationship
 rows already reference `Activity.id` (our UUID) directly for predecessor/successor
 — unlike the reference's `task_id` string joins — so no id-remapping is needed.
 
-Check #10 (Resources) is reported as "not_tracked" rather than computed or
-faked: we don't model resource assignments yet. It's excluded from the overall
-score's denominator (13 applicable checks instead of 14) rather than counted
-as an automatic pass or fail.
+Check #10 (Resources) is real when the caller supplies `assigned_activity_ids`
+(built from `resource_assignments` rows — see `engine/evm/evm_engine.py` for
+the other consumer of that table). Callers that don't pass it get
+"not_tracked", excluded from the overall score's denominator (13 applicable
+checks instead of 14) rather than counted as an automatic pass or fail —
+kept for backward compatibility with any caller that hasn't loaded resource
+data.
 
 DCMA 14 checks (reference: DCMA EA PAM 200.1):
   1.  Logic              — open-end activities (no predecessor or no successor)
@@ -20,7 +23,7 @@ DCMA 14 checks (reference: DCMA EA PAM 200.1):
   7.  Negative float      — TF < 0 count (any = fail)
   8.  High duration       — remaining duration > 44 working days (>5% = fail)
   9.  Invalid dates       — TK_NotStart with early_start < data_date
-  10. Resources           — not tracked (no resource-assignment model yet)
+  10. Resources           — activities with no resource assignment (>20% = warn)
   11. Missed logic        — TK_Complete with TK_NotStart successors
   12. Critical path length — critical activities vs total (informational)
   13. Total float = 0     — TF=0 but not on the longest path (>10% = warn)
@@ -30,8 +33,10 @@ DCMA 14 checks (reference: DCMA EA PAM 200.1):
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Optional
 
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship, LinkType
@@ -176,10 +181,24 @@ def _check9_invalid_dates(acts: list[Activity], data_date: date, total: int) -> 
     return _check(9, "Invalid Dates (ES < Data Date)", len(invalid), total, 0.0, [a.external_id for a in invalid])
 
 
-def _check10_resources() -> DcmaCheckResult:
+def _check10_resources(
+    acts: list[Activity], assigned_activity_ids: Optional[set[uuid.UUID]], total: int
+) -> DcmaCheckResult:
+    if assigned_activity_ids is None:
+        return DcmaCheckResult(
+            id=10, name="Resources (Unassigned)", status="not_tracked", value=0.0, threshold=20.0,
+            pct=0.0, unit="%", details=[],
+        )
+    no_rsrc = [
+        a for a in acts
+        if a.id not in assigned_activity_ids and a.task_type not in _MILESTONE_TYPES and a.status_code != "TK_Complete"
+    ]
+    codes = [a.external_id for a in no_rsrc]
+    pct = round(len(no_rsrc) / total * 100, 2) if total > 0 else 0.0
+    status = "warn" if pct > 20.0 else "pass"
     return DcmaCheckResult(
-        id=10, name="Resources (Unassigned)", status="not_tracked", value=0.0, threshold=20.0,
-        pct=0.0, unit="%", details=[],
+        id=10, name="Resources (Unassigned)", status=status, value=float(len(no_rsrc)), threshold=20.0,
+        pct=pct, unit="%", details=codes[:20],
     )
 
 
@@ -258,8 +277,11 @@ def run_dcma(
     relationships: list[ActivityRelationship],
     hours_per_day: float,
     data_date: datetime | None,
+    assigned_activity_ids: Optional[set[uuid.UUID]] = None,
 ) -> DcmaReport:
-    """Run all 14 DCMA checks against a project's current activities/relationships."""
+    """Run all 14 DCMA checks against a project's current activities/relationships.
+    `assigned_activity_ids` (activity ids with >=1 resource_assignments row) makes
+    check #10 real instead of "not_tracked" — see module docstring."""
     dd = (data_date or datetime.utcnow()).date()
     hpd = hours_per_day if hours_per_day > 0 else 8.0
 
@@ -277,7 +299,7 @@ def run_dcma(
         _check7_negative_float(in_scope, total),
         _check8_high_duration(in_scope, hpd, total),
         _check9_invalid_dates(in_scope, dd, total),
-        _check10_resources(),
+        _check10_resources(in_scope, assigned_activity_ids, total),
         _check11_missed_logic(activities, relationships, id_to_code, total),
         _check12_critical_path_length(in_scope, total),
         _check13_total_float_zero(in_scope, total),

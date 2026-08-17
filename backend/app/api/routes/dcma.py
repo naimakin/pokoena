@@ -10,6 +10,7 @@ from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
+from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.schemas.dcma import DcmaReportOut
 
@@ -48,5 +49,12 @@ def get_dcma_report(
     )
     data_date = last_import.data_date if last_import else None
 
-    report = run_dcma(activities, relationships, hours_per_day, data_date)
+    assigned_activity_ids = {
+        row.activity_id
+        for row in db.query(ResourceAssignment.activity_id)
+        .filter(ResourceAssignment.tenant_id == ctx.tenant_id, ResourceAssignment.project_id == project_id)
+        .all()
+    }
+
+    report = run_dcma(activities, relationships, hours_per_day, data_date, assigned_activity_ids)
     return DcmaReportOut.model_validate(report)

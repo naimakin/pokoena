@@ -147,6 +147,31 @@ class Relationship:
 
 
 @dataclass
+class Resource:
+    rsrc_id: str
+    rsrc_name: str
+    rsrc_short_name: str
+    rsrc_type: str  # RT_Labor, RT_Material, RT_Equipment
+    unit_id: Optional[str]
+    clndr_id: Optional[str]
+    curr_id: Optional[str]
+
+
+@dataclass
+class ResourceAssignment:
+    taskrsrc_id: str
+    task_id: str
+    rsrc_id: str
+    remain_qty: float
+    target_qty: float  # budgeted quantity (hours, for RT_Labor)
+    act_reg_qty: float  # actual quantity spent
+    target_cost: float
+    act_reg_cost: float
+    remain_cost: float
+    unit_id: Optional[str]
+
+
+@dataclass
 class ParsedSchedule:
     """Everything one `.xer` upload produces. Not persisted as-is anywhere — see
     `services/xer_import.py::import_xer` for how this becomes Postgres rows."""
@@ -156,4 +181,6 @@ class ParsedSchedule:
     calendars: list[Calendar]
     activities: list[Activity]
     relationships: list[Relationship]
+    resources: list[Resource] = field(default_factory=list)
+    assignments: list[ResourceAssignment] = field(default_factory=list)
     parse_log: list[str] = field(default_factory=list)

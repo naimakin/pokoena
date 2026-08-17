@@ -5,10 +5,10 @@
 1. Takes raw `bytes` rather than a filesystem `Path` — this service has no local
    disk to read from (and shouldn't; see `services/xer_import.py` for where the
    result actually lands: Postgres, not a JSON file).
-2. Trimmed to what CPM scheduling needs: WBS names (for display), calendars,
-   activities, and relationships. Activity codes, code types, and resource
-   assignments from the original parser are not ported this slice — nothing in
-   CPM scheduling reads them, and nothing in this app displays them yet.
+2. Trimmed to what CPM scheduling + EVM need: WBS, calendars, activities,
+   relationships, and resource assignments (RSRC/TASKRSRC — added for EVM's
+   `target_qty`/`act_reg_qty`). Activity codes/code types are still not
+   ported — nothing in this app reads them yet.
 
 Encoding strategy: try UTF-8 first, fall back to latin-1 (Windows-1252), same as
 the reference. Everything else — the multi-version `clndr_data` tokenizer, the
@@ -32,6 +32,8 @@ from app.parser.xer_models import (
     ParsedSchedule,
     ProjectMeta,
     Relationship,
+    Resource,
+    ResourceAssignment,
     WbsNode,
 )
 
@@ -347,6 +349,47 @@ def _parse_taskpred(rows: list[dict]) -> list[Relationship]:
     ]
 
 
+def _parse_rsrc(rows: list[dict]) -> list[Resource]:
+    return [
+        Resource(
+            rsrc_id=r.get("rsrc_id", ""),
+            rsrc_name=r.get("rsrc_name", ""),
+            rsrc_short_name=r.get("rsrc_short_name", ""),
+            rsrc_type=r.get("rsrc_type", "RT_Labor"),
+            unit_id=r.get("unit_id") or None,
+            clndr_id=r.get("clndr_id") or None,
+            curr_id=r.get("curr_id") or None,
+        )
+        for r in rows
+    ]
+
+
+def _parse_taskrsrc(rows: list[dict], known_rsrc_ids: set[str], parse_log: list[str]) -> list[ResourceAssignment]:
+    result = []
+    for r in rows:
+        rsrc_id = r.get("rsrc_id", "")
+        if rsrc_id not in known_rsrc_ids:
+            msg = f"TASKRSRC {r.get('taskrsrc_id', '?')}: references unknown rsrc_id {rsrc_id!r} — skipped"
+            logger.warning(msg)
+            parse_log.append(f"WARNING: {msg}")
+            continue
+        result.append(
+            ResourceAssignment(
+                taskrsrc_id=r.get("taskrsrc_id", ""),
+                task_id=r.get("task_id", ""),
+                rsrc_id=rsrc_id,
+                remain_qty=_safe_float(r.get("remain_qty", "0")),
+                target_qty=_safe_float(r.get("target_qty", "0")),
+                act_reg_qty=_safe_float(r.get("act_reg_qty", "0")),
+                target_cost=_safe_float(r.get("target_cost", "0")),
+                act_reg_cost=_safe_float(r.get("act_reg_cost", "0")),
+                remain_cost=_safe_float(r.get("remain_cost", "0")),
+                unit_id=r.get("unit_id") or None,
+            )
+        )
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -384,10 +427,14 @@ def parse_xer(file_bytes: bytes) -> ParsedSchedule:
     wbs_nodes = _parse_wbs(tables.get("PROJWBS", []))
     activities = _parse_tasks(tables.get("TASK", []), parse_log)
     relationships = _parse_taskpred(tables.get("TASKPRED", []))
+    resources = _parse_rsrc(tables.get("RSRC", []))
+    known_rsrc_ids = {r.rsrc_id for r in resources}
+    assignments = _parse_taskrsrc(tables.get("TASKRSRC", []), known_rsrc_ids, parse_log)
 
     parse_log.append(
         f"Parse complete: {len(activities)} activities, {len(relationships)} relationships, "
-        f"{len(calendars)} calendars, {len(wbs_nodes)} WBS nodes"
+        f"{len(calendars)} calendars, {len(wbs_nodes)} WBS nodes, {len(resources)} resources, "
+        f"{len(assignments)} resource assignments"
     )
     logger.info(parse_log[-1])
 
@@ -397,5 +444,7 @@ def parse_xer(file_bytes: bytes) -> ParsedSchedule:
         calendars=calendars,
         activities=activities,
         relationships=relationships,
+        resources=resources,
+        assignments=assignments,
         parse_log=parse_log,
     )

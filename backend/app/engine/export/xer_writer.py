@@ -13,9 +13,11 @@ update to the activities that were exported, not new ones. Falls back to our
 own UUIDs only for activities/projects that never went through an import
 (created natively in Poko).
 
-Deliberately not written: RSRC/TASKRSRC/ACTVTYPE/ACTVCODE/TASKACTV — we don't
-model resources or activity codes. P6 (and our own parser) tolerate a file
-where those tables are present but empty, same as the reference.
+RSRC/TASKRSRC are now populated from real data (`Resource`/`ResourceAssignment`,
+added for EVM — see `engine/evm/evm_engine.py`). ACTVTYPE/ACTVCODE/TASKACTV
+stay empty — we still don't model activity codes. P6 (and our own parser)
+tolerate a file where those tables are present but empty, same as the
+reference.
 
 Deliberate addition beyond the reference: a CALENDAR table. The reference's
 writer omits it entirely (relying on the target P6 database already having
@@ -34,6 +36,8 @@ from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar
 from app.models.project import Project
+from app.models.resource import Resource
+from app.models.resource_assignment import ResourceAssignment
 from app.models.wbs_node import WbsNode
 
 _DATE_FMT = "%Y-%m-%d"  # our DB only stores dates, not times — parse_xer accepts this short form
@@ -215,6 +219,45 @@ def _write_taskpred(buf: io.StringIO, relationships: list[ActivityRelationship],
         )
 
 
+def _write_rsrc(buf: io.StringIO, resources: list[Resource]) -> None:
+    buf.write("%T\tRSRC\n")
+    buf.write("%F\trsrc_id\trsrc_name\trsrc_short_name\trsrc_type\tunit_id\tclndr_id\tcurr_id\n")
+    for r in resources:
+        buf.write(
+            "%R\t" + _tab([_s(r.rsrc_id), _s(r.name), _s(r.short_name), _s(r.rsrc_type), _s(r.unit_id), _s(r.clndr_id), _s(r.curr_id)])
+            + "\n"
+        )
+
+
+def _write_taskrsrc(
+    buf: io.StringIO, assignments: list[ResourceAssignment], task_id_by_row_id: dict, rsrc_id_by_row_id: dict
+) -> None:
+    buf.write("%T\tTASKRSRC\n")
+    buf.write(
+        "%F\ttaskrsrc_id\ttask_id\trsrc_id\tremain_qty\ttarget_qty\tact_reg_qty\t"
+        "target_cost\tact_reg_cost\tremain_cost\tunit_id\n"
+    )
+    for i, a in enumerate(assignments, start=1):
+        buf.write(
+            "%R\t"
+            + _tab(
+                [
+                    str(i),
+                    task_id_by_row_id.get(a.activity_id, ""),
+                    rsrc_id_by_row_id.get(a.resource_id, ""),
+                    _f(a.remain_qty),
+                    _f(a.target_qty),
+                    _f(a.act_reg_qty),
+                    _f(a.target_cost),
+                    _f(a.act_reg_cost),
+                    _f(a.remain_cost),
+                    _s(a.unit_id),
+                ]
+            )
+            + "\n"
+        )
+
+
 def _write_empty_table(buf: io.StringIO, name: str, columns: list[str]) -> None:
     buf.write(f"%T\t{name}\n")
     buf.write("%F\t" + "\t".join(columns) + "\n")
@@ -226,6 +269,8 @@ def build_xer(
     relationships: list[ActivityRelationship],
     calendars: list[Calendar],
     wbs_nodes: list[WbsNode],
+    resources: list[Resource],
+    assignments: list[ResourceAssignment],
     data_date: Optional[datetime],
 ) -> bytes:
     """Serialize a project's current schedule back to XER format. Returns
@@ -236,6 +281,7 @@ def build_xer(
     default_clndr_id = calendars[0].clndr_id if calendars else ""
     clndr_id_by_row_id = {c.id: c.clndr_id for c in calendars}
     task_id_by_row_id = {a.id: (a.p6_task_id or str(a.id)) for a in activities}
+    rsrc_id_by_row_id = {r.id: r.rsrc_id for r in resources}
 
     _write_ermhdr(buf)
     _write_project(buf, project, default_clndr_id, data_date)
@@ -243,15 +289,8 @@ def build_xer(
     _write_projwbs(buf, wbs_nodes, proj_id)
     _write_task(buf, activities, proj_id, clndr_id_by_row_id)
     _write_taskpred(buf, relationships, task_id_by_row_id)
-    _write_empty_table(buf, "RSRC", ["rsrc_id", "rsrc_name", "rsrc_short_name", "rsrc_type", "unit_id", "clndr_id", "curr_id"])
-    _write_empty_table(
-        buf,
-        "TASKRSRC",
-        [
-            "taskrsrc_id", "task_id", "rsrc_id", "remain_qty", "target_qty",
-            "act_reg_qty", "target_cost", "act_reg_cost", "remain_cost", "unit_id",
-        ],
-    )
+    _write_rsrc(buf, resources)
+    _write_taskrsrc(buf, assignments, task_id_by_row_id, rsrc_id_by_row_id)
     _write_empty_table(buf, "ACTVTYPE", ["actv_code_type_id", "actv_code_type", "proj_id"])
     _write_empty_table(
         buf, "ACTVCODE", ["actv_code_id", "actv_code_type_id", "actv_code_name", "short_name", "parent_actv_code_id", "seq_num"]

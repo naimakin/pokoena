@@ -10,6 +10,8 @@ from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
+from app.models.resource import Resource
+from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.wbs_node import WbsNode
 
@@ -33,6 +35,12 @@ def export_xer(
     )
     calendars = db.query(Calendar).filter(Calendar.tenant_id == ctx.tenant_id, Calendar.project_id == project_id).all()
     wbs_nodes = db.query(WbsNode).filter(WbsNode.tenant_id == ctx.tenant_id, WbsNode.project_id == project_id).all()
+    resources = db.query(Resource).filter(Resource.tenant_id == ctx.tenant_id, Resource.project_id == project_id).all()
+    assignments = (
+        db.query(ResourceAssignment)
+        .filter(ResourceAssignment.tenant_id == ctx.tenant_id, ResourceAssignment.project_id == project_id)
+        .all()
+    )
 
     last_import = (
         db.query(ScheduleImport)
@@ -42,7 +50,7 @@ def export_xer(
     )
     data_date = last_import.data_date if last_import else None
 
-    xer_bytes = build_xer(project, activities, relationships, calendars, wbs_nodes, data_date)
+    xer_bytes = build_xer(project, activities, relationships, calendars, wbs_nodes, resources, assignments, data_date)
 
     return Response(
         content=xer_bytes,

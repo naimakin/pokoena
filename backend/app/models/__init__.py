@@ -11,6 +11,8 @@ from app.models.password_reset import PasswordReset
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.resource import Resource
+from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
@@ -46,6 +48,8 @@ __all__ = [
     "Project",
     "ProjectMembership",
     "ProjectScope",
+    "Resource",
+    "ResourceAssignment",
     "ScopeSubmission",
     "SubcontractorOrganization",
     "SubcontractorScopeAssignment",

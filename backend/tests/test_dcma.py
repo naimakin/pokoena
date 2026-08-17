@@ -174,3 +174,16 @@ def test_clean_schedule_scores_100():
     assert report.overall_score == 100.0
     assert report.overall_status == "pass"
     assert report.in_scope == 12
+
+
+def test_resources_check_is_real_when_assignment_ids_provided():
+    assigned = _act(external_id="A1")
+    unassigned = _act(external_id="A2")
+    report = run_dcma(
+        [assigned, unassigned], [], hours_per_day=8, data_date=None, assigned_activity_ids={assigned.id}
+    )
+
+    resources = next(c for c in report.checks if c.id == 10)
+    assert resources.status == "warn"  # 1 of 2 unassigned = 50% > 20% threshold
+    assert resources.details == ["A2"]
+    assert resources.pct == 50.0

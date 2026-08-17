@@ -41,6 +41,8 @@ from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar as CalendarModel
 from app.models.project import Project
+from app.models.resource import Resource as ResourceModel
+from app.models.resource_assignment import ResourceAssignment as ResourceAssignmentModel
 from app.models.schedule_import import ScheduleImport
 from app.models.wbs_node import WbsNode
 from app.parser.xer_models import ParsedSchedule
@@ -253,6 +255,53 @@ def import_xer(
                     and succ_act.total_float_hr_cnt <= _TOL
                 ),
             }
+        )
+
+    # --- resources: upsert by (project_id, rsrc_id) — feeds the quick EVM engine
+    # (engine/evm/evm_engine.py) and DCMA check #10. ---
+    existing_resources = {
+        r.rsrc_id: r for r in db.query(ResourceModel).filter(ResourceModel.project_id == project_id).all()
+    }
+    rsrc_id_to_row_id: dict[str, uuid.UUID] = {}
+    for res in parsed.resources:
+        res_row = existing_resources.get(res.rsrc_id)
+        if res_row is None:
+            res_row = ResourceModel(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id, rsrc_id=res.rsrc_id
+            )
+            db.add(res_row)
+        res_row.name = res.rsrc_name
+        res_row.short_name = res.rsrc_short_name
+        res_row.rsrc_type = res.rsrc_type
+        res_row.unit_id = res.unit_id
+        res_row.clndr_id = res.clndr_id
+        res_row.curr_id = res.curr_id
+        db.flush()
+        rsrc_id_to_row_id[res.rsrc_id] = res_row.id
+
+    # --- resource assignments: replace wholesale per import, same as
+    # relationships — a fresh import is the source of truth for resource loading. ---
+    db.query(ResourceAssignmentModel).filter(ResourceAssignmentModel.project_id == project_id).delete()
+    for assign in parsed.assignments:
+        activity_row_id = task_id_to_row_id.get(assign.task_id)
+        resource_row_id = rsrc_id_to_row_id.get(assign.rsrc_id)
+        if activity_row_id is None or resource_row_id is None:
+            continue
+        db.add(
+            ResourceAssignmentModel(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                project_id=project_id,
+                activity_id=activity_row_id,
+                resource_id=resource_row_id,
+                remain_qty=assign.remain_qty,
+                target_qty=assign.target_qty,
+                act_reg_qty=assign.act_reg_qty,
+                target_cost=assign.target_cost,
+                act_reg_cost=assign.act_reg_cost,
+                remain_cost=assign.remain_cost,
+                unit_id=assign.unit_id,
+            )
         )
 
     schedule_import = ScheduleImport(

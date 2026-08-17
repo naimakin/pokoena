@@ -43,7 +43,14 @@ def test_dcma_report_after_schedule_import(client, db_session):
 
     assert body["total_activities"] == 6
     by_id = {c["id"]: c for c in body["checks"]}
-    assert by_id[10]["status"] == "not_tracked"
+    # The synthetic fixture has no RSRC/TASKRSRC data, so every non-milestone
+    # in-scope activity is "unassigned" — check #10 is real now (Slice 6), not
+    # not_tracked, since the route always loads (possibly empty) assignment
+    # data. A600 (finish milestone) is excluded from the numerator (same
+    # milestone exclusion as check #1) but still counts in the denominator:
+    # 5 of 6 unassigned.
+    assert by_id[10]["status"] == "warn"
+    assert by_id[10]["pct"] == 83.33
     # A100 (Mobilization) has no predecessor and isn't a milestone, so it's a
     # genuine open end at the start of the network — A600 (finish milestone)
     # is excluded from the check by task type despite having no successor.
