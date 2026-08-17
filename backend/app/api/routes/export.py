@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.engine.export.xer_writer import build_xer
 from app.models.activity import Activity
+from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
@@ -41,6 +42,21 @@ def export_xer(
         .filter(ResourceAssignment.tenant_id == ctx.tenant_id, ResourceAssignment.project_id == project_id)
         .all()
     )
+    code_types = (
+        db.query(ActivityCodeType)
+        .filter(ActivityCodeType.tenant_id == ctx.tenant_id, ActivityCodeType.project_id == project_id)
+        .all()
+    )
+    code_values = (
+        db.query(ActivityCodeValue)
+        .filter(ActivityCodeValue.tenant_id == ctx.tenant_id, ActivityCodeValue.project_id == project_id)
+        .all()
+    )
+    task_activity_codes = (
+        db.query(TaskActivityCode)
+        .filter(TaskActivityCode.tenant_id == ctx.tenant_id, TaskActivityCode.project_id == project_id)
+        .all()
+    )
 
     last_import = (
         db.query(ScheduleImport)
@@ -50,7 +66,10 @@ def export_xer(
     )
     data_date = last_import.data_date if last_import else None
 
-    xer_bytes = build_xer(project, activities, relationships, calendars, wbs_nodes, resources, assignments, data_date)
+    xer_bytes = build_xer(
+        project, activities, relationships, calendars, wbs_nodes, resources, assignments,
+        code_types, code_values, task_activity_codes, data_date,
+    )
 
     return Response(
         content=xer_bytes,

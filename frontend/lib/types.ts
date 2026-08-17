@@ -517,3 +517,24 @@ export interface SubcontractorOrg {
   name: string;
   discipline: string;
 }
+
+export interface ActivityCodeType {
+  id: string;
+  actv_code_type_id: string;
+  name: string;
+}
+
+export interface ActivityCodeValue {
+  id: string;
+  code_type_id: string;
+  actv_code_id: string;
+  name: string;
+  short_name: string | null;
+  parent_actv_code_id: string | null;
+  seq_num: number | null;
+}
+
+export interface ActivityCodes {
+  code_types: ActivityCodeType[];
+  code_values: ActivityCodeValue[];
+}

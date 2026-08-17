@@ -172,6 +172,32 @@ class ResourceAssignment:
 
 
 @dataclass
+class CodeType:
+    actv_code_type_id: str
+    actv_code_type: str  # display name
+    proj_id: Optional[str]  # None = global
+
+
+@dataclass
+class CodeValue:
+    actv_code_id: str
+    actv_code_type_id: str
+    actv_code_name: str
+    short_name: str
+    parent_actv_code_id: Optional[str]
+    seq_num: Optional[int]
+
+
+@dataclass
+class ActivityCode:
+    """Junction: which CodeValue is assigned to which Activity."""
+
+    task_id: str
+    actv_code_type_id: str
+    actv_code_id: str
+
+
+@dataclass
 class ParsedSchedule:
     """Everything one `.xer` upload produces. Not persisted as-is anywhere — see
     `services/xer_import.py::import_xer` for how this becomes Postgres rows."""
@@ -183,4 +209,7 @@ class ParsedSchedule:
     relationships: list[Relationship]
     resources: list[Resource] = field(default_factory=list)
     assignments: list[ResourceAssignment] = field(default_factory=list)
+    code_types: list[CodeType] = field(default_factory=list)
+    code_values: list[CodeValue] = field(default_factory=list)
+    activity_codes: list[ActivityCode] = field(default_factory=list)
     parse_log: list[str] = field(default_factory=list)

@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 from app.deps import AuthContext
 from app.engine.cpm.scheduler import schedule
 from app.models.activity import Activity, ActivityStatus
+from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar as CalendarModel
 from app.models.project import Project
@@ -301,6 +302,64 @@ def import_xer(
                 act_reg_cost=assign.act_reg_cost,
                 remain_cost=assign.remain_cost,
                 unit_id=assign.unit_id,
+            )
+        )
+
+    # --- activity code types/values: upsert by (project_id, code_type_id) /
+    # (project_id, actv_code_id) — same small-stable-tree pattern as WBS nodes. ---
+    existing_code_types = {
+        t.actv_code_type_id: t
+        for t in db.query(ActivityCodeType).filter(ActivityCodeType.project_id == project_id).all()
+    }
+    code_type_id_to_row_id: dict[str, uuid.UUID] = {}
+    for ct in parsed.code_types:
+        ct_row = existing_code_types.get(ct.actv_code_type_id)
+        if ct_row is None:
+            ct_row = ActivityCodeType(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id,
+                actv_code_type_id=ct.actv_code_type_id,
+            )
+            db.add(ct_row)
+        ct_row.name = ct.actv_code_type
+        db.flush()
+        code_type_id_to_row_id[ct.actv_code_type_id] = ct_row.id
+
+    existing_code_values = {
+        v.actv_code_id: v
+        for v in db.query(ActivityCodeValue).filter(ActivityCodeValue.project_id == project_id).all()
+    }
+    code_value_id_to_row_id: dict[str, uuid.UUID] = {}
+    for cv in parsed.code_values:
+        code_type_row_id = code_type_id_to_row_id.get(cv.actv_code_type_id)
+        if code_type_row_id is None:
+            continue
+        cv_row = existing_code_values.get(cv.actv_code_id)
+        if cv_row is None:
+            cv_row = ActivityCodeValue(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id,
+                code_type_id=code_type_row_id, actv_code_id=cv.actv_code_id,
+            )
+            db.add(cv_row)
+        cv_row.code_type_id = code_type_row_id
+        cv_row.name = cv.actv_code_name
+        cv_row.short_name = cv.short_name
+        cv_row.parent_actv_code_id = cv.parent_actv_code_id
+        cv_row.seq_num = cv.seq_num
+        db.flush()
+        code_value_id_to_row_id[cv.actv_code_id] = cv_row.id
+
+    # --- task activity codes: replace wholesale per import, same as
+    # relationships/resource assignments. ---
+    db.query(TaskActivityCode).filter(TaskActivityCode.project_id == project_id).delete()
+    for tac in parsed.activity_codes:
+        activity_row_id = task_id_to_row_id.get(tac.task_id)
+        code_value_row_id = code_value_id_to_row_id.get(tac.actv_code_id)
+        if activity_row_id is None or code_value_row_id is None:
+            continue
+        db.add(
+            TaskActivityCode(
+                id=uuid.uuid4(), tenant_id=ctx.tenant_id, project_id=project_id,
+                activity_id=activity_row_id, code_value_id=code_value_row_id,
             )
         )
 

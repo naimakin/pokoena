@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     activities,
+    activity_codes,
     auth,
     change_requests,
     dashboard,
@@ -11,6 +12,7 @@ from app.api.routes import (
     export,
     invites,
     logic_diff,
+    metadata,
     password_reset,
     platform,
     platform_auth,
@@ -53,6 +55,8 @@ app.include_router(risk.router)
 app.include_router(logic_diff.router)
 app.include_router(export.router)
 app.include_router(wbs.router)
+app.include_router(activity_codes.router)
+app.include_router(metadata.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 

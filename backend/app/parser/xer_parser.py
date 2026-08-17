@@ -5,10 +5,10 @@
 1. Takes raw `bytes` rather than a filesystem `Path` — this service has no local
    disk to read from (and shouldn't; see `services/xer_import.py` for where the
    result actually lands: Postgres, not a JSON file).
-2. Trimmed to what CPM scheduling + EVM need: WBS, calendars, activities,
-   relationships, and resource assignments (RSRC/TASKRSRC — added for EVM's
-   `target_qty`/`act_reg_qty`). Activity codes/code types are still not
-   ported — nothing in this app reads them yet.
+2. Trimmed to what CPM scheduling + EVM + activity codes need: WBS, calendars,
+   activities, relationships, resource assignments (RSRC/TASKRSRC), and
+   activity codes (ACTVTYPE/ACTVCODE/TASKACTV). Everything the reference
+   parser reads is now ported.
 
 Encoding strategy: try UTF-8 first, fall back to latin-1 (Windows-1252), same as
 the reference. Everything else — the multi-version `clndr_data` tokenizer, the
@@ -25,9 +25,12 @@ from typing import Optional
 
 from app.parser.xer_models import (
     Activity,
+    ActivityCode,
     Calendar,
     CalendarDay,
     CalendarException,
+    CodeType,
+    CodeValue,
     DayShift,
     ParsedSchedule,
     ProjectMeta,
@@ -390,6 +393,42 @@ def _parse_taskrsrc(rows: list[dict], known_rsrc_ids: set[str], parse_log: list[
     return result
 
 
+def _parse_actvtype(rows: list[dict]) -> list[CodeType]:
+    return [
+        CodeType(
+            actv_code_type_id=r.get("actv_code_type_id", ""),
+            actv_code_type=r.get("actv_code_type", ""),
+            proj_id=r.get("proj_id") or None,
+        )
+        for r in rows
+    ]
+
+
+def _parse_actvcode(rows: list[dict]) -> list[CodeValue]:
+    return [
+        CodeValue(
+            actv_code_id=r.get("actv_code_id", ""),
+            actv_code_type_id=r.get("actv_code_type_id", ""),
+            actv_code_name=r.get("actv_code_name", ""),
+            short_name=r.get("short_name", ""),
+            parent_actv_code_id=r.get("parent_actv_code_id") or None,
+            seq_num=_safe_int(r.get("seq_num", "")),
+        )
+        for r in rows
+    ]
+
+
+def _parse_taskactv(rows: list[dict]) -> list[ActivityCode]:
+    return [
+        ActivityCode(
+            task_id=r.get("task_id", ""),
+            actv_code_type_id=r.get("actv_code_type_id", ""),
+            actv_code_id=r.get("actv_code_id", ""),
+        )
+        for r in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -430,11 +469,14 @@ def parse_xer(file_bytes: bytes) -> ParsedSchedule:
     resources = _parse_rsrc(tables.get("RSRC", []))
     known_rsrc_ids = {r.rsrc_id for r in resources}
     assignments = _parse_taskrsrc(tables.get("TASKRSRC", []), known_rsrc_ids, parse_log)
+    code_types = _parse_actvtype(tables.get("ACTVTYPE", []))
+    code_values = _parse_actvcode(tables.get("ACTVCODE", []))
+    activity_codes = _parse_taskactv(tables.get("TASKACTV", []))
 
     parse_log.append(
         f"Parse complete: {len(activities)} activities, {len(relationships)} relationships, "
         f"{len(calendars)} calendars, {len(wbs_nodes)} WBS nodes, {len(resources)} resources, "
-        f"{len(assignments)} resource assignments"
+        f"{len(assignments)} resource assignments, {len(code_values)} activity code values"
     )
     logger.info(parse_log[-1])
 
@@ -446,5 +488,8 @@ def parse_xer(file_bytes: bytes) -> ParsedSchedule:
         relationships=relationships,
         resources=resources,
         assignments=assignments,
+        code_types=code_types,
+        code_values=code_values,
+        activity_codes=activity_codes,
         parse_log=parse_log,
     )

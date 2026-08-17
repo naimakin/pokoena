@@ -14,10 +14,10 @@ own UUIDs only for activities/projects that never went through an import
 (created natively in Poko).
 
 RSRC/TASKRSRC are now populated from real data (`Resource`/`ResourceAssignment`,
-added for EVM — see `engine/evm/evm_engine.py`). ACTVTYPE/ACTVCODE/TASKACTV
-stay empty — we still don't model activity codes. P6 (and our own parser)
-tolerate a file where those tables are present but empty, same as the
-reference.
+added for EVM — see `engine/evm/evm_engine.py`), and so are ACTVTYPE/ACTVCODE/
+TASKACTV (`ActivityCodeType`/`ActivityCodeValue`/`TaskActivityCode`, added for
+activity-code support). Every table the reference's own writer produces is
+now backed by real data.
 
 Deliberate addition beyond the reference: a CALENDAR table. The reference's
 writer omits it entirely (relying on the target P6 database already having
@@ -33,6 +33,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from app.models.activity import Activity
+from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar
 from app.models.project import Project
@@ -258,9 +259,47 @@ def _write_taskrsrc(
         )
 
 
-def _write_empty_table(buf: io.StringIO, name: str, columns: list[str]) -> None:
-    buf.write(f"%T\t{name}\n")
-    buf.write("%F\t" + "\t".join(columns) + "\n")
+def _write_actvtype(buf: io.StringIO, code_types: list[ActivityCodeType], proj_id: str) -> None:
+    buf.write("%T\tACTVTYPE\n")
+    buf.write("%F\tactv_code_type_id\tactv_code_type\tproj_id\n")
+    for ct in code_types:
+        buf.write("%R\t" + _tab([_s(ct.actv_code_type_id), _s(ct.name), proj_id]) + "\n")
+
+
+def _write_actvcode(buf: io.StringIO, code_values: list[ActivityCodeValue], code_type_id_by_row_id: dict) -> None:
+    buf.write("%T\tACTVCODE\n")
+    buf.write("%F\tactv_code_id\tactv_code_type_id\tactv_code_name\tshort_name\tparent_actv_code_id\tseq_num\n")
+    for cv in code_values:
+        buf.write(
+            "%R\t"
+            + _tab(
+                [
+                    _s(cv.actv_code_id),
+                    code_type_id_by_row_id.get(cv.code_type_id, ""),
+                    _s(cv.name),
+                    _s(cv.short_name),
+                    _s(cv.parent_actv_code_id),
+                    "" if cv.seq_num is None else str(cv.seq_num),
+                ]
+            )
+            + "\n"
+        )
+
+
+def _write_taskactv(
+    buf: io.StringIO, task_activity_codes: list[TaskActivityCode], task_id_by_row_id: dict, code_value_by_row_id: dict
+) -> None:
+    buf.write("%T\tTASKACTV\n")
+    buf.write("%F\ttask_id\tactv_code_type_id\tactv_code_id\n")
+    for tac in task_activity_codes:
+        code_value = code_value_by_row_id.get(tac.code_value_id)
+        if code_value is None:
+            continue
+        buf.write(
+            "%R\t"
+            + _tab([task_id_by_row_id.get(tac.activity_id, ""), _s(code_value["type_id"]), _s(code_value["code_id"])])
+            + "\n"
+        )
 
 
 def build_xer(
@@ -271,6 +310,9 @@ def build_xer(
     wbs_nodes: list[WbsNode],
     resources: list[Resource],
     assignments: list[ResourceAssignment],
+    code_types: list[ActivityCodeType],
+    code_values: list[ActivityCodeValue],
+    task_activity_codes: list[TaskActivityCode],
     data_date: Optional[datetime],
 ) -> bytes:
     """Serialize a project's current schedule back to XER format. Returns
@@ -282,6 +324,11 @@ def build_xer(
     clndr_id_by_row_id = {c.id: c.clndr_id for c in calendars}
     task_id_by_row_id = {a.id: (a.p6_task_id or str(a.id)) for a in activities}
     rsrc_id_by_row_id = {r.id: r.rsrc_id for r in resources}
+    code_type_id_by_row_id = {ct.id: ct.actv_code_type_id for ct in code_types}
+    code_value_by_row_id = {
+        cv.id: {"type_id": code_type_id_by_row_id.get(cv.code_type_id, ""), "code_id": cv.actv_code_id}
+        for cv in code_values
+    }
 
     _write_ermhdr(buf)
     _write_project(buf, project, default_clndr_id, data_date)
@@ -291,11 +338,9 @@ def build_xer(
     _write_taskpred(buf, relationships, task_id_by_row_id)
     _write_rsrc(buf, resources)
     _write_taskrsrc(buf, assignments, task_id_by_row_id, rsrc_id_by_row_id)
-    _write_empty_table(buf, "ACTVTYPE", ["actv_code_type_id", "actv_code_type", "proj_id"])
-    _write_empty_table(
-        buf, "ACTVCODE", ["actv_code_id", "actv_code_type_id", "actv_code_name", "short_name", "parent_actv_code_id", "seq_num"]
-    )
-    _write_empty_table(buf, "TASKACTV", ["task_id", "actv_code_type_id", "actv_code_id"])
+    _write_actvtype(buf, code_types, proj_id)
+    _write_actvcode(buf, code_values, code_type_id_by_row_id)
+    _write_taskactv(buf, task_activity_codes, task_id_by_row_id, code_value_by_row_id)
 
     buf.write("%E\n")
 

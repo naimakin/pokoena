@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from app.engine.export.xer_writer import build_xer
 from app.models.activity import Activity
+from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar
 from app.models.project import Project
@@ -64,7 +65,9 @@ def test_round_trips_through_our_own_parser():
     a100 = _activity(external_id="A100", clndr_id=cal.id, wbs_path="WBS1", p6_task_id="1001")
     a200 = _activity(external_id="A200", name="Foundation", clndr_id=cal.id, wbs_path="WBS1", p6_task_id="1002")
 
-    xer_bytes = build_xer(project, [a100, a200], [_rel(a100, a200)], [cal], [wbs], [], [], datetime(2026, 1, 5, 8, 0))
+    xer_bytes = build_xer(
+        project, [a100, a200], [_rel(a100, a200)], [cal], [wbs], [], [], [], [], [], datetime(2026, 1, 5, 8, 0)
+    )
     parsed = parse_xer(xer_bytes)
 
     assert parsed.meta.proj_id == "PROJ1"
@@ -100,7 +103,7 @@ def test_activity_without_p6_task_id_falls_back_to_our_own_uuid():
     cal = _calendar()
     native = _activity(external_id="NEW1", clndr_id=cal.id, p6_task_id=None)
 
-    xer_bytes = build_xer(project, [native], [], [cal], [], [], [], None)
+    xer_bytes = build_xer(project, [native], [], [cal], [], [], [], [], [], [], None)
     parsed = parse_xer(xer_bytes)
 
     assert parsed.activities[0].task_id == str(native.id)
@@ -108,7 +111,7 @@ def test_activity_without_p6_task_id_falls_back_to_our_own_uuid():
 
 def test_writes_empty_resource_and_activity_code_tables_when_none_assigned():
     project = _project()
-    xer_bytes = build_xer(project, [], [], [], [], [], [], None)
+    xer_bytes = build_xer(project, [], [], [], [], [], [], [], [], [], None)
     text = xer_bytes.decode("utf-8")
 
     for table in ("RSRC", "TASKRSRC", "ACTVTYPE", "ACTVCODE", "TASKACTV"):
@@ -134,7 +137,7 @@ def test_resource_assignments_round_trip():
         remain_cost=0.0,
     )
 
-    xer_bytes = build_xer(project, [a], [], [cal], [], [resource], [assignment], None)
+    xer_bytes = build_xer(project, [a], [], [cal], [], [resource], [assignment], [], [], [], None)
     parsed = parse_xer(xer_bytes)
 
     assert len(parsed.resources) == 1
@@ -154,10 +157,35 @@ def test_relationship_lag_and_link_type_round_trip():
     b = _activity(external_id="A2", clndr_id=cal.id, p6_task_id="2")
     rel = _rel(a, b, link_type=LinkType.SS, lag_hours=16)
 
-    xer_bytes = build_xer(project, [a, b], [rel], [cal], [], [], [], None)
+    xer_bytes = build_xer(project, [a, b], [rel], [cal], [], [], [], [], [], [], None)
     parsed = parse_xer(xer_bytes)
 
     assert len(parsed.relationships) == 1
     parsed_rel = parsed.relationships[0]
     assert parsed_rel.pred_type == "PR_SS"
     assert parsed_rel.lag_hr_cnt == 16.0
+
+
+def test_activity_codes_round_trip():
+    project = _project()
+    cal = _calendar()
+    a = _activity(external_id="A1", clndr_id=cal.id, p6_task_id="1")
+
+    code_type = ActivityCodeType(id=uuid.uuid4(), actv_code_type_id="PHASE", name="Phase")
+    code_value = ActivityCodeValue(
+        id=uuid.uuid4(), code_type_id=code_type.id, actv_code_id="PH1", name="Phase 1",
+        short_name="P1", parent_actv_code_id=None, seq_num=1,
+    )
+    assignment = TaskActivityCode(id=uuid.uuid4(), activity_id=a.id, code_value_id=code_value.id)
+
+    xer_bytes = build_xer(project, [a], [], [cal], [], [], [], [code_type], [code_value], [assignment], None)
+    parsed = parse_xer(xer_bytes)
+
+    assert len(parsed.code_types) == 1
+    assert parsed.code_types[0].actv_code_type_id == "PHASE"
+    assert len(parsed.code_values) == 1
+    assert parsed.code_values[0].actv_code_id == "PH1"
+    assert parsed.code_values[0].actv_code_type_id == "PHASE"
+    assert len(parsed.activity_codes) == 1
+    assert parsed.activity_codes[0].task_id == "1"
+    assert parsed.activity_codes[0].actv_code_id == "PH1"
