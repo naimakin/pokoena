@@ -8,6 +8,7 @@ from app.api.routes import (
     dashboard,
     dcma,
     invites,
+    logic_diff,
     password_reset,
     platform,
     platform_auth,
@@ -45,6 +46,7 @@ app.include_router(activities.router)
 app.include_router(schedule_imports.router)
 app.include_router(dcma.router)
 app.include_router(risk.router)
+app.include_router(logic_diff.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 

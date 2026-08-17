@@ -29,3 +29,8 @@ class ScheduleImport(Base):
     activity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     critical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     warnings: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    # Frozen list of this import's relationships (pred/succ external_id, link
+    # type, lag, criticality at import time) — enough for Logic Diff
+    # (engine/diff/logic_diff.py) to compare two imports without a full
+    # versioned schedule graph. See services/xer_import.py for how it's built.
+    relationships_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)

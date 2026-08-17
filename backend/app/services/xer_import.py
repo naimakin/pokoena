@@ -20,8 +20,12 @@ days).
 
 Relationships are matched by P6's internal `task_id` (not the human-readable
 `task_code` we store as `external_id`) — that's what TASKPRED rows reference.
-Since a .xer export is always a full network snapshot, relationships are
-replaced wholesale on every import rather than diffed.
+Since a .xer export is always a full network snapshot, the live
+`activity_relationships` rows are replaced wholesale on every import rather
+than diffed in place. A frozen copy of that import's relationships (keyed by
+external_id, since that survives re-imports) is written to
+`ScheduleImport.relationships_snapshot` so two imports of the same project
+can later be compared — see `engine/diff/logic_diff.py`.
 """
 
 from __future__ import annotations
@@ -179,11 +183,14 @@ def import_xer(
 
     # --- relationships: the .xer is a full network snapshot, so replace wholesale ---
     db.query(ActivityRelationship).filter(ActivityRelationship.project_id == project_id).delete()
+    acts_by_task_id = {a.task_id: a for a in parsed.activities}
+    relationships_snapshot: list[dict] = []
     for rel in parsed.relationships:
         pred_row_id = task_id_to_row_id.get(rel.pred_task_id)
         succ_row_id = task_id_to_row_id.get(rel.task_id)
         if pred_row_id is None or succ_row_id is None:
             continue
+        link_type = _PRED_TYPE_TO_LINK_TYPE.get(rel.pred_type, LinkType.FS)
         db.add(
             ActivityRelationship(
                 id=uuid.uuid4(),
@@ -191,10 +198,36 @@ def import_xer(
                 project_id=project_id,
                 predecessor_id=pred_row_id,
                 successor_id=succ_row_id,
-                link_type=_PRED_TYPE_TO_LINK_TYPE.get(rel.pred_type, LinkType.FS),
+                link_type=link_type,
                 lag_days=round(rel.lag_hr_cnt / 8.0),
                 lag_hours=round(rel.lag_hr_cnt),
             )
+        )
+
+        # Frozen for Logic Diff (engine/diff/logic_diff.py) — captured here
+        # (not re-derived from the DB later) so criticality reflects this
+        # import's own CPM result, not whatever the live rows say afterward.
+        pred_act = acts_by_task_id.get(rel.pred_task_id)
+        succ_act = acts_by_task_id.get(rel.task_id)
+        relationships_snapshot.append(
+            {
+                "pred_external_id": pred_act.task_code if pred_act else rel.pred_task_id,
+                "pred_name": pred_act.task_name if pred_act else "",
+                "succ_external_id": succ_act.task_code if succ_act else rel.task_id,
+                "succ_name": succ_act.task_name if succ_act else "",
+                "link_type": link_type.value,
+                "lag_hours": rel.lag_hr_cnt,
+                "pred_critical": bool(
+                    pred_act
+                    and pred_act.total_float_hr_cnt is not None
+                    and pred_act.total_float_hr_cnt <= _TOL
+                ),
+                "succ_critical": bool(
+                    succ_act
+                    and succ_act.total_float_hr_cnt is not None
+                    and succ_act.total_float_hr_cnt <= _TOL
+                ),
+            }
         )
 
     schedule_import = ScheduleImport(
@@ -207,6 +240,7 @@ def import_xer(
         activity_count=len(parsed.activities),
         critical_count=critical_count,
         warnings=parsed.parse_log,
+        relationships_snapshot=relationships_snapshot,
     )
     db.add(schedule_import)
 

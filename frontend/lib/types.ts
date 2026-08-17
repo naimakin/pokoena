@@ -194,6 +194,37 @@ export interface MonteCarloResult {
   critical_activities: string[];
 }
 
+export type LogicDiffChangeType = "ADDED" | "REMOVED" | "MODIFIED";
+
+export interface LogicDiffChange {
+  pred_external_id: string;
+  pred_name: string;
+  succ_external_id: string;
+  succ_name: string;
+  change_type: LogicDiffChangeType;
+  changes: string[];
+  old_link_type: LinkType | null;
+  new_link_type: LinkType | null;
+  old_lag_hours: number | null;
+  new_lag_hours: number | null;
+  pred_was_critical: boolean;
+  succ_was_critical: boolean;
+}
+
+export interface LogicDiffSummary {
+  added: number;
+  removed: number;
+  modified: number;
+  total: number;
+}
+
+export interface LogicDiffReport {
+  from_import_id: string;
+  to_import_id: string;
+  summary: LogicDiffSummary;
+  changes: LogicDiffChange[];
+}
+
 export interface ScheduleImport {
   id: string;
   project_id: string;
