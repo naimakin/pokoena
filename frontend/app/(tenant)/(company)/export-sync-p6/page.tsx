@@ -106,7 +106,7 @@ export default function ExportSyncP6Page() {
                 <div>
                   <div style={{ fontWeight: 700, fontSize: ".8125rem" }}>{activityCount} activities included</div>
                   <div style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
-                    Resource and activity-code data isn&rsquo;t tracked in Poko yet, so those P6 tables export empty.
+                    Calendars, resources, and activity codes from the last import are included automatically.
                   </div>
                 </div>
               </div>
