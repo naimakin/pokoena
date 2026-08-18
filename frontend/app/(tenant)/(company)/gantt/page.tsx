@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Activity, Project, ScheduleImport } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { Activity, ScheduleImport } from "@/lib/types";
 
 // Ported from the reference app's GanttView.jsx: hand-rolled CSS-positioned
 // bars (no charting library), sticky month axis, 3 zoom levels, a data-date
@@ -49,7 +50,7 @@ function latestDate(a: Activity): string | null {
 }
 
 export default function GanttPage() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [dataDate, setDataDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,17 +63,19 @@ export default function GanttPage() {
   const pxPerDay = ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
 
   useEffect(() => {
+    if (!project) {
+      setActivities([]);
+      setDataDate(null);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
         const [rows, imports] = await Promise.all([
-          api.get<Activity[]>(`/activities?project_id=${active.id}`),
-          api.get<ScheduleImport[]>(`/projects/${active.id}/schedule-imports`),
+          api.get<Activity[]>(`/activities?project_id=${project.id}`),
+          api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
         ]);
         setActivities(rows);
         setDataDate(imports[0]?.data_date ? new Date(imports[0].data_date) : null);
@@ -83,7 +86,7 @@ export default function GanttPage() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   const rows = useMemo(() => {
     let list = activities;

@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { Project, ScheduleImport } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { ScheduleImport } from "@/lib/types";
 import { CheckIcon, UploadCloudIcon } from "@/components/icons";
 
 export default function ProjectFilesPage() {
   const { showToast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [imports, setImports] = useState<ScheduleImport[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -18,14 +19,15 @@ export default function ProjectFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function load() {
+    if (!project) {
+      setImports([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const projects = await api.get<Project[]>("/projects");
-      const active = projects[0] ?? null;
-      setProject(active);
-      if (!active) return;
-      const history = await api.get<ScheduleImport[]>(`/projects/${active.id}/schedule-imports`);
+      const history = await api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`);
       setImports(history);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load project files.");
@@ -37,7 +39,7 @@ export default function ProjectFilesPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [project]);
 
   async function upload(file: File) {
     if (!project) return;
@@ -109,7 +111,7 @@ export default function ProjectFilesPage() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one before uploading a schedule.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
           </div>
         ) : (
           <>

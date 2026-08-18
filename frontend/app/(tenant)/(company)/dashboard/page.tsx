@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { DashboardSummary, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { DashboardSummary } from "@/lib/types";
 import { AlertTriangleIcon, BellIcon, CheckIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
 
 function daysUntil(iso: string | null): number | null {
@@ -14,23 +15,23 @@ function daysUntil(iso: string | null): number | null {
 
 export default function DashboardPage() {
   const { showToast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCloseWarning, setShowCloseWarning] = useState(false);
 
   async function load() {
+    if (!project) {
+      setSummary(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const projects = await api.get<Project[]>("/projects");
-      const active = projects[0] ?? null;
-      setProject(active);
-      if (active) {
-        const dashboardSummary = await api.get<DashboardSummary>(`/dashboard/summary?project_id=${active.id}`);
-        setSummary(dashboardSummary);
-      }
+      const dashboardSummary = await api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`);
+      setSummary(dashboardSummary);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load the dashboard.");
     } finally {
@@ -41,7 +42,7 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [project]);
 
   async function handleRemind() {
     const periodId = summary?.active_period_id;
@@ -86,7 +87,7 @@ export default function DashboardPage() {
   if (!project) {
     return (
       <div className="a-content">
-        <p className="page-desc">No projects yet — seed one with backend/scripts/seed_demo.py.</p>
+        <p className="page-desc">No projects yet — create one from the project switcher in the sidebar.</p>
       </div>
     );
   }

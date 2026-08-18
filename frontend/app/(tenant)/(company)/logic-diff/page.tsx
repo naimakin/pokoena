@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { LogicDiffChangeType, LogicDiffReport, Project, ScheduleImport } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { LogicDiffChangeType, LogicDiffReport, ScheduleImport } from "@/lib/types";
 import { ArrowRightIcon, CompareIcon } from "@/components/icons";
 
 const CHANGE_CHIP: Record<LogicDiffChangeType, string> = {
@@ -17,7 +18,7 @@ function importLabel(imp: ScheduleImport): string {
 }
 
 export default function LogicDiffPage() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [imports, setImports] = useState<ScheduleImport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +31,16 @@ export default function LogicDiffPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | LogicDiffChangeType>("all");
 
   useEffect(() => {
+    if (!project) {
+      setImports([]);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
-        const history = await api.get<ScheduleImport[]>(`/projects/${active.id}/schedule-imports`);
+        const history = await api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`);
         setImports(history);
         // History is newest-first — default "To" to the latest import, "From" to the one before it.
         if (history.length > 0) setToId(history[0].id);
@@ -50,7 +52,7 @@ export default function LogicDiffPage() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   async function compare() {
     if (!project || !fromId || !toId) return;

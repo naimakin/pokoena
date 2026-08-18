@@ -2,7 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { DcmaCheckResult, DcmaReport, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
 import { ChevronDownIcon, ChevronUpIcon } from "@/components/icons";
 
 const STATUS_CHIP: Record<DcmaCheckResult["status"], string> = {
@@ -33,22 +34,23 @@ function formatValue(check: DcmaCheckResult): string {
 }
 
 export default function DcmaPage() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [report, setReport] = useState<DcmaReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
+    if (!project) {
+      setReport(null);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
-        const dcmaReport = await api.get<DcmaReport>(`/projects/${active.id}/dcma`);
+        const dcmaReport = await api.get<DcmaReport>(`/projects/${project.id}/dcma`);
         setReport(dcmaReport);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load the DCMA report.");
@@ -57,7 +59,7 @@ export default function DcmaPage() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   function toggle(id: number) {
     setExpanded((prev) => {

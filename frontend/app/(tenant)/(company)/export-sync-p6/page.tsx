@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Activity, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { Activity } from "@/lib/types";
 import { DownloadIcon } from "@/components/icons";
 
 export default function ExportSyncP6Page() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [activityCount, setActivityCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,15 +15,16 @@ export default function ExportSyncP6Page() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!project) {
+      setActivityCount(0);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
-        const activities = await api.get<Activity[]>(`/activities?project_id=${active.id}`);
+        const activities = await api.get<Activity[]>(`/activities?project_id=${project.id}`);
         setActivityCount(activities.length);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load the project.");
@@ -31,7 +33,7 @@ export default function ExportSyncP6Page() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   async function downloadXer() {
     if (!project) return;
@@ -88,7 +90,7 @@ export default function ExportSyncP6Page() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
           </div>
         ) : (
           <div className="card" style={{ padding: "1.25rem 1.1rem" }}>

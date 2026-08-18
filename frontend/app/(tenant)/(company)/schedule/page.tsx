@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Activity, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { Activity } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 
@@ -18,7 +19,7 @@ function fmtFloat(hours: number | null | undefined): string {
 }
 
 export default function SchedulePage() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,15 +28,16 @@ export default function SchedulePage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    if (!project) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
-        const rows = await api.get<Activity[]>(`/activities?project_id=${active.id}`);
+        const rows = await api.get<Activity[]>(`/activities?project_id=${project.id}`);
         setActivities(rows);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load the schedule.");
@@ -44,7 +46,7 @@ export default function SchedulePage() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
+import { ProjectProvider } from "@/lib/project-context";
+import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import {
   BuildingIcon,
   CalendarIcon,
@@ -116,6 +118,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
     : "";
 
   return (
+    <ProjectProvider>
     <div className="app-shell">
       <aside className="a-sidebar">
         <div className="brand">
@@ -128,8 +131,9 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
+        <ProjectSwitcher />
+
         <nav>
-          <div className="nav-group-label">Riverside Logistics Park</div>
           {NAV_GROUPS.map((group) => {
             const items = group.items.filter((item) => item.visible(user));
             if (items.length === 0) return null;
@@ -161,5 +165,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
 
       <main className="a-main">{children}</main>
     </div>
+    </ProjectProvider>
   );
 }

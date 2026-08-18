@@ -3,27 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { ChangeRequest, DashboardSummary, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { ChangeRequest, DashboardSummary } from "@/lib/types";
 import { ArrowRightIcon, CheckIcon, XIcon } from "@/components/icons";
 
 export default function ReviewQueuePage() {
   const { showToast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [items, setItems] = useState<ChangeRequest[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    if (!project) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const projects = await api.get<Project[]>("/projects");
-      const active = projects[0] ?? null;
-      setProject(active);
-      if (!active) return;
-
-      const summary = await api.get<DashboardSummary>(`/dashboard/summary?project_id=${active.id}`);
+      const summary = await api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`);
       if (!summary.active_period_id) {
         setItems([]);
         return;
@@ -42,7 +43,7 @@ export default function ReviewQueuePage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [project]);
 
   const selectableIds = useMemo(
     () => new Set(items.filter((item) => item.status === "pending").map((item) => item.id)),

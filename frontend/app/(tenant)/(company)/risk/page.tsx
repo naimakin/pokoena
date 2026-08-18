@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { MonteCarloResult, Project } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { MonteCarloResult } from "@/lib/types";
 import { DiceIcon } from "@/components/icons";
 
 function fmtDate(iso: string): string {
@@ -10,31 +11,13 @@ function fmtDate(iso: string): string {
 }
 
 export default function RiskPage() {
-  const [project, setProject] = useState<Project | null>(null);
-  const [loadingProject, setLoadingProject] = useState(true);
-  const [projectError, setProjectError] = useState<string | null>(null);
+  const { project, loading: loadingProject, error: projectError } = useProjectContext();
 
   const [iterations, setIterations] = useState(1000);
   const [spreadPct, setSpreadPct] = useState(20);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<MonteCarloResult | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      setLoadingProject(true);
-      setProjectError(null);
-      try {
-        const projects = await api.get<Project[]>("/projects");
-        setProject(projects[0] ?? null);
-      } catch (err) {
-        setProjectError(err instanceof ApiError ? err.message : "Failed to load the project.");
-      } finally {
-        setLoadingProject(false);
-      }
-    }
-    load();
-  }, []);
 
   async function runSimulation() {
     if (!project) return;
@@ -90,7 +73,7 @@ export default function RiskPage() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
           </div>
         ) : (
           <>

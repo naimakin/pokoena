@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { Activity, BaselineStatus, ProgressEntryPayload, Project, WbsNode } from "@/lib/types";
+import { useProjectContext } from "@/lib/project-context";
+import type { Activity, BaselineStatus, ProgressEntryPayload, WbsNode } from "@/lib/types";
 import { ChevronDownIcon, ChevronUpIcon, ClockIcon } from "@/components/icons";
 
 interface RowDraft {
@@ -17,7 +18,7 @@ function todayIso(): string {
 
 export default function ProgressInputPage() {
   const { showToast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [wbsNodes, setWbsNodes] = useState<WbsNode[]>([]);
   const [hasActiveBaseline, setHasActiveBaseline] = useState(false);
@@ -30,18 +31,20 @@ export default function ProgressInputPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!project) {
+      setActivities([]);
+      setWbsNodes([]);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
         const [acts, wbs, baseline] = await Promise.all([
-          api.get<Activity[]>(`/activities?project_id=${active.id}`),
-          api.get<WbsNode[]>(`/projects/${active.id}/wbs-nodes`),
-          api.get<BaselineStatus>(`/projects/${active.id}/evm/baseline`),
+          api.get<Activity[]>(`/activities?project_id=${project.id}`),
+          api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
+          api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
         ]);
         setActivities(acts);
         setWbsNodes(wbs);
@@ -53,7 +56,7 @@ export default function ProgressInputPage() {
       }
     }
     load();
-  }, []);
+  }, [project]);
 
   const groups = useMemo(() => {
     const nodeByWbsId = new Map(wbsNodes.map((n) => [n.wbs_id, n]));

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
+import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, EvmScurve, EvmSummary, Project } from "@/lib/types";
 import { CheckIcon, DownloadIcon, LockIcon, TrendingUpIcon } from "@/components/icons";
 
@@ -20,7 +21,7 @@ function indexColor(v: number | null | undefined): string {
 }
 
 export default function EvmPage() {
-  const [project, setProject] = useState<Project | null>(null);
+  const { project } = useProjectContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,15 +53,18 @@ export default function EvmPage() {
   }
 
   useEffect(() => {
+    if (!project) {
+      setBaselineStatus(null);
+      setSummary(null);
+      setScurve(null);
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const projects = await api.get<Project[]>("/projects");
-        const active = projects[0] ?? null;
-        setProject(active);
-        if (!active) return;
-        await loadAll(active);
+        await loadAll(project);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load EVM data.");
       } finally {
@@ -69,7 +73,7 @@ export default function EvmPage() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [project]);
 
   useEffect(() => {
     if (!project || !baselineStatus?.has_active) return;
@@ -158,7 +162,7 @@ export default function EvmPage() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
           </div>
         ) : !baselineStatus?.has_active ? (
           <div className="card" style={{ padding: "1.25rem 1.1rem" }}>
