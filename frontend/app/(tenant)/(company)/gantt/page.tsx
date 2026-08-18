@@ -63,13 +63,13 @@ export default function GanttPage() {
   const pxPerDay = ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
 
   useEffect(() => {
-    if (!project) {
-      setActivities([]);
-      setDataDate(null);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setActivities([]);
+        setDataDate(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

@@ -15,12 +15,12 @@ export default function ExportSyncP6Page() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!project) {
-      setActivityCount(0);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setActivityCount(0);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

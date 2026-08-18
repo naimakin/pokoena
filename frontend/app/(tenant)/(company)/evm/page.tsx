@@ -53,14 +53,14 @@ export default function EvmPage() {
   }
 
   useEffect(() => {
-    if (!project) {
-      setBaselineStatus(null);
-      setSummary(null);
-      setScurve(null);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setBaselineStatus(null);
+        setSummary(null);
+        setScurve(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

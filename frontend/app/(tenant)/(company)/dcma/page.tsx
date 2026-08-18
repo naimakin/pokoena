@@ -41,12 +41,12 @@ export default function DcmaPage() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    if (!project) {
-      setReport(null);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setReport(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

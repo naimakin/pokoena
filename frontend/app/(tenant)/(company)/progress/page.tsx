@@ -31,13 +31,13 @@ export default function ProgressInputPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!project) {
-      setActivities([]);
-      setWbsNodes([]);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setActivities([]);
+        setWbsNodes([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

@@ -28,12 +28,12 @@ export default function SchedulePage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (!project) {
-      setActivities([]);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setActivities([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

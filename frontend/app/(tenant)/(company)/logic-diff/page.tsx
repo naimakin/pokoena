@@ -31,12 +31,12 @@ export default function LogicDiffPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | LogicDiffChangeType>("all");
 
   useEffect(() => {
-    if (!project) {
-      setImports([]);
-      setLoading(false);
-      return;
-    }
     async function load() {
+      if (!project) {
+        setImports([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
