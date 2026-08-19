@@ -61,7 +61,7 @@ aynı satırlar.
 ### Team
 | Menü | Kim görür | Ne yapar |
 |---|---|---|
-| **User Management** | company_admin, veya `user_management`/`project_administrator` proje rolüne sahip employee | Kullanıcı/davet/proje/taşeron organizasyonu yönetimi |
+| **Project and User Management** | company_admin, veya `user_management`/`project_administrator` proje rolüne sahip employee | Proje oluşturma, kullanıcı/davet/taşeron organizasyonu yönetimi |
 | **Change Review Queue** | sadece company_admin | Taşeronların bayrakladığı mantık/lag değişikliklerini onaylama/reddetme |
 
 ## Subcontractor arayüzü

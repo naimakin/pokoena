@@ -68,7 +68,7 @@ const NAV_GROUPS = [
     items: [
       {
         href: "/user-management",
-        label: "User Management",
+        label: "Project and User Management",
         icon: UsersIcon,
         visible: (user: User | null) =>
           user?.role === "company_admin" ||

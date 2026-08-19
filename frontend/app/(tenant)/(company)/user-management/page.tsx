@@ -203,16 +203,17 @@ export default function UserManagementPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>User Management</b>
+          <b>Project and User Management</b>
         </span>
       </div>
 
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">User Management</div>
+            <div className="page-title">Project and User Management</div>
             <div className="page-desc">
-              Add employees and subcontractors, assign them to projects, and set what they&rsquo;re allowed to do.
+              Create projects, add employees and subcontractors, assign them to projects, and set what they&rsquo;re
+              allowed to do.
             </div>
           </div>
         </div>
