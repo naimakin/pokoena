@@ -153,6 +153,73 @@ def test_cannot_onboard_tenant_with_admin_email_that_already_has_an_account(clie
     assert not any(t["slug"] == "hijack-co" for t in client.get("/platform/tenants").json())
 
 
+def test_platform_admin_can_resend_a_lost_admin_invite(client, db_session):
+    """Covers the gap the reset-password flow deliberately doesn't: if the
+    platform admin loses the one-time invite link from tenant creation before
+    the tenant's admin accepts it, there was previously no way to recover
+    it — resend-admin-invite revokes the old token and issues a fresh one to
+    the same email."""
+    create_user(db_session, "staff5@pokoena.com", "secret123", is_platform_admin=True)
+    client.post("/platform-auth/login", json={"email": "staff5@pokoena.com", "password": "secret123"})
+
+    create_response = client.post(
+        "/platform/tenants",
+        json={
+            "name": "Lost Link Co",
+            "slug": "lost-link-co",
+            "admin_email": "founder@lostlink.com",
+            "admin_full_name": "Founder Person",
+        },
+    )
+    tenant_id = create_response.json()["id"]
+    old_token = create_response.json()["admin_invite_url"].rsplit("/", 1)[-1]
+
+    listed = next(t for t in client.get("/platform/tenants").json() if t["id"] == tenant_id)
+    assert listed["admin_accepted"] is False
+
+    resend_response = client.post(f"/platform/tenants/{tenant_id}/resend-admin-invite")
+    assert resend_response.status_code == 200
+    body = resend_response.json()
+    assert body["email"] == "founder@lostlink.com"
+    new_token = body["invite_url"].rsplit("/", 1)[-1]
+    assert new_token != old_token
+
+    # The old link is dead — revoked, not just superseded.
+    assert client.get(f"/invites/{old_token}").status_code == 400
+
+    # The new link works end-to-end.
+    preview_response = client.get(f"/invites/{new_token}")
+    assert preview_response.status_code == 200
+    assert preview_response.json()["email"] == "founder@lostlink.com"
+
+    accept_response = client.post(f"/invites/{new_token}/accept", json={"password": "secret123"})
+    assert accept_response.status_code == 200
+
+
+def test_resend_admin_invite_rejected_once_admin_has_an_account(client, db_session):
+    create_user(db_session, "staff6@pokoena.com", "secret123", is_platform_admin=True)
+    tenant = create_tenant(db_session, name="Already Onboarded Co")
+    admin_user = create_user(db_session, "admin@onboarded.com", "secret123")
+    add_membership(db_session, admin_user, tenant, TenantRole.company_admin)
+
+    client.post("/platform-auth/login", json={"email": "staff6@pokoena.com", "password": "secret123"})
+    listed = next(t for t in client.get("/platform/tenants").json() if t["id"] == str(tenant.id))
+    assert listed["admin_accepted"] is True
+
+    response = client.post(f"/platform/tenants/{tenant.id}/resend-admin-invite")
+    assert response.status_code == 400
+
+
+def test_non_platform_admin_cannot_resend_admin_invites(client, db_session):
+    tenant = create_tenant(db_session)
+    user = create_user(db_session, "admin4@example.com", "secret123")
+    add_membership(db_session, user, tenant, TenantRole.company_admin)
+    client.post("/auth/login", json={"email": "admin4@example.com", "password": "secret123"})
+
+    response = client.post(f"/platform/tenants/{tenant.id}/resend-admin-invite")
+    assert response.status_code == 401
+
+
 def test_non_platform_admin_cannot_manage_tenants(client, db_session):
     tenant = create_tenant(db_session)
     user = create_user(db_session, "admin2@example.com", "secret123")

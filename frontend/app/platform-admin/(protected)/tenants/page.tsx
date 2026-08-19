@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { BuildingIcon, CheckIcon } from "@/components/icons";
-import type { PasswordResetLink, Tenant, TenantCreateResult } from "@/lib/types";
+import type { PasswordResetLink, Tenant, TenantCreateResult, TenantInviteLink } from "@/lib/types";
 
 export default function PlatformTenantsPage() {
   const { showToast } = useToast();
@@ -79,6 +79,15 @@ export default function PlatformTenantsPage() {
           ? err.message
           : "Failed to generate a reset link.",
       );
+    }
+  }
+
+  async function handleResendInvite(tenant: Tenant) {
+    try {
+      const result = await api.post<TenantInviteLink>(`/platform/tenants/${tenant.id}/resend-admin-invite`);
+      setLastLink({ heading: `Invite link for ${result.email}`, url: result.invite_url });
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to resend the invite.");
     }
   }
 
@@ -272,11 +281,16 @@ export default function PlatformTenantsPage() {
                               Activate
                             </button>
                           )}
-                          {tenant.admin_email && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleResetLink(tenant)}>
-                              Reset password
-                            </button>
-                          )}
+                          {tenant.admin_email &&
+                            (tenant.admin_accepted ? (
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleResetLink(tenant)}>
+                                Reset password
+                              </button>
+                            ) : (
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleResendInvite(tenant)}>
+                                Resend invite
+                              </button>
+                            ))}
                           {tenant.status !== "deleted" && (
                             <button className="btn btn-danger btn-sm" onClick={() => handleDelete(tenant)}>
                               Delete

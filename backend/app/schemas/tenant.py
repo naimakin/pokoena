@@ -19,6 +19,10 @@ class TenantOut(BaseModel):
     # accepted yet (no User row exists for that email until then), or in the
     # rare case a tenant somehow has no company_admin.
     admin_email: str | None = None
+    # False while admin_email only reflects a still-pending invite (no User
+    # row exists yet) — tells the frontend to offer "Resend invite" instead
+    # of "Reset password" in that case.
+    admin_accepted: bool = False
 
 
 class TenantCreate(BaseModel):
@@ -34,6 +38,15 @@ class TenantCreateOut(TenantOut):
     only place that link is ever recoverable."""
 
     admin_invite_url: str
+
+
+class TenantInviteLinkOut(BaseModel):
+    """Returned by resend-admin-invite — a fresh one-time link, same
+    recoverability rule as TenantCreateOut.admin_invite_url: only ever
+    obtainable right when the invite is (re)created."""
+
+    email: str
+    invite_url: str
 
 
 class UsageSummary(BaseModel):

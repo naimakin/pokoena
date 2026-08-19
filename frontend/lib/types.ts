@@ -54,6 +54,9 @@ export interface Tenant {
   status: TenantStatus;
   created_at: string;
   admin_email: string | null;
+  // False while admin_email only reflects a still-pending invite — no User
+  // row exists yet, so Reset password can't work; offer Resend invite instead.
+  admin_accepted: boolean;
 }
 
 export interface TenantCreateResult extends Tenant {
@@ -65,6 +68,11 @@ export interface TenantCreateResult extends Tenant {
 export interface PasswordResetLink {
   email: string;
   reset_url: string;
+}
+
+export interface TenantInviteLink {
+  email: string;
+  invite_url: string;
 }
 
 export interface PasswordResetPreview {

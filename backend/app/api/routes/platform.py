@@ -14,7 +14,7 @@ from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole, UserTenantRole
 from app.schemas.password_reset import PasswordResetLinkOut
-from app.schemas.tenant import TenantCreate, TenantCreateOut, TenantOut, UsageSummary
+from app.schemas.tenant import TenantCreate, TenantCreateOut, TenantInviteLinkOut, TenantOut, UsageSummary
 from app.schemas.user import PlatformAdminCreate, PlatformAdminOut
 from app.services import audit
 from app.services.invites import InviteError, create_invite
@@ -23,23 +23,25 @@ from app.services.password_reset import create_password_reset
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 
-def _admin_emails_by_tenant(tenant_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+def _admin_info_by_tenant(tenant_ids: list[uuid.UUID]) -> dict[uuid.UUID, tuple[str, bool]]:
     """Cross-tenant by nature (one row per tenant, read from the platform
     admin's own list page) — uses the BYPASSRLS connection like the other
     platform-wide aggregates in this file, never row-level tenant business
-    data. Prefers an accepted company_admin; falls back to the still-pending
-    invite's email so a freshly-onboarded tenant shows something immediately."""
+    data. Value is (email, accepted) — accepted membership wins over a
+    still-pending invite, which is shown so a freshly-onboarded tenant
+    displays something immediately. `accepted` tells the frontend whether to
+    offer Reset password (an account exists) or Resend invite (it doesn't)."""
     if not tenant_ids:
         return {}
     bypass_db = BypassSessionLocal()
     try:
-        emails: dict[uuid.UUID, str] = {}
+        info: dict[uuid.UUID, tuple[str, bool]] = {}
         for tenant_id, email in (
             bypass_db.query(Invite.tenant_id, Invite.email)
             .filter(Invite.tenant_id.in_(tenant_ids), Invite.role == TenantRole.company_admin, Invite.status == InviteStatus.pending)
             .all()
         ):
-            emails[tenant_id] = email
+            info[tenant_id] = (email, False)
         for tenant_id, email in (
             bypass_db.query(UserTenantRole.tenant_id, User.email)
             .join(User, User.id == UserTenantRole.user_id)
@@ -50,8 +52,8 @@ def _admin_emails_by_tenant(tenant_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]
             )
             .all()
         ):
-            emails[tenant_id] = email  # accepted membership wins over a stale pending invite
-        return emails
+            info[tenant_id] = (email, True)
+        return info
     finally:
         bypass_db.close()
 
@@ -104,11 +106,12 @@ def list_tenants(
     db: Session = Depends(get_db), _: User = Depends(get_current_platform_admin)
 ) -> list[TenantOut]:
     tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
-    admin_emails = _admin_emails_by_tenant([t.id for t in tenants])
+    admin_info = _admin_info_by_tenant([t.id for t in tenants])
     return [
         TenantOut(
             id=t.id, name=t.name, slug=t.slug, status=t.status, created_at=t.created_at,
-            admin_email=admin_emails.get(t.id),
+            admin_email=admin_info.get(t.id, (None, False))[0],
+            admin_accepted=admin_info.get(t.id, (None, False))[1],
         )
         for t in tenants
     ]
@@ -176,6 +179,78 @@ def create_tenant_admin_reset_link(
         target_type="user", target_id=admin_user_id,
     )
     return PasswordResetLinkOut(email=admin_email, reset_url=reset_url)
+
+
+@router.post("/tenants/{tenant_id}/resend-admin-invite", response_model=TenantInviteLinkOut)
+def resend_tenant_admin_invite(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    platform_admin: User = Depends(get_current_platform_admin),
+) -> TenantInviteLinkOut:
+    """The counterpart to admin-reset-link for the other half of the invite's
+    lifecycle: before it's ever accepted. create_invite's URL is only ever
+    obtainable once, at creation time (see services/invites.create_invite) —
+    if the platform admin lost that first link (closed the tab, etc.) there
+    was previously no way to recover it short of querying the database
+    directly. Revokes whatever invite the admin previously had (pending or
+    expired — a stale token left active isn't useful and shouldn't linger)
+    and issues a fresh one to the same email."""
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    bypass_db = BypassSessionLocal()
+    try:
+        already_accepted = (
+            bypass_db.query(UserTenantRole.id)
+            .filter(
+                UserTenantRole.tenant_id == tenant_id,
+                UserTenantRole.role == TenantRole.company_admin,
+                UserTenantRole.is_active.is_(True),
+            )
+            .first()
+            is not None
+        )
+    finally:
+        bypass_db.close()
+    if already_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This tenant's admin already has an account — use Reset password instead.",
+        )
+
+    set_rls_context(db, tenant_id)
+    old_invite = (
+        db.query(Invite)
+        .filter(Invite.tenant_id == tenant_id, Invite.role == TenantRole.company_admin)
+        .order_by(Invite.created_at.desc())
+        .first()
+    )
+    if old_invite is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No admin invite found for this tenant")
+
+    if old_invite.status == InviteStatus.pending:
+        old_invite.status = InviteStatus.revoked
+        db.commit()
+
+    try:
+        _invite, invite_url = create_invite(
+            db=db,
+            tenant_id=tenant_id,
+            email=old_invite.email,
+            full_name=old_invite.full_name,
+            role=TenantRole.company_admin,
+            invited_by_user_id=platform_admin.id,
+            tenant_name=tenant.name,
+        )
+    except InviteError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    audit.log(
+        "tenant.admin_invite_resent", tenant_id=tenant_id, actor_user_id=platform_admin.id,
+        target_type="tenant", target_id=tenant_id,
+    )
+    return TenantInviteLinkOut(email=old_invite.email, invite_url=invite_url)
 
 
 @router.post("/tenants/{tenant_id}/activate", response_model=TenantOut)
