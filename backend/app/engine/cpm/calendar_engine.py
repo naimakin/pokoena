@@ -11,6 +11,14 @@ from typing import Optional
 from app.parser.xer_models import Calendar, CalendarDay, CalendarException
 
 
+class NoWorkingDayError(ValueError):
+    """A calendar has no working day within the lookahead window used to
+    resolve a date onto it — most often a calendar whose `clndr_data` parsed
+    to zero working days (a genuinely blank/placeholder calendar in the
+    source file, or a real P6 calendar format our parser didn't read
+    correctly — either way, CPM can't run against it as-is)."""
+
+
 class CalendarEngine:
     """Wraps a Calendar and provides work-hour arithmetic. All public methods
     accept and return datetime objects."""
@@ -114,7 +122,10 @@ class CalendarEngine:
                     if s_start_h <= cur_h <= s_end_h:
                         return candidate
             candidate = (candidate + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        raise RuntimeError(f"No working day found within 365 days of {dt}")
+        raise NoWorkingDayError(
+            f"Calendar {self._cal.clndr_id!r} ({self._cal.clndr_name!r}) has no working day "
+            f"within 365 days of {dt} — check its working week in P6."
+        )
 
     def add_work_hours(self, dt: datetime, hours: float) -> datetime:
         """Add `hours` work hours to `dt`, skipping non-working days/gaps.
@@ -140,7 +151,10 @@ class CalendarEngine:
                 next_day = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
                 current = self.snap_to_work_start(next_day)
 
-        raise RuntimeError(f"add_work_hours: could not advance {hours}h from {dt}")
+        raise NoWorkingDayError(
+            f"Calendar {self._cal.clndr_id!r} ({self._cal.clndr_name!r}) couldn't advance {hours}h "
+            f"from {dt} — check its working week in P6."
+        )
 
     def sub_work_hours(self, dt: datetime, hours: float) -> datetime:
         """Subtract `hours` work hours from `dt` (go backwards)."""
@@ -167,7 +181,10 @@ class CalendarEngine:
                 we = self._day_work_end(prev_day)
                 current = we if we else prev_day
 
-        raise RuntimeError(f"sub_work_hours: could not retreat {hours}h from {dt}")
+        raise NoWorkingDayError(
+            f"Calendar {self._cal.clndr_id!r} ({self._cal.clndr_name!r}) couldn't retreat {hours}h "
+            f"from {dt} — check its working week in P6."
+        )
 
     def work_hours_between(self, start: datetime, end: datetime) -> float:
         """Count net work hours between two datetimes. Negative if end < start."""

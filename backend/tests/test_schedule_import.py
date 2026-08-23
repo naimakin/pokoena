@@ -121,6 +121,30 @@ def test_import_rejects_a_cyclic_relationship_network(client, db_session):
     assert client.get(f"/projects/{project.id}/schedule-imports").json() == []
 
 
+def test_import_rejects_a_calendar_with_no_working_days(client, db_session):
+    """A real production import crashed with an unhandled RuntimeError from
+    CalendarEngine.snap_to_work_start when a project's calendar had no
+    working day at all (an empty/placeholder week — plausible in a real P6
+    "template" export). Must come back as a clear 400 instead."""
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+
+    text = FIXTURE.read_bytes().decode("utf-8")
+    blank_calendar_text = text.replace(
+        "(0)(1|08:00|17:00)(2|08:00|17:00)(3|08:00|17:00)(4|08:00|17:00)(5|08:00|17:00)(6)",
+        "(0)(1)(2)(3)(4)(5)(6)",
+    )
+    assert blank_calendar_text != text  # the replace actually matched something
+
+    response = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("blank-calendar.xer", blank_calendar_text.encode("utf-8"), "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "no working day" in response.json()["detail"].lower()
+
+
 def test_unexpected_import_error_returns_a_proper_500_with_cors_headers(client, db_session, monkeypatch):
     """Regression test for a real production symptom: an unhandled exception
     reaching the browser with no CORS headers at all, which shows up as a

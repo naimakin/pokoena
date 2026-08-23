@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
+from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
 from app.models.project import Project
 from app.models.schedule_import import ScheduleImport
@@ -54,3 +55,5 @@ def upload_schedule(
             status_code=400,
             detail=f"This schedule can't be recomputed: {e} Fix the circular dependency in P6 and re-export.",
         )
+    except NoWorkingDayError as e:
+        raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
