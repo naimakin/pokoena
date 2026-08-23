@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Optional
 
 from app.parser.xer_models import (
@@ -164,11 +164,12 @@ def _parse_shifts_from_token(token: str) -> list[DayShift]:
     return shifts
 
 
-def _parse_clndr_data(
+def _parse_clndr_data_legacy(
     clndr_id: str, clndr_data: str, parse_log: list[str]
 ) -> tuple[list[CalendarDay], list[CalendarException]]:
-    """Parse a P6 `clndr_data` field (supports v7-v24 format variants). Unknown
-    tokens produce a warning + parse_log entry rather than a silent error.
+    """Parse the older, flat `(dow|HH:MM|HH:MM)...` clndr_data variant — what
+    this project's own synthetic test fixture uses. Unknown tokens produce a
+    warning + parse_log entry rather than a silent error.
 
     Token key: 0-6 → weekday (0=Sun ... 6=Sat); a date string → exception; anything
     else → warning + skip.
@@ -208,6 +209,149 @@ def _parse_clndr_data(
 
     week_list = [week.get(dow, CalendarDay(day_of_week=dow, shifts=[])) for dow in range(7)]
     return week_list, exceptions
+
+
+# ---------------------------------------------------------------------------
+# clndr_data parser — modern nested variant (real-world P6 exports)
+# ---------------------------------------------------------------------------
+#
+# Every real .xer this app has been handed so far uses this format, not the
+# flat one above — a genuine S-expression tree, not a flat token list:
+#
+#   (0||CalendarData()(
+#     (0||DaysOfWeek()(
+#       (0||1()(                          <- day 1 (P6: 1=Sun ... 7=Sat)
+#         (0||0(s|07:00|f|12:00)())       <- shift 0: 07:00-12:00
+#         (0||1(s|13:00|f|18:00)())))     <- shift 1: 13:00-18:00
+#       ...
+#       (0||6()())))                     <- day 6, no shifts (day off)
+#     (0||VIEW(ShowTotal|N)())
+#     (0||Exceptions()(
+#       (0||41(d|42536)(                 <- exception, day-serial 42536
+#         (0||0(s|00:00|f|00:30)()) ...))))))
+#
+# Every node is `(0||KEY(PAYLOAD)(CHILD*))` — KEY is always prefixed "0||",
+# PAYLOAD is flat pipe-delimited data (never nested), CHILD* is zero or more
+# sibling nodes of the same shape. Genuinely recursive, so it needs a real
+# parser, not a single-level regex (which is what silently produced empty
+# calendars — and a scheduler that could never find a working day — the
+# first time a real, non-synthetic .xer went through this app).
+
+# Exception dates are stored as a day count from P6's serial-date epoch —
+# the same 1899-12-30 base OLE Automation / Delphi TDateTime uses (P6's
+# desktop client is Delphi-based), confirmed against a real calendar's
+# exceptions landing on plausible holiday dates once converted.
+_P6_SERIAL_DATE_EPOCH = datetime(1899, 12, 30)
+
+
+class _NestedNode:
+    __slots__ = ("key", "payload", "children")
+
+    def __init__(self, key: str, payload: str, children: list["_NestedNode"]):
+        self.key = key
+        self.payload = payload
+        self.children = children
+
+
+def _parse_nested_node(s: str, i: int) -> tuple[_NestedNode, int]:
+    """Parse one `(0||KEY(PAYLOAD)(CHILD*))` node starting at s[i] == '('.
+    Returns (node, index just past the node's closing ')')."""
+    header_end = s.index("(", i + 1)
+    header = s[i + 1 : header_end]
+    key = header.split("||", 1)[1] if "||" in header else header
+
+    payload_end = s.index(")", header_end)
+    payload = s[header_end + 1 : payload_end]
+
+    children_start = payload_end + 1  # points at the children group's '('
+    depth = 1
+    j = children_start + 1
+    while depth > 0:
+        if s[j] == "(":
+            depth += 1
+        elif s[j] == ")":
+            depth -= 1
+        j += 1
+    children_end = j - 1  # index of the children group's matching ')'
+
+    children: list[_NestedNode] = []
+    k = children_start + 1
+    while k < children_end:
+        if s[k] != "(":
+            k += 1
+            continue
+        child, k = _parse_nested_node(s, k)
+        children.append(child)
+
+    node_end = children_end + 1  # the node's own closing ')'
+    return _NestedNode(key=key, payload=payload, children=children), node_end + 1
+
+
+def _parse_nested_shift(node: _NestedNode) -> Optional[DayShift]:
+    parts = node.payload.split("|")
+    if len(parts) < 4:
+        return None
+    try:
+        sh, sm = (int(x) for x in parts[1].split(":"))
+        eh, em = (int(x) for x in parts[3].split(":"))
+        return DayShift(start=time(sh, sm), end=time(eh, em))
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_clndr_data_nested(
+    clndr_id: str, clndr_data: str, parse_log: list[str]
+) -> tuple[list[CalendarDay], list[CalendarException]]:
+    week: dict[int, CalendarDay] = {}
+    exceptions: list[CalendarException] = []
+
+    try:
+        root, _ = _parse_nested_node(clndr_data, clndr_data.index("("))
+    except (ValueError, IndexError) as e:
+        msg = f"CAL {clndr_id}: failed to parse nested clndr_data — {e}"
+        logger.warning(msg)
+        parse_log.append(f"WARNING: {msg}")
+        return [], []
+
+    for section in root.children:
+        if section.key == "DaysOfWeek":
+            for day_node in section.children:
+                try:
+                    p6_day_num = int(day_node.key)  # 1=Sun ... 7=Sat
+                except ValueError:
+                    continue
+                dow = p6_day_num - 1  # -> this app's 0=Sun ... 6=Sat convention
+                if not (0 <= dow <= 6):
+                    continue
+                shifts = [s for s in (_parse_nested_shift(c) for c in day_node.children) if s]
+                week[dow] = CalendarDay(day_of_week=dow, shifts=shifts)
+        elif section.key == "Exceptions":
+            for exc_node in section.children:
+                parts = exc_node.payload.split("|")
+                if len(parts) < 2 or parts[0] != "d":
+                    continue
+                try:
+                    serial = int(parts[1])
+                except ValueError:
+                    continue
+                exc_date = _P6_SERIAL_DATE_EPOCH + timedelta(days=serial)
+                shifts = [s for s in (_parse_nested_shift(c) for c in exc_node.children) if s]
+                exceptions.append(CalendarException(exc_date=exc_date, shifts=shifts))
+        # VIEW and anything else are P6 UI display state, not schedule data.
+
+    week_list = [week.get(dow, CalendarDay(day_of_week=dow, shifts=[])) for dow in range(7)]
+    return week_list, exceptions
+
+
+def _parse_clndr_data(
+    clndr_id: str, clndr_data: str, parse_log: list[str]
+) -> tuple[list[CalendarDay], list[CalendarException]]:
+    """Dispatches to whichever clndr_data variant this calendar actually uses.
+    The nested format always starts with a literal `(0||` node header; the
+    older flat format never does."""
+    if clndr_data.strip().startswith("(0||"):
+        return _parse_clndr_data_nested(clndr_id, clndr_data, parse_log)
+    return _parse_clndr_data_legacy(clndr_id, clndr_data, parse_log)
 
 
 def _hours_per_day(week: list[CalendarDay]) -> float:
