@@ -66,6 +66,24 @@ def test_nested_clndr_data_exceptions_use_the_p6_serial_date_epoch():
     assert partial_day.shifts[0].start.hour == 9 and partial_day.shifts[0].end.hour == 13
 
 
+def test_nested_clndr_data_tolerates_stray_control_bytes():
+    """A real production import kept crashing after the nested-format fix
+    shipped: this exact real export prefixes clndr_data with a couple of
+    \\x7f (DEL) bytes before the "(0||" marker, and scatters more between
+    sibling nodes. str.strip() doesn't remove control characters, so a plain
+    startswith("(0||") dispatch check silently fell back to the legacy
+    parser and re-produced the original "no working day" crash. The
+    dispatcher now searches for the marker instead of anchoring to index 0,
+    and the node parser already skips any non-'(' filler between children."""
+    noisy = "\x7f\x7f" + _NESTED_SAMPLE.replace("(0||VIEW", "\x7f\x7f(0||VIEW")
+    week, exceptions = _parse_clndr_data("CAL1", noisy, [])
+
+    by_dow = {d.day_of_week: d for d in week}
+    assert by_dow[0].is_working and len(by_dow[0].shifts) == 2
+    assert not by_dow[2].is_working
+    assert len(exceptions) == 2
+
+
 def test_legacy_flat_clndr_data_still_parses():
     """The older `(dow|HH:MM|HH:MM)` flat format (this project's own synthetic
     test fixture) must keep working — real exports can use either variant."""

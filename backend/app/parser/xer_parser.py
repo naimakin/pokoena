@@ -343,14 +343,27 @@ def _parse_clndr_data_nested(
     return week_list, exceptions
 
 
+_NESTED_MARKER = "(0||"
+# How many leading characters of noise (non-printable bytes some real
+# exports have been seen prefixing this field with — e.g. a couple of stray
+# \x7f/DEL bytes) to tolerate before giving up on "this is the nested
+# format". str.strip() only removes whitespace, not control characters, so
+# a plain startswith() check is not enough on its own.
+_NESTED_MARKER_SEARCH_WINDOW = 20
+
+
 def _parse_clndr_data(
     clndr_id: str, clndr_data: str, parse_log: list[str]
 ) -> tuple[list[CalendarDay], list[CalendarException]]:
     """Dispatches to whichever clndr_data variant this calendar actually uses.
-    The nested format always starts with a literal `(0||` node header; the
-    older flat format never does."""
-    if clndr_data.strip().startswith("(0||"):
-        return _parse_clndr_data_nested(clndr_id, clndr_data, parse_log)
+    The nested format always contains a `(0||` node header near the very
+    start — real exports have shown up with a couple of stray non-printable
+    bytes ahead of it, so this looks for the marker within a small leading
+    window instead of anchoring strictly to index 0 (which silently fell
+    back to the legacy parser, garbling every real calendar it touched)."""
+    marker_at = clndr_data.find(_NESTED_MARKER)
+    if 0 <= marker_at < _NESTED_MARKER_SEARCH_WINDOW:
+        return _parse_clndr_data_nested(clndr_id, clndr_data[marker_at:], parse_log)
     return _parse_clndr_data_legacy(clndr_id, clndr_data, parse_log)
 
 
