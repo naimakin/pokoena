@@ -82,6 +82,25 @@ def import_xer(
 
     import_id = uuid.uuid4()
 
+    # Created (and flushed) up front, not at the end: activities below stamp
+    # last_import_id=import_id and get flushed per-row as they're upserted,
+    # and that column is a real FK to schedule_imports.id — inserting an
+    # activity before this row exists violates the constraint on Postgres
+    # (SQLite, what the test suite runs against, doesn't enforce FKs by
+    # default, so this only ever surfaced against a real Postgres import).
+    # Its summary fields (activity_count, etc.) are filled in on this same
+    # tracked instance at the end, once they're known.
+    schedule_import = ScheduleImport(
+        id=import_id,
+        tenant_id=ctx.tenant_id,
+        project_id=project_id,
+        filename=filename,
+        data_date=parsed.meta.data_date,
+        imported_by_user_id=ctx.user.id,
+    )
+    db.add(schedule_import)
+    db.flush()
+
     # --- calendars: upsert by (project_id, clndr_id) ---
     existing_calendars = {
         c.clndr_id: c for c in db.query(CalendarModel).filter(CalendarModel.project_id == project_id).all()
@@ -363,19 +382,10 @@ def import_xer(
             )
         )
 
-    schedule_import = ScheduleImport(
-        id=import_id,
-        tenant_id=ctx.tenant_id,
-        project_id=project_id,
-        filename=filename,
-        data_date=parsed.meta.data_date,
-        imported_by_user_id=ctx.user.id,
-        activity_count=len(parsed.activities),
-        critical_count=critical_count,
-        warnings=parsed.parse_log,
-        relationships_snapshot=relationships_snapshot,
-    )
-    db.add(schedule_import)
+    schedule_import.activity_count = len(parsed.activities)
+    schedule_import.critical_count = critical_count
+    schedule_import.warnings = parsed.parse_log
+    schedule_import.relationships_snapshot = relationships_snapshot
 
     db.commit()
     db.refresh(schedule_import)

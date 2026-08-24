@@ -18,8 +18,8 @@ os.environ.setdefault("REDIS_HOST", "localhost")
 
 import fakeredis
 import pytest
+from sqlalchemy import create_engine, event
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -37,6 +37,17 @@ def db_session(monkeypatch):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # SQLite ignores foreign keys unless a connection explicitly turns them
+    # on — real Postgres (production) always enforces them. Without this, an
+    # insert-order bug that violates a real FK (e.g. a row referencing a
+    # not-yet-flushed parent) passes every test here and only ever surfaces
+    # in production; see xer_import.py's ScheduleImport-before-activities
+    # ordering for exactly that bug.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_connection, _):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(engine)
     testing_session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
