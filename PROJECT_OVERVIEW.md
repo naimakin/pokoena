@@ -52,6 +52,7 @@ aynı satırlar.
 ### Manage
 | Menü | Durum | Ne yapar |
 |---|---|---|
+| **Projects** | ✅ Gerçek | Proje listesi, yeni proje oluşturma (`user-management`'tan ayrıldı) — sadece company_admin/`user_management`/`project_administrator` |
 | **Progress Input** | ✅ Gerçek | WBS'e göre gruplanmış activity listesi, günlük "yakılan adam-saat" girişi (EVM'i besler) |
 | **Completion Plan** | ⏳ Placeholder | Henüz kodlanmadı |
 | **Project Files** | ✅ Gerçek | .xer dosyası yükleme (sürükle-bırak), geçmiş import listesi |
@@ -61,7 +62,7 @@ aynı satırlar.
 ### Team
 | Menü | Kim görür | Ne yapar |
 |---|---|---|
-| **Project and User Management** | company_admin, veya `user_management`/`project_administrator` proje rolüne sahip employee | Proje oluşturma, kullanıcı/davet/taşeron organizasyonu yönetimi |
+| **User Management** | company_admin, veya `user_management`/`project_administrator` proje rolüne sahip employee | Kullanıcı/davet/taşeron organizasyonu yönetimi (proje oluşturma artık **Projects**'te) |
 | **Change Review Queue** | sadece company_admin | Taşeronların bayrakladığı mantık/lag değişikliklerini onaylama/reddetme |
 
 ## Subcontractor arayüzü

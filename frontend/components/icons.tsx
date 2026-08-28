@@ -172,6 +172,14 @@ export function FolderPlusIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function FolderIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+    </svg>
+  );
+}
+
 export function DatabaseIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

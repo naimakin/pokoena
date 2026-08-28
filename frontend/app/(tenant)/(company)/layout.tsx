@@ -15,6 +15,7 @@ import {
   DatabaseIcon,
   DiceIcon,
   FlagIcon,
+  FolderIcon,
   GanttIcon,
   GridIcon,
   LayersIcon,
@@ -24,6 +25,11 @@ import {
   UsersIcon,
   XIcon,
 } from "@/components/icons";
+
+const canManageTeam = (user: User | null) =>
+  user?.role === "company_admin" ||
+  Boolean(user?.project_roles?.includes("user_management")) ||
+  Boolean(user?.project_roles?.includes("project_administrator"));
 
 const NAV_GROUPS = [
   {
@@ -46,6 +52,7 @@ const NAV_GROUPS = [
   {
     label: "Manage",
     items: [
+      { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
       { href: "/progress", label: "Progress Input", icon: ClockIcon, visible: (_user: User | null) => true },
       { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: (_user: User | null) => true },
       { href: "/project-files", label: "Project Files", icon: DatabaseIcon, visible: (_user: User | null) => true },
@@ -68,12 +75,9 @@ const NAV_GROUPS = [
     items: [
       {
         href: "/user-management",
-        label: "Project and User Management",
+        label: "User Management",
         icon: UsersIcon,
-        visible: (user: User | null) =>
-          user?.role === "company_admin" ||
-          Boolean(user?.project_roles?.includes("user_management")) ||
-          Boolean(user?.project_roles?.includes("project_administrator")),
+        visible: canManageTeam,
       },
       {
         href: "/review-queue",
