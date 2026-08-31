@@ -20,14 +20,11 @@ def _setup(db_session):
 def test_export_requires_active_baseline(client, db_session):
     tenant, project = _setup(db_session)
     client.post("/auth/login", json={"email": "evm-export-admin@example.com", "password": "secret123"})
-    with open(FIXTURE, "rb") as f:
-        client.post(
-            f"/projects/{project.id}/schedule-imports",
-            files={"file": ("synthetic_project.xer", f.read(), "application/octet-stream")},
-        )
 
     response = client.get(f"/projects/{project.id}/evm/export")
 
+    # No import at all — and therefore no auto-locked baseline (see
+    # services/baseline.py) — so the guard must still fire on its own.
     assert response.status_code == 423
 
 

@@ -100,7 +100,7 @@ export default function ExportSyncP6Page() {
                 <ol style={{ fontSize: ".8125rem", color: "var(--text-secondary)", paddingLeft: "1.1rem", lineHeight: 1.6 }}>
                   <li>Download the .xer file below — it reflects the current schedule and progress in Poko.</li>
                   <li>Open it in Primavera P6 and run F9 (schedule recalculation).</li>
-                  <li>Re-upload the F9 result via Project Files to bring the recalculated dates back into Poko.</li>
+                  <li>Re-upload the F9 result via Program Library to bring the recalculated dates back into Poko.</li>
                 </ol>
               </div>
 
@@ -118,7 +118,7 @@ export default function ExportSyncP6Page() {
               </button>
               {activityCount === 0 && (
                 <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
-                  Import a schedule from Project Files before exporting.
+                  Import a schedule from Program Library before exporting.
                 </p>
               )}
               {exportError && <p className="login-error">{exportError}</p>}

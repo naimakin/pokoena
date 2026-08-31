@@ -105,7 +105,7 @@ export default function DcmaPage() {
         {!report || report.total_activities === 0 ? (
           <div className="card">
             <p className="empty-state">
-              No schedule imported yet — upload a .xer file from Project Files to run the DCMA check.
+              No schedule imported yet — upload a .xer file from Program Library to run the DCMA check.
             </p>
           </div>
         ) : (

@@ -146,7 +146,7 @@ export default function SchedulePage() {
                   <tr>
                     <td colSpan={7} className="empty-state">
                       {activities.length === 0
-                        ? "No schedule imported yet — upload a .xer file from Project Files."
+                        ? "No schedule imported yet — upload a .xer file from Program Library."
                         : "No activities match your filters."}
                     </td>
                   </tr>

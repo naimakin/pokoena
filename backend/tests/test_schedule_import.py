@@ -73,6 +73,31 @@ def test_reimport_preserves_subcontractor_owned_progress_fields(client, db_sessi
     assert refreshed.total_float_hours == 0
 
 
+def test_first_import_auto_locks_baseline(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+
+    assert _upload(client, project.id).status_code == 201
+
+    status = client.get(f"/projects/{project.id}/evm/baseline").json()
+    assert status["has_active"] is True
+    assert status["active_baseline"]["version_label"] == "Baseline"
+
+
+def test_second_import_does_not_relock_baseline(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+
+    assert _upload(client, project.id).status_code == 201
+    first_baseline = client.get(f"/projects/{project.id}/evm/baseline").json()["active_baseline"]
+
+    assert _upload(client, project.id).status_code == 201
+    status = client.get(f"/projects/{project.id}/evm/baseline").json()
+
+    assert len(status["all_baselines"]) == 1
+    assert status["active_baseline"]["id"] == first_baseline["id"]
+
+
 def test_history_endpoint_lists_past_imports(client, db_session):
     tenant, project = _setup(db_session)
     client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})

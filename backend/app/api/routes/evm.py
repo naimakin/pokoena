@@ -14,7 +14,6 @@ from app.engine.evm.scurve_engine import (
     compute_current_ev,
     compute_evm_series,
     find_out_of_sequence_activities,
-    generate_pv_curve,
 )
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
@@ -26,6 +25,7 @@ from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.user_tenant_role import TenantRole
+from app.services.baseline import BaselineConflictError, BaselineValidationError, lock_baseline_for_project
 from app.schemas.evm import (
     BaselineOut,
     BaselineStatusOut,
@@ -201,10 +201,9 @@ def lock_baseline(
     """Locks the project's CURRENT schedule as a baseline — we don't keep
     versioned historical schedule snapshots (see services/xer_import.py), so
     unlike the reference (which locks a specific named snapshot), this always
-    locks "now". `total_budget_manhours` (BAC) comes from each eligible
-    activity's `target_duration_hours`, matching the reference's own choice —
-    see engine/evm/scurve_engine.py's module docstring for why that's not a
-    resource-quantity-based BAC."""
+    locks "now". The actual lock (BAC/date computation, Baseline/
+    BaselineActivity/BaselinePvCurve writes) lives in services/baseline.py,
+    shared with the Program Library page's auto-lock-on-first-import."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
     last_import = (
@@ -216,82 +215,21 @@ def lock_baseline(
     if last_import is None:
         raise HTTPException(status_code=422, detail="No schedule has been imported for this project yet.")
 
-    activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
-    eligible = [a for a in activities if (a.target_duration_hours or 0) > 0]
-
-    bac = sum(a.target_duration_hours or 0.0 for a in eligible)
-    if bac <= 0:
-        raise HTTPException(
-            status_code=422,
-            detail="Snapshot has no duration-loaded activities (BAC = 0). Ensure activities have a target duration.",
+    try:
+        baseline = lock_baseline_for_project(
+            db, ctx.tenant_id, project_id, last_import.id, ctx.user.id,
+            version_label=payload.version_label, notes=payload.notes,
         )
-
-    # Prefer P6's own baseline dates (planned_start/planned_finish); fall back
-    # to our CPM-computed early dates when a file didn't carry target_start/
-    # target_end_date — same fallback engine/evm/evm_engine.py already uses
-    # for its own planned-% calculation, kept consistent here.
-    starts = [a.planned_start or a.early_start for a in eligible]
-    starts = [s for s in starts if s]
-    ends = [a.planned_finish or a.early_finish for a in eligible]
-    ends = [e for e in ends if e]
-    if not starts or not ends:
-        raise HTTPException(status_code=422, detail="Activities have no planned dates. Run CPM (import a scheduled .xer) first.")
-    target_start_date = min(starts)
-    target_end_date = max(ends)
-
-    existing_active = (
-        db.query(Baseline)
-        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
-        .first()
-    )
-    if existing_active:
-        raise HTTPException(
-            status_code=409, detail=f"Active baseline '{existing_active.version_label}' already exists. Supersede it first."
-        )
-    dup = (
-        db.query(Baseline)
-        .filter(Baseline.project_id == project_id, Baseline.version_label == payload.version_label)
-        .first()
-    )
-    if dup:
-        raise HTTPException(status_code=409, detail=f"Version label '{payload.version_label}' already used.")
-
-    baseline_id = uuid.uuid4()
-    db.add(
-        Baseline(
-            id=baseline_id, tenant_id=ctx.tenant_id, project_id=project_id, schedule_import_id=last_import.id,
-            version_label=payload.version_label, locked_at=datetime.utcnow(), locked_by_user_id=ctx.user.id,
-            total_budget_manhours=round(bac, 4), target_start_date=target_start_date, target_end_date=target_end_date,
-            distribution_method="linear", status=BaselineStatus.active, activity_count=len(eligible), notes=payload.notes,
-        )
-    )
-
-    curve_input = []
-    for a in eligible:
-        a_start = a.planned_start or a.early_start
-        a_end = a.planned_finish or a.early_finish
-        db.add(
-            BaselineActivity(
-                id=uuid.uuid4(), tenant_id=ctx.tenant_id, baseline_id=baseline_id, activity_id=a.id,
-                planned_manhours=a.target_duration_hours or 0.0, baseline_start=a_start,
-                baseline_end=a_end, wbs_code=a.wbs_path,
-            )
-        )
-        curve_input.append({"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end})
-
-    for curve_date, pv_daily, pv_cumulative in generate_pv_curve(curve_input, bac):
-        db.add(
-            BaselinePvCurve(
-                id=uuid.uuid4(), tenant_id=ctx.tenant_id, baseline_id=baseline_id,
-                curve_date=curve_date, pv_daily=pv_daily, pv_cumulative=pv_cumulative,
-            )
-        )
-
+    except BaselineValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except BaselineConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     db.commit()
 
     return LockBaselineResultOut(
-        status="locked", baseline_id=baseline_id, version_label=payload.version_label, bac=round(bac, 2),
-        activity_count=len(eligible), target_start=target_start_date, target_end=target_end_date,
+        status="locked", baseline_id=baseline.id, version_label=baseline.version_label,
+        bac=round(baseline.total_budget_manhours, 2), activity_count=baseline.activity_count,
+        target_start=baseline.target_start_date, target_end=baseline.target_end_date,
     )
 
 

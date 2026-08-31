@@ -4,13 +4,14 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { ScheduleImport } from "@/lib/types";
-import { CheckIcon, UploadCloudIcon } from "@/components/icons";
+import type { BaselineStatus, ScheduleImport } from "@/lib/types";
+import { CheckIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
 
-export default function ProjectFilesPage() {
+export default function ProgramLibraryPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
   const [imports, setImports] = useState<ScheduleImport[]>([]);
+  const [baselineStatus, setBaselineStatus] = useState<BaselineStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -21,16 +22,21 @@ export default function ProjectFilesPage() {
   async function load() {
     if (!project) {
       setImports([]);
+      setBaselineStatus(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const history = await api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`);
+      const [history, baseline] = await Promise.all([
+        api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
+        api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
+      ]);
       setImports(history);
+      setBaselineStatus(baseline);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load project files.");
+      setError(err instanceof ApiError ? err.message : "Failed to load program library.");
     } finally {
       setLoading(false);
     }
@@ -96,15 +102,17 @@ export default function ProjectFilesPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Project Files</b>
+          {project?.name ?? "—"} / <b>Program Library</b>
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Project Files</div>
+            <div className="page-title">Program Library</div>
             <div className="page-desc">
-              Upload a Primavera P6 .xer export to (re)compute the schedule — dates, float, and critical path.
+              Upload a Primavera P6 .xer export to (re)compute the schedule — dates, float, and critical path. The
+              first upload for a project locks in as its baseline; later uploads keep updating the live schedule
+              against it.
             </div>
           </div>
         </div>
@@ -115,6 +123,26 @@ export default function ProjectFilesPage() {
           </div>
         ) : (
           <>
+            {baselineStatus?.has_active ? (
+              <div className="banner">
+                <LockIcon className="icon" style={{ color: "var(--good)" }} />
+                <div className="banner-text">
+                  Baseline locked (<b>{baselineStatus.active_baseline?.version_label}</b>) — new uploads update the
+                  live schedule; the baseline itself stays fixed for comparison.
+                </div>
+              </div>
+            ) : imports.length > 0 ? (
+              <div className="banner warn">
+                <LockIcon className="icon" />
+                <div className="banner-text">No baseline locked yet for this project.</div>
+              </div>
+            ) : (
+              <div className="banner">
+                <LockIcon className="icon" style={{ color: "var(--text-muted)" }} />
+                <div className="banner-text">This project has no schedule yet — the first file you upload becomes its baseline.</div>
+              </div>
+            )}
+
             <div
               className={`dropzone${dragOver ? " dragover" : ""}`}
               onClick={() => fileInputRef.current?.click()}
@@ -161,12 +189,13 @@ export default function ProjectFilesPage() {
                       <th>Activities</th>
                       <th>Critical</th>
                       <th>Imported</th>
+                      <th>Baseline</th>
                     </tr>
                   </thead>
                   <tbody>
                     {imports.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="empty-state">
+                        <td colSpan={6} className="empty-state">
                           No schedule imported yet.
                         </td>
                       </tr>
@@ -178,6 +207,15 @@ export default function ProjectFilesPage() {
                         <td>{imp.activity_count}</td>
                         <td>{imp.critical_count}</td>
                         <td>{new Date(imp.imported_at).toLocaleString()}</td>
+                        <td>
+                          {imp.id === baselineStatus?.active_baseline?.schedule_import_id ? (
+                            <span className="chip chip-good">
+                              <LockIcon className="icon" /> Baseline
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

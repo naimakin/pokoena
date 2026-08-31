@@ -103,18 +103,46 @@ textarea{
 .icon{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .icon-lg{width:20px;height:20px}
 
-/* ---------- layout shells ---------- */
+/* ---------- layout shells ----------
+   .app-shell (flex row: sidebar | main) is also used, unmodified, by the
+   platform-admin shell (app/platform-admin/(protected)/layout.tsx) — the
+   tenant company shell below uses its own .tenant-shell/.tenant-body wrapper
+   instead of repurposing it, so that layout's markup keeps working as-is. */
 .app-shell{display:flex;min-height:100vh}
 
-.a-sidebar{
-  width:224px;flex:none;background:var(--surface);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;padding:1rem .75rem;gap:1.25rem;
+.tenant-shell{display:flex;flex-direction:column;min-height:100vh}
+.tenant-body{display:flex;flex:1;min-height:0}
+
+/* top nav bar: brand, section tabs, project switcher, avatar/sign-out */
+.a-topnav{
+  display:flex;align-items:center;gap:1.25rem;padding:0 1.25rem;height:56px;flex:none;
+  background:var(--surface);border-bottom:1px solid var(--border);
 }
+.a-topnav-tabs{display:flex;align-items:stretch;gap:2px;height:100%;overflow-x:auto}
+.topnav-tab{
+  display:flex;align-items:center;gap:.4rem;padding:0 .7rem;height:100%;
+  font-size:.8125rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;
+  border-bottom:2px solid transparent;
+}
+.topnav-tab .icon{color:var(--text-muted)}
+.topnav-tab:hover{color:var(--text-primary)}
+.topnav-tab.active{color:var(--accent-strong);border-bottom-color:var(--accent)}
+.topnav-tab.active .icon{color:var(--accent-strong)}
+.a-topnav-right{margin-left:auto;display:flex;align-items:center;gap:.75rem;flex:none}
+/* .project-switcher-trigger is width:100% — it filled the old vertical
+   sidebar via flex stretch; here it needs an explicit width to fill instead. */
+.a-topnav-right .project-switcher{width:220px}
+
 .brand{display:flex;align-items:center;gap:.55rem;padding:0 .35rem}
 .brand .mark{width:26px;height:26px;border-radius:6px;background:var(--accent);color:var(--accent-contrast);display:flex;align-items:center;justify-content:center;flex:none}
 .brand .mark .icon{width:15px;height:15px}
 .brand-name{font-weight:700;font-size:.95rem;letter-spacing:-.01em}
 .brand-sub{font-size:.625rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
+
+.a-sidebar{
+  width:208px;flex:none;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:1rem .75rem;gap:1.25rem;overflow-y:auto;
+}
 
 .nav-group-label{font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);padding:0 .5rem;margin-bottom:.35rem}
 .navlist{display:flex;flex-direction:column;gap:2px}
@@ -163,12 +191,19 @@ textarea{
 .navitem .count{margin-left:auto;background:var(--warn-soft);color:var(--warn);font-size:.6875rem;font-weight:700;padding:.05rem .4rem;border-radius:999px}
 .navitem .soon{margin-left:auto;font-size:.5625rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border:1px solid var(--border-strong);padding:.1rem .35rem;border-radius:4px}
 
+/* .a-foot (vertical sidebar footer) is also used, unmodified, by the
+   platform-admin shell — kept as-is; .topnav-user below is the equivalent
+   cluster laid out horizontally for the tenant top nav bar. */
 .a-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:.75rem;display:flex;align-items:center;gap:.55rem}
 .avatar{width:28px;height:28px;border-radius:6px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:.6875rem;font-weight:700;color:var(--text-secondary);flex:none}
 .a-foot .who{font-size:.75rem;font-weight:600}
 .a-foot .role{font-size:.6875rem;color:var(--text-muted)}
 .signout{margin-left:auto;color:var(--text-muted)}
 .signout:hover{color:var(--crit)}
+
+.topnav-user{display:flex;align-items:center;gap:.55rem}
+.topnav-user .who{font-size:.75rem;font-weight:600}
+.topnav-user .role{font-size:.6875rem;color:var(--text-muted)}
 
 .a-main{flex:1;min-width:0;display:flex;flex-direction:column}
 .a-topbar{
@@ -401,4 +436,6 @@ tr.resolved{opacity:.45}
   .navitem{justify-content:center}
   .navitem .count,.navitem .soon{margin-left:0;position:absolute;top:2px;right:2px}
   .field-row{grid-template-columns:1fr}
+  .a-topnav{gap:.6rem;padding:0 .75rem}
+  .a-topnav .brand-name,.a-topnav .brand-sub,.topnav-tab span,.topnav-user .who,.topnav-user .role{display:none}
 }

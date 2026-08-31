@@ -165,7 +165,7 @@ export default function ProgressInputPage() {
 
         {activities.length === 0 ? (
           <div className="card">
-            <p className="empty-state">No activities yet — import a schedule from Project Files.</p>
+            <p className="empty-state">No activities yet — import a schedule from Program Library.</p>
           </div>
         ) : (
           <div className="card">

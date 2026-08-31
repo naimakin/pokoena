@@ -48,6 +48,7 @@ from app.models.schedule_import import ScheduleImport
 from app.models.wbs_node import WbsNode
 from app.parser.xer_models import ParsedSchedule
 from app.parser.xer_parser import parse_xer
+from app.services.baseline import BaselineLockError, lock_baseline_for_project
 
 _TOL = 0.01
 
@@ -386,6 +387,22 @@ def import_xer(
     schedule_import.critical_count = critical_count
     schedule_import.warnings = parsed.parse_log
     schedule_import.relationships_snapshot = relationships_snapshot
+
+    # Program Library: a project's very first .xer upload auto-locks as its
+    # baseline (see services/baseline.py) — later uploads just keep
+    # reconciling the live schedule as they already do above; the baseline
+    # itself stays frozen, which is what makes EVM/S-curve variance
+    # meaningful. Best-effort: a lockable-schedule edge case (BAC=0, no
+    # planned dates) shouldn't fail an otherwise-successful import.
+    is_first_import = (
+        db.query(ScheduleImport).filter(ScheduleImport.project_id == project_id, ScheduleImport.id != import_id).first()
+        is None
+    )
+    if is_first_import:
+        try:
+            lock_baseline_for_project(db, ctx.tenant_id, project_id, import_id, ctx.user.id, version_label="Baseline")
+        except BaselineLockError as e:
+            schedule_import.warnings = [*schedule_import.warnings, f"Could not auto-lock baseline: {e}"]
 
     db.commit()
     db.refresh(schedule_import)

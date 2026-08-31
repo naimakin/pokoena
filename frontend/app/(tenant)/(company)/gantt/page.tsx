@@ -191,7 +191,7 @@ export default function GanttPage() {
           <div className="card">
             <p className="empty-state">
               {activities.length === 0
-                ? "No schedule imported yet — upload a .xer file from Project Files."
+                ? "No schedule imported yet — upload a .xer file from Program Library."
                 : "No activities match your filters."}
             </p>
           </div>
