@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
-import { ProjectProvider } from "@/lib/project-context";
+import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
+import { BaselineGate, BASELINE_GATED_SECTIONS } from "@/components/BaselineGate";
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -86,12 +87,12 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/planning/wbs",
     visible: always,
     children: [
+      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
       { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
       { href: "/schedule", label: "Activities", icon: GridIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
       { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
-      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
     ],
@@ -189,6 +190,14 @@ function isActiveHref(pathname: string | null, href: string): boolean {
   return pathname === href;
 }
 
+// Small lock marker on gated top-nav tabs while the selected project has no
+// baseline. Rendered inside <ProjectProvider>, so it can read the context.
+function GatedTabLock() {
+  const { project, baselineReady } = useProjectContext();
+  if (!project || baselineReady !== false) return null;
+  return <LockIcon className="icon" style={{ width: 12, height: 12, opacity: 0.7 }} />;
+}
+
 export default function CompanyLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -257,6 +266,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
                 >
                   <Icon className="icon" />
                   <span>{section.label}</span>
+                  {BASELINE_GATED_SECTIONS.has(section.key) && <GatedTabLock />}
                 </Link>
               );
             })}
@@ -295,7 +305,9 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
             </aside>
           )}
 
-          <main className="a-main">{children}</main>
+          <main className="a-main">
+            <BaselineGate gated={BASELINE_GATED_SECTIONS.has(activeSection?.key ?? "")}>{children}</BaselineGate>
+          </main>
         </div>
       </div>
     </ProjectProvider>

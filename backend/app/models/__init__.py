@@ -5,7 +5,14 @@ from app.models.activity import Activity, ActivityStatus
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.audit_log import AuditLog
-from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve, BaselineStatus
+from app.models.baseline import (
+    Baseline,
+    BaselineActivity,
+    BaselinePvCurve,
+    BaselineResource,
+    BaselineResourceAssignment,
+    BaselineStatus,
+)
 from app.models.calendar import Calendar
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
 from app.models.dashboard_layout import DashboardLayout
@@ -48,6 +55,8 @@ __all__ = [
     "Baseline",
     "BaselineActivity",
     "BaselinePvCurve",
+    "BaselineResource",
+    "BaselineResourceAssignment",
     "BaselineStatus",
     "Calendar",
     "ScheduleImport",

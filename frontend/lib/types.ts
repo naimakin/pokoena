@@ -287,6 +287,82 @@ export interface Baseline {
   activity_count: number;
   notes: string | null;
   created_at: string;
+  source_filename?: string | null;
+}
+
+export interface BaselineProgramResult {
+  mode: "created" | "overwritten";
+  filename: string;
+  activity_count: number;
+  critical_count: number;
+  warnings: string[];
+  baseline: Baseline;
+}
+
+export interface BaselineResourceItem {
+  rsrc_id: string;
+  name: string;
+  short_name: string | null;
+  rsrc_type: string;
+  unit_id: string | null;
+  budgeted_qty: number;
+  budgeted_cost: number;
+  assignment_count: number;
+}
+
+export interface BaselineResourceSummary {
+  project_id: string;
+  baseline_id: string;
+  version_label: string;
+  resource_count: number;
+  labor_count: number;
+  material_count: number;
+  equipment_count: number;
+  total_budgeted_labor_hours: number;
+  total_budgeted_cost: number;
+  resources: BaselineResourceItem[];
+}
+
+export interface BaselineVarianceHistogramBin {
+  label: string;
+  count: number;
+}
+
+export interface BaselineVarianceRow {
+  activity_id: string;
+  external_id: string;
+  name: string;
+  wbs_code: string | null;
+  baseline_start: string | null;
+  baseline_finish: string | null;
+  current_start: string | null;
+  current_finish: string | null;
+  start_variance_days: number | null;
+  finish_variance_days: number | null;
+  is_critical: boolean;
+  status: string;
+  percent_complete: number;
+}
+
+export interface BaselineVarianceSummary {
+  activities_total: number;
+  ahead: number;
+  on_track: number;
+  behind: number;
+  baseline_finish: string | null;
+  forecast_finish: string | null;
+  project_finish_variance_days: number | null;
+  worst_slip_days: number | null;
+  critical_slip_count: number;
+  finish_variance_histogram: BaselineVarianceHistogramBin[];
+}
+
+export interface BaselineVariance {
+  project_id: string;
+  baseline_id: string;
+  version_label: string;
+  summary: BaselineVarianceSummary;
+  rows: BaselineVarianceRow[];
 }
 
 export interface BaselineStatus {

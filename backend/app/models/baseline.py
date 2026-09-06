@@ -79,3 +79,40 @@ class BaselinePvCurve(Base):
     curve_date: Mapped[date] = mapped_column(Date, nullable=False)
     pv_daily: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     pv_cumulative: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class BaselineResource(Base):
+    """A P6 resource (RSRC) frozen against a baseline at lock time — a copy of
+    the live `resources` row so "the resources that were in the BSL programme"
+    survives every later update-programme (.xer) import, which replaces the
+    live `resources`/`resource_assignments` rows wholesale. Same
+    lock-then-supersede immutability as BaselineActivity."""
+
+    __tablename__ = "baseline_resources"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    baseline_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("baselines.id"), nullable=False, index=True)
+    rsrc_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    short_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    rsrc_type: Mapped[str] = mapped_column(String(30), nullable=False, default="RT_Labor")
+    unit_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class BaselineResourceAssignment(Base):
+    """One (activity, resource) budget line frozen against a baseline — the
+    TASKRSRC `target_qty`/`target_cost` at lock time. Feeds the Baselines
+    page's "resources in this baseline" summary and, later, a resource-loaded
+    PV curve."""
+
+    __tablename__ = "baseline_resource_assignments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    baseline_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("baselines.id"), nullable=False, index=True)
+    activity_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activities.id"), nullable=False)
+    baseline_resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("baseline_resources.id"), nullable=False)
+    target_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    target_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    unit_id: Mapped[str | None] = mapped_column(String(50), nullable=True)

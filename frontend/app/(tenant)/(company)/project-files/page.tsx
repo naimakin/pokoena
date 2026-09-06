@@ -110,9 +110,9 @@ export default function ProgramLibraryPage() {
           <div>
             <div className="page-title">Program Library</div>
             <div className="page-desc">
-              Upload a Primavera P6 .xer export to (re)compute the schedule — dates, float, and critical path. The
-              first upload for a project locks in as its baseline; later uploads keep updating the live schedule
-              against it.
+              Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
+              float, and critical path. The baseline programme is managed on <b>Planning → Baselines</b>; uploads
+              here update the live schedule and are compared back to that baseline.
             </div>
           </div>
         </div>
@@ -131,15 +131,12 @@ export default function ProgramLibraryPage() {
                   live schedule; the baseline itself stays fixed for comparison.
                 </div>
               </div>
-            ) : imports.length > 0 ? (
+            ) : (
               <div className="banner warn">
                 <LockIcon className="icon" />
-                <div className="banner-text">No baseline locked yet for this project.</div>
-              </div>
-            ) : (
-              <div className="banner">
-                <LockIcon className="icon" style={{ color: "var(--text-muted)" }} />
-                <div className="banner-text">This project has no schedule yet — the first file you upload becomes its baseline.</div>
+                <div className="banner-text">
+                  No baseline programme yet — set one on <b>Planning → Baselines</b> before uploading updates here.
+                </div>
               </div>
             )}
 

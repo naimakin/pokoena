@@ -1,27 +1,37 @@
 """Shared "lock the project's current schedule as a baseline" logic.
 
-Used by two callers: the manual `POST /projects/{id}/evm/baseline` action
-(app/api/routes/evm.py, company_admin-gated) and the Program Library page's
+Used by three callers: the manual `POST /projects/{id}/evm/baseline` action
+(app/api/routes/evm.py, company_admin-gated), the Program Library page's
 automatic lock-on-first-import (app/services/xer_import.py, system-triggered,
-no role gate — see that module for why the first .xer upload for a project
-becomes its baseline automatically). See app/models/baseline.py for the
-"Vance Baseline Mandate" (at most one `active` baseline per project).
+no role gate), and the Baselines page's `POST /projects/{id}/evm/baseline/
+program` upload — which locks on first use and calls `overwrite_active_baseline`
+on every later replacement (the owner chose overwrite-in-place: no new baseline
+version). See app/models/baseline.py for the "Vance Baseline Mandate" (at most
+one `active` baseline per project).
 
-Does not commit — callers own the transaction boundary (the manual route
-commits right after; the import path commits once at the end of import_xer,
-alongside the ScheduleImport row itself).
+Does not commit — callers own the transaction boundary.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
 from app.engine.evm.scurve_engine import generate_pv_curve
 from app.models.activity import Activity
-from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve, BaselineStatus
+from app.models.baseline import (
+    Baseline,
+    BaselineActivity,
+    BaselinePvCurve,
+    BaselineResource,
+    BaselineResourceAssignment,
+    BaselineStatus,
+)
+from app.models.evm_snapshot import EvmSnapshot
+from app.models.resource import Resource
+from app.models.resource_assignment import ResourceAssignment
 
 
 class BaselineLockError(ValueError):
@@ -36,16 +46,11 @@ class BaselineConflictError(BaselineLockError):
     """An active baseline or the requested version label already exists."""
 
 
-def lock_baseline_for_project(
-    db: Session,
-    tenant_id: uuid.UUID,
-    project_id: uuid.UUID,
-    schedule_import_id: uuid.UUID,
-    locked_by_user_id: uuid.UUID,
-    version_label: str = "Target-1",
-    notes: str | None = None,
-) -> Baseline:
-    activities = db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
+def _compute_baseline_scope(
+    activities: list[Activity],
+) -> tuple[list[Activity], float, date, date]:
+    """Duration-loaded activities + BAC + target start/end. Raises
+    BaselineValidationError if the schedule isn't lockable yet."""
     eligible = [a for a in activities if (a.target_duration_hours or 0) > 0]
 
     bac = sum(a.target_duration_hours or 0.0 for a in eligible)
@@ -58,8 +63,84 @@ def lock_baseline_for_project(
     ends = [e for e in (a.planned_finish or a.early_finish for a in eligible) if e]
     if not starts or not ends:
         raise BaselineValidationError("Activities have no planned dates. Run CPM (import a scheduled .xer) first.")
-    target_start_date = min(starts)
-    target_end_date = max(ends)
+    return eligible, round(bac, 4), min(starts), max(ends)
+
+
+def _populate_baseline_children(
+    db: Session, tenant_id: uuid.UUID, baseline_id: uuid.UUID, eligible: list[Activity], bac: float
+) -> None:
+    """Write the BaselineActivity rows + the linear PV curve for a baseline."""
+    curve_input = []
+    for a in eligible:
+        a_start = a.planned_start or a.early_start
+        a_end = a.planned_finish or a.early_finish
+        db.add(
+            BaselineActivity(
+                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id, activity_id=a.id,
+                planned_manhours=a.target_duration_hours or 0.0, baseline_start=a_start, baseline_end=a_end,
+                wbs_code=a.wbs_path,
+            )
+        )
+        curve_input.append(
+            {"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end}
+        )
+
+    for curve_date, pv_daily, pv_cumulative in generate_pv_curve(curve_input, bac):
+        db.add(
+            BaselinePvCurve(
+                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id,
+                curve_date=curve_date, pv_daily=pv_daily, pv_cumulative=pv_cumulative,
+            )
+        )
+
+
+def _snapshot_baseline_resources(
+    db: Session, tenant_id: uuid.UUID, baseline_id: uuid.UUID, project_id: uuid.UUID
+) -> None:
+    """Freeze the project's live P6 resources + budget lines against this
+    baseline. The live `resources`/`resource_assignments` rows were just
+    written by the same import_xer run; later update-programme imports replace
+    them wholesale, so this copy is what keeps "the resources in the BSL"
+    stable. See app/models/baseline.py."""
+    resources = db.query(Resource).filter(Resource.project_id == project_id).all()
+    rsrc_row_id_to_baseline_rsrc_id: dict[uuid.UUID, uuid.UUID] = {}
+    for r in resources:
+        br_id = uuid.uuid4()
+        rsrc_row_id_to_baseline_rsrc_id[r.id] = br_id
+        db.add(
+            BaselineResource(
+                id=br_id, tenant_id=tenant_id, baseline_id=baseline_id, rsrc_id=r.rsrc_id,
+                name=r.name, short_name=r.short_name, rsrc_type=r.rsrc_type, unit_id=r.unit_id,
+            )
+        )
+
+    assignments = (
+        db.query(ResourceAssignment).filter(ResourceAssignment.project_id == project_id).all()
+    )
+    for a in assignments:
+        baseline_rsrc_id = rsrc_row_id_to_baseline_rsrc_id.get(a.resource_id)
+        if baseline_rsrc_id is None:
+            continue
+        db.add(
+            BaselineResourceAssignment(
+                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id, activity_id=a.activity_id,
+                baseline_resource_id=baseline_rsrc_id, target_qty=a.target_qty, target_cost=a.target_cost,
+                unit_id=a.unit_id,
+            )
+        )
+
+
+def lock_baseline_for_project(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    schedule_import_id: uuid.UUID,
+    locked_by_user_id: uuid.UUID,
+    version_label: str = "Target-1",
+    notes: str | None = None,
+) -> Baseline:
+    activities = db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
+    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
 
     existing_active = (
         db.query(Baseline)
@@ -79,31 +160,60 @@ def lock_baseline_for_project(
         Baseline(
             id=baseline_id, tenant_id=tenant_id, project_id=project_id, schedule_import_id=schedule_import_id,
             version_label=version_label, locked_at=datetime.utcnow(), locked_by_user_id=locked_by_user_id,
-            total_budget_manhours=round(bac, 4), target_start_date=target_start_date, target_end_date=target_end_date,
+            total_budget_manhours=bac, target_start_date=target_start_date, target_end_date=target_end_date,
             distribution_method="linear", status=BaselineStatus.active, activity_count=len(eligible), notes=notes,
         )
     )
+    db.flush()
 
-    curve_input = []
-    for a in eligible:
-        a_start = a.planned_start or a.early_start
-        a_end = a.planned_finish or a.early_finish
-        db.add(
-            BaselineActivity(
-                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id, activity_id=a.id,
-                planned_manhours=a.target_duration_hours or 0.0, baseline_start=a_start, baseline_end=a_end,
-                wbs_code=a.wbs_path,
-            )
-        )
-        curve_input.append({"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end})
-
-    for curve_date, pv_daily, pv_cumulative in generate_pv_curve(curve_input, bac):
-        db.add(
-            BaselinePvCurve(
-                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id,
-                curve_date=curve_date, pv_daily=pv_daily, pv_cumulative=pv_cumulative,
-            )
-        )
+    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _snapshot_baseline_resources(db, tenant_id, baseline_id, project_id)
 
     db.flush()
     return db.get(Baseline, baseline_id)
+
+
+def overwrite_active_baseline(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    schedule_import_id: uuid.UUID,
+    locked_by_user_id: uuid.UUID,
+) -> Baseline:
+    """Replace the current active baseline's frozen data in place — same
+    `baselines` row (id, version_label, status), recomputed activities / PV
+    curve / resources from the schedule that was just re-imported. Stale
+    EvmSnapshot rows for this baseline are dropped; the caller re-derives them
+    from surviving progress_entries. The owner chose this over locking a new
+    baseline version on every re-upload."""
+    baseline = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
+        .first()
+    )
+    if baseline is None:
+        raise BaselineConflictError("No active baseline to overwrite.")
+
+    activities = db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
+    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
+
+    db.query(BaselineResourceAssignment).filter(BaselineResourceAssignment.baseline_id == baseline.id).delete()
+    db.query(BaselineResource).filter(BaselineResource.baseline_id == baseline.id).delete()
+    db.query(BaselinePvCurve).filter(BaselinePvCurve.baseline_id == baseline.id).delete()
+    db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).delete()
+    db.query(EvmSnapshot).filter(EvmSnapshot.baseline_id == baseline.id).delete()
+
+    baseline.schedule_import_id = schedule_import_id
+    baseline.locked_at = datetime.utcnow()
+    baseline.locked_by_user_id = locked_by_user_id
+    baseline.total_budget_manhours = bac
+    baseline.target_start_date = target_start_date
+    baseline.target_end_date = target_end_date
+    baseline.activity_count = len(eligible)
+    db.flush()
+
+    _populate_baseline_children(db, tenant_id, baseline.id, eligible, bac)
+    _snapshot_baseline_resources(db, tenant_id, baseline.id, project_id)
+
+    db.flush()
+    return baseline

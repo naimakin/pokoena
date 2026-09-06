@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission, require_role
+from app.engine.cpm.calendar_engine import NoWorkingDayError
+from app.engine.cpm.scheduler import CpmCycleError
 from app.engine.evm.evm_engine import calculate_evm
 from app.engine.evm.excel_export import build_evm_excel
 from app.engine.evm.scurve_engine import (
@@ -15,9 +17,17 @@ from app.engine.evm.scurve_engine import (
     compute_evm_series,
     find_out_of_sequence_activities,
 )
+from app.engine.evm.variance_engine import compute_baseline_date_variance
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
-from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve, BaselineStatus
+from app.models.baseline import (
+    Baseline,
+    BaselineActivity,
+    BaselinePvCurve,
+    BaselineResource,
+    BaselineResourceAssignment,
+    BaselineStatus,
+)
 from app.models.calendar import Calendar
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.progress_entry import ProgressEntry, ProgressEntryType
@@ -25,10 +35,21 @@ from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.user_tenant_role import TenantRole
-from app.services.baseline import BaselineConflictError, BaselineValidationError, lock_baseline_for_project
+from app.parser.xer_parser import XerParseError
+from app.services.baseline import (
+    BaselineConflictError,
+    BaselineValidationError,
+    lock_baseline_for_project,
+    overwrite_active_baseline,
+)
+from app.services.xer_import import import_xer
 from app.schemas.evm import (
     BaselineOut,
+    BaselineProgramResultOut,
+    BaselineResourceItemOut,
+    BaselineResourceSummaryOut,
     BaselineStatusOut,
+    BaselineVarianceOut,
     EvmScurveOut,
     EvmScurvePointOut,
     EvmSummaryOut,
@@ -169,6 +190,28 @@ def _recalculate_evm_snapshots(db: Session, ctx: AuthContext, project_id: uuid.U
     db.flush()
 
 
+def _baseline_out(db: Session, baseline: Baseline) -> BaselineOut:
+    """BaselineOut with `source_filename` resolved from the .xer it was locked
+    from — the UI shows "locked from update_2026_08.xer" rather than a UUID."""
+    out = BaselineOut.model_validate(baseline)
+    si = db.get(ScheduleImport, baseline.schedule_import_id)
+    out.source_filename = si.filename if si else None
+    return out
+
+
+def _unique_baseline_label(db: Session, project_id: uuid.UUID) -> str:
+    existing = {
+        b.version_label
+        for b in db.query(Baseline.version_label).filter(Baseline.project_id == project_id).all()
+    }
+    if "Baseline" not in existing:
+        return "Baseline"
+    n = 2
+    while f"Baseline r{n}" in existing:
+        n += 1
+    return f"Baseline r{n}"
+
+
 @router.get("/baseline", response_model=BaselineStatusOut)
 def get_baseline_status(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
@@ -186,8 +229,168 @@ def get_baseline_status(
     return BaselineStatusOut(
         project_id=project_id,
         has_active=active is not None,
-        active_baseline=BaselineOut.model_validate(active) if active else None,
-        all_baselines=[BaselineOut.model_validate(b) for b in baselines],
+        active_baseline=_baseline_out(db, active) if active else None,
+        all_baselines=[_baseline_out(db, b) for b in baselines],
+    )
+
+
+@router.post("/baseline/program", response_model=BaselineProgramResultOut, status_code=201)
+def upload_baseline_program(
+    project_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> BaselineProgramResultOut:
+    """Upload the baseline programme (.xer) from Planning → Baselines. First
+    use of this endpoint (or the Program Library) locks the baseline; every
+    later upload here overwrites it in place (same baseline row, recomputed
+    activities / PV curve / frozen resources — the owner's choice over
+    versioning). Also refreshes EVM snapshots when progress already exists so
+    a replace doesn't leave stale metrics."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+
+    if not file.filename or not file.filename.lower().endswith(".xer"):
+        raise HTTPException(status_code=400, detail="Only .xer files are supported")
+
+    file_bytes = file.file.read()
+    try:
+        schedule_import = import_xer(db, project_id, ctx, file.filename, file_bytes)
+    except XerParseError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except CpmCycleError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This schedule can't be recomputed: {e} Fix the circular dependency in P6 and re-export.",
+        )
+    except NoWorkingDayError as e:
+        raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
+
+    active = (
+        db.query(Baseline)
+        .filter(
+            Baseline.tenant_id == ctx.tenant_id,
+            Baseline.project_id == project_id,
+            Baseline.status == BaselineStatus.active,
+        )
+        .first()
+    )
+
+    if active is not None and active.schedule_import_id == schedule_import.id:
+        # import_xer auto-locked this as the project's first baseline.
+        mode = "created"
+        baseline = active
+    elif active is not None:
+        try:
+            baseline = overwrite_active_baseline(db, ctx.tenant_id, project_id, schedule_import.id, ctx.user.id)
+        except BaselineValidationError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).first() is not None:
+            _recalculate_evm_snapshots(db, ctx, project_id, baseline)
+        db.commit()
+        mode = "overwritten"
+    else:
+        try:
+            baseline = lock_baseline_for_project(
+                db, ctx.tenant_id, project_id, schedule_import.id, ctx.user.id,
+                version_label=_unique_baseline_label(db, project_id),
+            )
+        except BaselineValidationError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except BaselineConflictError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        db.commit()
+        mode = "created"
+
+    db.refresh(baseline)
+    return BaselineProgramResultOut(
+        mode=mode,
+        filename=schedule_import.filename,
+        activity_count=schedule_import.activity_count,
+        critical_count=schedule_import.critical_count,
+        warnings=schedule_import.warnings,
+        baseline=_baseline_out(db, baseline),
+    )
+
+
+@router.get("/baseline/resources", response_model=BaselineResourceSummaryOut)
+def get_baseline_resources(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> BaselineResourceSummaryOut:
+    """The P6 resources frozen against the active baseline, with budgeted
+    quantity/cost rolled up per resource from the frozen TASKRSRC lines."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    resources = (
+        db.query(BaselineResource).filter(BaselineResource.baseline_id == baseline.id).all()
+    )
+    assignments = (
+        db.query(BaselineResourceAssignment)
+        .filter(BaselineResourceAssignment.baseline_id == baseline.id)
+        .all()
+    )
+
+    qty_by_rsrc: dict[uuid.UUID, float] = {}
+    cost_by_rsrc: dict[uuid.UUID, float] = {}
+    count_by_rsrc: dict[uuid.UUID, int] = {}
+    for a in assignments:
+        qty_by_rsrc[a.baseline_resource_id] = qty_by_rsrc.get(a.baseline_resource_id, 0.0) + (a.target_qty or 0.0)
+        cost_by_rsrc[a.baseline_resource_id] = cost_by_rsrc.get(a.baseline_resource_id, 0.0) + (a.target_cost or 0.0)
+        count_by_rsrc[a.baseline_resource_id] = count_by_rsrc.get(a.baseline_resource_id, 0) + 1
+
+    items = [
+        BaselineResourceItemOut(
+            rsrc_id=r.rsrc_id, name=r.name, short_name=r.short_name, rsrc_type=r.rsrc_type, unit_id=r.unit_id,
+            budgeted_qty=round(qty_by_rsrc.get(r.id, 0.0), 2), budgeted_cost=round(cost_by_rsrc.get(r.id, 0.0), 2),
+            assignment_count=count_by_rsrc.get(r.id, 0),
+        )
+        for r in resources
+    ]
+    items.sort(key=lambda i: (i.rsrc_type, i.name))
+
+    return BaselineResourceSummaryOut(
+        project_id=project_id,
+        baseline_id=baseline.id,
+        version_label=baseline.version_label,
+        resource_count=len(resources),
+        labor_count=sum(1 for r in resources if r.rsrc_type == "RT_Labor"),
+        material_count=sum(1 for r in resources if r.rsrc_type == "RT_Material"),
+        equipment_count=sum(1 for r in resources if r.rsrc_type == "RT_Equip"),
+        total_budgeted_labor_hours=round(
+            sum(qty_by_rsrc.get(r.id, 0.0) for r in resources if r.rsrc_type == "RT_Labor"), 2
+        ),
+        total_budgeted_cost=round(sum(cost_by_rsrc.values()), 2),
+        resources=items,
+    )
+
+
+@router.get("/baseline/variance", response_model=BaselineVarianceOut)
+def get_baseline_variance(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> BaselineVarianceOut:
+    """Baseline (frozen) vs current schedule (latest update-programme import):
+    per-activity start/finish date variance in calendar days, plus a
+    project-level slip summary and a distribution histogram for the chart."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    baseline_activities = (
+        db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).all()
+    )
+    activities_by_id = {
+        a.id: a
+        for a in db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
+    }
+
+    result = compute_baseline_date_variance(baseline_activities, activities_by_id)
+    return BaselineVarianceOut(
+        project_id=project_id,
+        baseline_id=baseline.id,
+        version_label=baseline.version_label,
+        summary=result["summary"],
+        rows=result["rows"],
     )
 
 

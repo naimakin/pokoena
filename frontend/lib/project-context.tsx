@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Project, ProjectCreatePayload } from "@/lib/types";
+import type { BaselineStatus, Project, ProjectCreatePayload } from "@/lib/types";
 
 const STORAGE_KEY = "poko:selected-project-id";
 
@@ -13,6 +13,12 @@ interface ProjectContextValue {
   error: string | null;
   selectProject: (id: string) => void;
   createProject: (payload: ProjectCreatePayload) => Promise<Project>;
+  // Whether the selected project has an active (locked) baseline. `null` while
+  // still loading — the setup gate treats null as "don't block yet" to avoid a
+  // flash. Refetched on every project switch; `refreshBaseline` lets the
+  // Baselines page lift the gate immediately after an upload.
+  baselineReady: boolean | null;
+  refreshBaseline: () => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -25,6 +31,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [baselineReady, setBaselineReady] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +56,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     load();
   }, [load]);
 
+  const refreshBaseline = useCallback(async () => {
+    if (!selectedId) {
+      setBaselineReady(null);
+      return;
+    }
+    try {
+      const status = await api.get<BaselineStatus>(`/projects/${selectedId}/evm/baseline`);
+      setBaselineReady(status.has_active);
+    } catch {
+      // A failure here shouldn't hard-block the app — fail open.
+      setBaselineReady(true);
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    setBaselineReady(null);
+    refreshBaseline();
+  }, [refreshBaseline]);
+
   function selectProject(id: string) {
     setSelectedId(id);
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, id);
@@ -63,7 +89,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const project = useMemo(() => projects.find((p) => p.id === selectedId) ?? null, [projects, selectedId]);
 
-  const value: ProjectContextValue = { projects, project, loading, error, selectProject, createProject };
+  const value: ProjectContextValue = {
+    projects,
+    project,
+    loading,
+    error,
+    selectProject,
+    createProject,
+    baselineReady,
+    refreshBaseline,
+  };
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
