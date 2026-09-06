@@ -27,6 +27,7 @@ from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
+from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
@@ -62,6 +63,7 @@ __all__ = [
     "Calendar",
     "ScheduleExport",
     "ScheduleImport",
+    "ScheduleStatusSnapshot",
     "ChangeRequest",
     "ChangeRequestStatus",
     "RiskLevel",

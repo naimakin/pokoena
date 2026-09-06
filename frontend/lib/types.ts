@@ -711,3 +711,65 @@ export interface ActivityCodes {
   code_types: ActivityCodeType[];
   code_values: ActivityCodeValue[];
 }
+
+// --- Execution → Project / Program Status ---
+
+export interface StatusTrendPoint {
+  label: string;
+  value: number;
+}
+
+export interface StatusCard {
+  verdict: string;
+  headline: string;
+  metric: number | null;
+  delta: number | null;
+  series: StatusTrendPoint[];
+}
+
+export interface StatusSummary {
+  progress: StatusCard;
+  risk: StatusCard;
+  quality: StatusCard;
+}
+
+export type PriorityQuadrantKey = "focus" | "watch" | "delegate" | "later";
+
+export interface PriorityQuadrant {
+  key: PriorityQuadrantKey;
+  label: string;
+  program_count: number;
+  user_count: number;
+  recommendation_count: number;
+}
+
+export interface PriorityActivity {
+  activity_id: string;
+  external_id: string;
+  name: string;
+  discipline: string;
+  planned_start: string | null;
+  planned_finish: string | null;
+  total_float_days: number | null;
+  percent_complete: number;
+  is_critical: boolean;
+  is_overdue: boolean;
+  is_delay_driver: boolean;
+}
+
+export interface Priorities {
+  quadrants: PriorityQuadrant[];
+  activities: Record<PriorityQuadrantKey, PriorityActivity[]>;
+  filtered_total: number;
+}
+
+export interface ProjectStatus {
+  project_id: string;
+  data_date: string | null;
+  latest_revision_label: string | null;
+  latest_filename: string | null;
+  imported_at: string | null;
+  has_snapshots: boolean;
+  summary: StatusSummary;
+  priorities: Priorities;
+}

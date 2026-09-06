@@ -60,12 +60,9 @@ const canManageTeam: Visible = (user) =>
 
 const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 
-// Some destinations are deliberately reused under more than one top section
-// (e.g. /dashboard under both Dashboard and Execution > Project Status,
-// /schedule under both Planning > Activities and Execution > Activities) —
-// there's a single real page behind each, just relevant from more than one
-// angle. Where a route is reused, TOP_SECTIONS order below decides which
-// section is treated as "active" when that route is open (first match wins).
+// Where a destination is reused under more than one top section, TOP_SECTIONS
+// order below decides which section is treated as "active" when that route is
+// open (first match wins).
 const TOP_SECTIONS: NavSection[] = [
   { key: "dashboard", label: "Dashboard", icon: GridIcon, href: "/dashboard", visible: always, children: [] },
   {
@@ -105,8 +102,7 @@ const TOP_SECTIONS: NavSection[] = [
     visible: always,
     children: [
       { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always },
-      { href: "/dashboard", label: "Project Status", icon: GridIcon, visible: always },
-      { href: "/schedule", label: "Activities", icon: GridIcon, visible: always },
+      { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/progress", label: "Progress", icon: ClockIcon, visible: always },
       { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: always },
       { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always },

@@ -46,10 +46,12 @@ from app.models.project import Project
 from app.models.resource import Resource as ResourceModel
 from app.models.resource_assignment import ResourceAssignment as ResourceAssignmentModel
 from app.models.schedule_import import ScheduleImport
+from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.models.wbs_node import WbsNode
 from app.parser.xer_models import ParsedSchedule
 from app.parser.xer_parser import parse_xer
 from app.services.baseline import BaselineLockError, lock_baseline_for_project
+from app.services.project_status import compute_status_rollup
 
 _TOL = 0.01
 
@@ -431,6 +433,43 @@ def import_xer(
         )
         schedule_import.revision_no = last_no + 1
         schedule_import.revision_label = f"UPD-{last_no + 1}"
+
+    # Freeze this import's project-status rollup (SPI / DCMA quality / recovery
+    # index / verdicts) so Execution → Project Status can trend status across
+    # UPD-n — the live schedule tables keep no per-version history. Best-effort:
+    # a rollup edge case must never fail an otherwise-good import, same policy
+    # as the auto-baseline lock above.
+    try:
+        db.flush()
+        rollup = compute_status_rollup(db, ctx.tenant_id, project_id)
+        db.add(
+            ScheduleStatusSnapshot(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                project_id=project_id,
+                schedule_import_id=import_id,
+                data_date=schedule_import.data_date,
+                revision_label=schedule_import.revision_label,
+                spi=rollup.spi,
+                cpi=rollup.cpi,
+                schedule_recovery_index=rollup.schedule_recovery_index,
+                dcma_score=rollup.dcma_score,
+                dcma_status=rollup.dcma_status,
+                activity_count=rollup.activity_count,
+                critical_count=rollup.critical_count,
+                negative_float_count=rollup.negative_float_count,
+                overdue_count=rollup.overdue_count,
+                percent_complete=rollup.percent_complete,
+                progress_verdict=rollup.progress_verdict,
+                risk_verdict=rollup.risk_verdict,
+                quality_verdict=rollup.quality_verdict,
+            )
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        schedule_import.warnings = [
+            *schedule_import.warnings,
+            f"Could not capture status snapshot: {e}",
+        ]
 
     db.commit()
     db.refresh(schedule_import)
