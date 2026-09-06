@@ -33,6 +33,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.deps import AuthContext
@@ -76,8 +77,18 @@ def _derive_status(status_code: str, phys_complete_pct: float) -> tuple[Activity
 
 
 def import_xer(
-    db: Session, project_id: uuid.UUID, ctx: AuthContext, filename: str, file_bytes: bytes
+    db: Session,
+    project_id: uuid.UUID,
+    ctx: AuthContext,
+    filename: str,
+    file_bytes: bytes,
+    *,
+    revision_kind: str = "update",
+    roundtrip_from_export_id: uuid.UUID | None = None,
 ) -> ScheduleImport:
+    """`revision_kind` drives the sync-log label: "update" (Program Library)
+    gets the next per-project UPD-n; "baseline" (Planning → Baselines) and the
+    project's very first upload are the unnumbered "Baseline programme"."""
     parsed: ParsedSchedule = parse_xer(file_bytes)
     schedule(parsed)
 
@@ -98,6 +109,7 @@ def import_xer(
         filename=filename,
         data_date=parsed.meta.data_date,
         imported_by_user_id=ctx.user.id,
+        roundtrip_from_export_id=roundtrip_from_export_id,
     )
     db.add(schedule_import)
     db.flush()
@@ -403,6 +415,22 @@ def import_xer(
             lock_baseline_for_project(db, ctx.tenant_id, project_id, import_id, ctx.user.id, version_label="Baseline")
         except BaselineLockError as e:
             schedule_import.warnings = [*schedule_import.warnings, f"Could not auto-lock baseline: {e}"]
+
+    # Sync-log label. The baseline programme (first upload, or any upload via
+    # Planning → Baselines) stays out of the UPD sequence and keeps its own
+    # version label; ordinary status updates get the next per-project UPD-n.
+    if revision_kind == "baseline" or is_first_import:
+        schedule_import.revision_no = None
+        schedule_import.revision_label = "Baseline programme"
+    else:
+        last_no = (
+            db.query(func.max(ScheduleImport.revision_no))
+            .filter(ScheduleImport.project_id == project_id, ScheduleImport.id != import_id)
+            .scalar()
+            or 0
+        )
+        schedule_import.revision_no = last_no + 1
+        schedule_import.revision_label = f"UPD-{last_no + 1}"
 
     db.commit()
     db.refresh(schedule_import)

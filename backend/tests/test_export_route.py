@@ -38,7 +38,7 @@ def test_export_round_trips_the_synthetic_fixture(client, db_session):
 
     response = client.get(f"/projects/{project.id}/export/xer")
     assert response.status_code == 200
-    assert response.headers["content-disposition"] == f'attachment; filename="{project.code}.xer"'
+    assert response.headers["content-disposition"] == f'attachment; filename="{project.code}-EXP-1.xer"'
 
     reparsed = parse_xer(response.content)
     assert len(reparsed.activities) == 6

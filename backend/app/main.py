@@ -23,6 +23,7 @@ from app.api.routes import (
     risk,
     schedule_imports,
     subcontractor_organizations,
+    sync,
     team,
     update_periods,
     wbs,
@@ -76,6 +77,7 @@ app.include_router(projects.router)
 app.include_router(update_periods.router)
 app.include_router(activities.router)
 app.include_router(schedule_imports.router)
+app.include_router(sync.router)
 app.include_router(dcma.router)
 app.include_router(evm.router)
 app.include_router(risk.router)

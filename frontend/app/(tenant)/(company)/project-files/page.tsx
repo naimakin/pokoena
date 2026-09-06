@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { BaselineStatus, ScheduleImport } from "@/lib/types";
+import type { BaselineStatus, ScheduleImport, SyncLogEntry } from "@/lib/types";
 import { CheckIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
+
+const selectStyle: CSSProperties = {
+  fontSize: ".8125rem",
+  height: 34,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};
 
 export default function ProgramLibraryPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
   const [imports, setImports] = useState<ScheduleImport[]>([]);
+  const [syncExports, setSyncExports] = useState<SyncLogEntry[]>([]);
+  const [linkExportId, setLinkExportId] = useState("");
   const [baselineStatus, setBaselineStatus] = useState<BaselineStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -29,12 +41,14 @@ export default function ProgramLibraryPage() {
     setLoading(true);
     setError(null);
     try {
-      const [history, baseline] = await Promise.all([
+      const [history, baseline, syncLog] = await Promise.all([
         api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
         api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
+        api.get<SyncLogEntry[]>(`/projects/${project.id}/sync-log`),
       ]);
       setImports(history);
       setBaselineStatus(baseline);
+      setSyncExports(syncLog.filter((e) => e.kind === "export"));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load program library.");
     } finally {
@@ -57,8 +71,10 @@ export default function ProgramLibraryPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      if (linkExportId) formData.append("roundtrip_from_export_id", linkExportId);
       const result = await api.postFile<ScheduleImport>(`/projects/${project.id}/schedule-imports`, formData);
       setLastResult(result);
+      setLinkExportId("");
       showToast(`Imported ${result.activity_count} activities (${result.critical_count} critical)`);
       load();
     } catch (err) {
@@ -156,6 +172,36 @@ export default function ProgramLibraryPage() {
               <input ref={fileInputRef} type="file" accept=".xer" onChange={handleFileInput} disabled={uploading} />
             </div>
 
+            {syncExports.length > 0 && (
+              <div
+                style={{
+                  marginTop: ".75rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: ".6rem",
+                  flexWrap: "wrap",
+                  fontSize: ".75rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <label htmlFor="link-export">Is this the F9 result of a Poko export?</label>
+                <select
+                  id="link-export"
+                  style={selectStyle}
+                  value={linkExportId}
+                  onChange={(e) => setLinkExportId(e.target.value)}
+                  disabled={uploading}
+                >
+                  <option value="">Not linked</option>
+                  {syncExports.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.label} — {e.filename}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {lastResult && (
               <div className="banner" style={{ marginTop: "1rem" }}>
                 <CheckIcon className="icon" style={{ color: "var(--good)" }} />
@@ -181,6 +227,7 @@ export default function ProgramLibraryPage() {
                 <table>
                   <thead>
                     <tr>
+                      <th>Rev</th>
                       <th>File</th>
                       <th>Data date</th>
                       <th>Activities</th>
@@ -192,13 +239,21 @@ export default function ProgramLibraryPage() {
                   <tbody>
                     {imports.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="empty-state">
+                        <td colSpan={7} className="empty-state">
                           No schedule imported yet.
                         </td>
                       </tr>
                     )}
                     {imports.map((imp) => (
                       <tr key={imp.id}>
+                        <td>
+                          <span className="mono">{imp.revision_label ?? "—"}</span>
+                          {imp.roundtrip_from_export_id && syncExports.find((e) => e.id === imp.roundtrip_from_export_id) && (
+                            <div className="actid">
+                              from {syncExports.find((e) => e.id === imp.roundtrip_from_export_id)!.label}
+                            </div>
+                          )}
+                        </td>
                         <td>{imp.filename}</td>
                         <td>{imp.data_date ? new Date(imp.data_date).toLocaleDateString() : "—"}</td>
                         <td>{imp.activity_count}</td>

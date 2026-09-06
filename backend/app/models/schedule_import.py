@@ -24,6 +24,19 @@ class ScheduleImport(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     data_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Human sequence label for the Program Library / sync log. Ordinary status
+    # updates are numbered per-project ("UPD-1", "UPD-2"…) with revision_no set;
+    # the baseline programme (first upload, or any upload via Planning →
+    # Baselines) is "Baseline programme" with revision_no NULL — the baseline
+    # keeps its own version label and stays out of the UPD sequence.
+    revision_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revision_label: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Optional, user-declared: this import is the F9 return of a specific Poko
+    # export. Shown as metadata in the sync log ("UPD-5 · from EXP-3"), never
+    # part of the identity or the counter.
+    roundtrip_from_export_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("schedule_exports.id"), nullable=True
+    )
     imported_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     activity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -484,6 +484,36 @@ export interface ScheduleImport {
   activity_count: number;
   critical_count: number;
   warnings: string[];
+  // "UPD-1", "UPD-2"… for status updates; "Baseline programme" (revision_no
+  // null) for the frozen plan. Null on imports from before sync-log tracking.
+  revision_no: number | null;
+  revision_label: string | null;
+  roundtrip_from_export_id: string | null;
+}
+
+export interface ScheduleExport {
+  id: string;
+  project_id: string;
+  revision_no: number;
+  revision_label: string;
+  source_filename: string;
+  data_date: string | null;
+  activity_count: number;
+  exported_by_user_id: string;
+  exported_at: string;
+}
+
+export interface SyncLogEntry {
+  kind: "export" | "import";
+  id: string;
+  label: string;
+  at: string;
+  user_id: string;
+  user_name: string | null;
+  activity_count: number;
+  data_date: string | null;
+  filename: string;
+  linked_export_label: string | null;
 }
 
 export interface ActivityUpdatePayload {

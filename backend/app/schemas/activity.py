@@ -82,3 +82,6 @@ class ScheduleImportOut(BaseModel):
     activity_count: int
     critical_count: int
     warnings: list[str]
+    revision_no: int | None = None
+    revision_label: str | None = None
+    roundtrip_from_export_id: uuid.UUID | None = None

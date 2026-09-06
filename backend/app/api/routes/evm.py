@@ -254,7 +254,9 @@ def upload_baseline_program(
 
     file_bytes = file.file.read()
     try:
-        schedule_import = import_xer(db, project_id, ctx, file.filename, file_bytes)
+        schedule_import = import_xer(
+            db, project_id, ctx, file.filename, file_bytes, revision_kind="baseline"
+        )
     except XerParseError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except CpmCycleError as e:

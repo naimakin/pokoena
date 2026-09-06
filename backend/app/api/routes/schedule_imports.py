@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -8,6 +8,7 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
 from app.models.project import Project
+from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ScheduleImportOut
@@ -36,6 +37,7 @@ def list_schedule_imports(
 def upload_schedule(
     project_id: uuid.UUID,
     file: UploadFile = File(...),
+    roundtrip_from_export_id: uuid.UUID | None = Form(None),
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ScheduleImport:
@@ -45,9 +47,25 @@ def upload_schedule(
     if not file.filename or not file.filename.lower().endswith(".xer"):
         raise HTTPException(status_code=400, detail="Only .xer files are supported")
 
+    if roundtrip_from_export_id is not None:
+        linked = (
+            db.query(ScheduleExport)
+            .filter(
+                ScheduleExport.tenant_id == ctx.tenant_id,
+                ScheduleExport.project_id == project_id,
+                ScheduleExport.id == roundtrip_from_export_id,
+            )
+            .first()
+        )
+        if linked is None:
+            raise HTTPException(status_code=400, detail="Unknown export to link this upload to")
+
     file_bytes = file.file.read()
     try:
-        return import_xer(db, project_id, ctx, file.filename, file_bytes)
+        return import_xer(
+            db, project_id, ctx, file.filename, file_bytes,
+            roundtrip_from_export_id=roundtrip_from_export_id,
+        )
     except XerParseError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except CpmCycleError as e:

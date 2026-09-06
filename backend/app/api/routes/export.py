@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -13,6 +14,7 @@ from app.models.calendar import Calendar
 from app.models.project import Project
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
+from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.wbs_node import WbsNode
 
@@ -71,8 +73,31 @@ def export_xer(
         code_types, code_values, task_activity_codes, data_date,
     )
 
+    # Log the export with a per-project sequence label (EXP-1, EXP-2…) so the
+    # user can tell which file they sent to P6 and which F9 result came back.
+    next_no = (
+        db.query(func.max(ScheduleExport.revision_no))
+        .filter(ScheduleExport.tenant_id == ctx.tenant_id, ScheduleExport.project_id == project_id)
+        .scalar()
+        or 0
+    ) + 1
+    filename = f"{project.code}-EXP-{next_no}.xer"
+    db.add(
+        ScheduleExport(
+            tenant_id=ctx.tenant_id,
+            project_id=project_id,
+            revision_no=next_no,
+            revision_label=f"EXP-{next_no}",
+            source_filename=filename,
+            data_date=data_date,
+            activity_count=len(activities),
+            exported_by_user_id=ctx.user.id,
+        )
+    )
+    db.commit()
+
     return Response(
         content=xer_bytes,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{project.code}.xer"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
