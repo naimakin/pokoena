@@ -55,6 +55,27 @@ class ActivityUpdate(BaseModel):
     remaining_duration_days: int | None = Field(default=None, ge=0)
 
 
+class ActivityBatchItemIn(ActivityUpdate):
+    """One row of a PATCH /activities?project_id= batch — the editable fields
+    plus which activity they apply to."""
+
+    id: uuid.UUID
+
+
+class ActivityBatchUpdateIn(BaseModel):
+    updates: list[ActivityBatchItemIn] = Field(min_length=1, max_length=2000)
+
+
+class ActivityBatchRowError(BaseModel):
+    id: uuid.UUID
+    error: str
+
+
+class ActivityBatchResultOut(BaseModel):
+    saved: list[ActivityOut]
+    failed: list[ActivityBatchRowError]
+
+
 class ActivityRelationshipOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

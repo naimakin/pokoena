@@ -81,8 +81,17 @@ def test_wbs_tree_rollup_activity_counts(client, db_session):
     assert rows["C"]["total_activity_count"] == 3  # 1 direct + 2 under Grinding
     assert rows["M"]["total_activity_count"] == 1
     assert rows["R"]["total_activity_count"] == 4  # everything
-    # seq_num ordering preserved
+    # preorder (depth-first), not flat seq_num
     assert [r["wbs_id"] for r in client.get(f"/projects/{project.id}/wbs-nodes").json()] == ["R", "C", "G", "M"]
+    # hierarchy metadata for the indented register
+    assert rows["R"]["depth"] == 0 and rows["C"]["depth"] == 1 and rows["G"]["depth"] == 2
+    assert rows["M"]["depth"] == 1
+    assert rows["G"]["path_ids"] == ["R", "C", "G"]
+    # short names here are prose ("Construction"), so outline codes are positional
+    assert rows["R"]["outline_code"] == "1"
+    assert rows["C"]["outline_code"] == "1.1"
+    assert rows["G"]["outline_code"] == "1.1.1"
+    assert rows["M"]["outline_code"] == "1.2"
 
 
 def test_wbs_node_with_out_of_tree_parent_is_treated_as_root(client, db_session):

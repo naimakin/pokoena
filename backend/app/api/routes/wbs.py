@@ -21,10 +21,11 @@ def list_wbs_nodes(
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[WbsNodeOut]:
-    """The project's WBS tree as a flat, seq_num-ordered list — the frontend
-    reassembles the hierarchy from parent_wbs_id. Each node also carries a
-    direct and a rolled-up activity count (activities join the tree via
-    Activity.wbs_path, which xer_import sets to the activity's TASK.wbs_id)."""
+    """The project's WBS tree as a preorder-flattened list carrying depth,
+    path_ids and a dotted outline_code — the frontend renders it as an indented
+    register and reassembles the hierarchy from parent_wbs_id. Each node also
+    carries a direct and a rolled-up activity count (activities join the tree
+    via Activity.wbs_path, which xer_import sets to the activity's TASK.wbs_id)."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx)
 
@@ -70,6 +71,31 @@ def list_wbs_nodes(
     for root in children.get(None, []):
         rollup(root, set())
 
+    # Preorder walk: assign depth / path_ids / outline_code and produce the
+    # return order. `children` lists are already seq_num-ordered (nodes was).
+    ordered: list[tuple[WbsNode, int, list[str], str]] = []
+
+    def walk(node: WbsNode, depth: int, ancestors: list[str], parent_code: str, index: int, seen: set[str]) -> None:
+        if node.wbs_id in seen:  # defensive: a malformed file could cycle
+            return
+        seen.add(node.wbs_id)
+        # Positional dotted outline ("1", "1.2", "1.2.1") — predictable and P6-like.
+        segment = str(index + 1)
+        outline_code = f"{parent_code}.{segment}" if parent_code else segment
+        path_ids = [*ancestors, node.wbs_id]
+        ordered.append((node, depth, path_ids, outline_code))
+        for child_index, child in enumerate(children.get(node.wbs_id, [])):
+            walk(child, depth + 1, path_ids, outline_code, child_index, seen)
+
+    root_seen: set[str] = set()
+    for root_index, root in enumerate(children.get(None, [])):
+        walk(root, 0, [], "", root_index, root_seen)
+
+    # Any node not reached from a root (a pure cycle in a malformed file) is
+    # still returned, flat, so the list stays complete.
+    for leftover_index, n in enumerate(n for n in nodes if n.wbs_id not in root_seen):
+        ordered.append((n, 0, [n.wbs_id], str(leftover_index + 1)))
+
     return [
         WbsNodeOut(
             id=n.id,
@@ -80,6 +106,9 @@ def list_wbs_nodes(
             seq_num=n.seq_num,
             direct_activity_count=direct.get(n.wbs_id, 0),
             total_activity_count=totals.get(n.wbs_id, direct.get(n.wbs_id, 0)),
+            depth=depth,
+            path_ids=path_ids,
+            outline_code=outline_code,
         )
-        for n in nodes
+        for n, depth, path_ids, outline_code in ordered
     ]

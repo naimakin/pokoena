@@ -22,6 +22,7 @@ from app.api.routes import (
     project_status,
     projects,
     risk,
+    saved_activity_filters,
     schedule_imports,
     subcontractor_organizations,
     sync,
@@ -90,6 +91,7 @@ app.include_router(metadata.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 app.include_router(project_status.router)
+app.include_router(saved_activity_filters.router)
 
 
 @app.get("/healthz")

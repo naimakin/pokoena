@@ -1,54 +1,96 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { Activity, BaselineStatus, ProgressEntryPayload, WbsNode } from "@/lib/types";
-import { ChevronDownIcon, ChevronUpIcon, ClockIcon } from "@/components/icons";
+import type { Activity, BaselineStatus, SavedActivityFilter, ScheduleImport, WbsNode } from "@/lib/types";
+import { applyFilter, EMPTY_CRITERIA, normalizeCriteria, type FilterCriteria } from "@/components/progress/filter";
+import { FilterPanel } from "@/components/progress/FilterPanel";
+import { StatusDatesMode } from "@/components/progress/StatusDatesMode";
+import { ManhoursMode } from "@/components/progress/ManhoursMode";
 
-interface RowDraft {
-  burnedHours: string;
-  physicalPct: string;
-}
+type Mode = "status" | "manhours";
+const MODE_KEY = "poko:progress:mode";
+const VIEW = "progress";
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export default function ProgressInputPage() {
+export default function ProgressPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
+
   const [activities, setActivities] = useState<Activity[]>([]);
   const [wbsNodes, setWbsNodes] = useState<WbsNode[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedActivityFilter[]>([]);
   const [hasActiveBaseline, setHasActiveBaseline] = useState(false);
+  const [dataDate, setDataDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [entryDate, setEntryDate] = useState(todayIso());
-  const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
+  const [mode, setMode] = useState<Mode>("status");
+  const [criteria, setCriteriaState] = useState<FilterCriteria>(EMPTY_CRITERIA);
+  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
+  const [filterDirty, setFilterDirty] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [submitting, setSubmitting] = useState(false);
+
+  const [statusDirty, setStatusDirty] = useState(0);
+  const [manhoursDirty, setManhoursDirty] = useState(0);
+  const totalDirty = statusDirty + manhoursDirty;
+
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem(MODE_KEY);
+      if (m === "status" || m === "manhours") setMode(m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (totalDirty === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [totalDirty]);
+
+  const loadFilters = useCallback(async () => {
+    if (!project) return;
+    try {
+      const rows = await api.get<SavedActivityFilter[]>(
+        `/projects/${project.id}/saved-filters?view=${VIEW}`,
+      );
+      setSavedFilters(rows);
+    } catch {
+      setSavedFilters([]);
+    }
+  }, [project]);
 
   useEffect(() => {
     async function load() {
       if (!project) {
         setActivities([]);
-        setWbsNodes([]);
         setLoading(false);
         return;
       }
       setLoading(true);
       setError(null);
+      setCriteriaState(EMPTY_CRITERIA);
+      setActiveSavedId(null);
+      setFilterDirty(false);
       try {
-        const [acts, wbs, baseline] = await Promise.all([
+        const [acts, nodes, baseline, imports] = await Promise.all([
           api.get<Activity[]>(`/activities?project_id=${project.id}`),
           api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
           api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
+          api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
         ]);
         setActivities(acts);
-        setWbsNodes(wbs);
+        setWbsNodes(nodes);
         setHasActiveBaseline(baseline.has_active);
+        setDataDate(imports[0]?.data_date ?? null);
+        loadFilters();
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load activities.");
       } finally {
@@ -56,27 +98,23 @@ export default function ProgressInputPage() {
       }
     }
     load();
-  }, [project]);
+  }, [project, loadFilters]);
 
-  const groups = useMemo(() => {
-    const nodeByWbsId = new Map(wbsNodes.map((n) => [n.wbs_id, n]));
-    const byGroup = new Map<string, Activity[]>();
-    for (const a of activities) {
-      const key = (a.wbs_path && nodeByWbsId.has(a.wbs_path) ? a.wbs_path : null) ?? "__ungrouped__";
-      const list = byGroup.get(key) ?? [];
-      list.push(a);
-      byGroup.set(key, list);
-    }
-    return Array.from(byGroup.entries())
-      .map(([wbsId, acts]) => ({
-        wbsId,
-        label: wbsId === "__ungrouped__" ? "Ungrouped" : nodeByWbsId.get(wbsId)?.wbs_name ?? wbsId,
-        activities: acts.sort((a, b) => a.external_id.localeCompare(b.external_id)),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [activities, wbsNodes]);
+  const nodeByWbsId = useMemo(() => new Map(wbsNodes.map((n) => [n.wbs_id, n])), [wbsNodes]);
+  const filtered = useMemo(
+    () => applyFilter(activities, nodeByWbsId, criteria),
+    [activities, nodeByWbsId, criteria],
+  );
 
-  function toggleGroup(wbsId: string) {
+  const setCriteria = useCallback(
+    (next: FilterCriteria) => {
+      setCriteriaState(next);
+      if (activeSavedId) setFilterDirty(true);
+    },
+    [activeSavedId],
+  );
+
+  function toggleCollapse(wbsId: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(wbsId)) next.delete(wbsId);
@@ -85,39 +123,67 @@ export default function ProgressInputPage() {
     });
   }
 
-  function setDraft(activityId: string, field: keyof RowDraft, value: string) {
-    setDrafts((prev) => ({ ...prev, [activityId]: { ...prev[activityId], [field]: value } }));
+  function switchMode(m: Mode) {
+    setMode(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* ignore */
+    }
   }
 
-  const pendingCount = Object.values(drafts).filter((d) => d.burnedHours && Number(d.burnedHours) > 0).length;
+  const onActivitiesUpdated = useCallback((rows: Activity[]) => {
+    setActivities((prev) => {
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      return prev.map((a) => byId.get(a.id) ?? a);
+    });
+  }, []);
 
-  async function submitProgress() {
+  function selectSaved(f: SavedActivityFilter) {
+    setCriteriaState(normalizeCriteria(f.criteria));
+    setActiveSavedId(f.id);
+    setFilterDirty(false);
+  }
+  function clearSaved() {
+    setActiveSavedId(null);
+    setFilterDirty(false);
+  }
+  async function saveNewFilter(name: string) {
     if (!project) return;
-    const entries: ProgressEntryPayload[] = Object.entries(drafts)
-      .filter(([, d]) => d.burnedHours && Number(d.burnedHours) > 0)
-      .map(([activityId, d]) => ({
-        activity_id: activityId,
-        entry_date: entryDate,
-        burned_manhours_daily: Number(d.burnedHours),
-        physical_pct_snapshot: d.physicalPct ? Number(d.physicalPct) : undefined,
-      }));
-    if (entries.length === 0) return;
-
-    setSubmitting(true);
     try {
-      const result = await api.post<{ written: number; out_of_sequence_count: number }>(
-        `/projects/${project.id}/evm/progress`,
-        { entries }
+      const created = await api.post<SavedActivityFilter>(
+        `/projects/${project.id}/saved-filters?view=${VIEW}`,
+        { name, criteria: criteria as unknown as Record<string, unknown>, filter_version: 1 },
       );
-      showToast(
-        `${result.written} progress entr${result.written === 1 ? "y" : "ies"} recorded` +
-          (result.out_of_sequence_count > 0 ? ` (${result.out_of_sequence_count} out of sequence)` : "")
-      );
-      setDrafts({});
+      await loadFilters();
+      setActiveSavedId(created.id);
+      setFilterDirty(false);
+      showToast("Filter saved.");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to submit progress.");
-    } finally {
-      setSubmitting(false);
+      showToast(err instanceof ApiError ? err.message : "Could not save filter.");
+    }
+  }
+  async function updateActiveFilter() {
+    if (!project || !activeSavedId) return;
+    try {
+      await api.put<SavedActivityFilter>(`/projects/${project.id}/saved-filters/${activeSavedId}`, {
+        criteria: criteria as unknown as Record<string, unknown>,
+      });
+      await loadFilters();
+      setFilterDirty(false);
+      showToast("Filter updated.");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not update filter.");
+    }
+  }
+  async function deleteSaved(f: SavedActivityFilter) {
+    if (!project) return;
+    try {
+      await api.delete(`/projects/${project.id}/saved-filters/${f.id}`);
+      if (activeSavedId === f.id) clearSaved();
+      await loadFilters();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not delete filter.");
     }
   }
 
@@ -137,125 +203,90 @@ export default function ProgressInputPage() {
       </div>
     );
   }
+  if (!project) {
+    return (
+      <div className="a-content">
+        <p className="page-desc">No project selected.</p>
+      </div>
+    );
+  }
+
+  const canEdit = true; // route enforces per-role; company_employee without edit gets 403 on save
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Progress Input</b>
+          {project?.name ?? "—"} / <b>Progress</b>
         </span>
+        <div className="spacer" />
+        {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress Input</div>
-            <div className="page-desc">Log today&rsquo;s burned manhours per activity — feeds the EVM S-Curve</div>
+            <div className="page-title">Progress</div>
+            <div className="page-desc">
+              {filtered.length} of {activities.length} activities
+              {dataDate ? ` · data date ${new Date(dataDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+            </div>
+          </div>
+          <div className="segmented">
+            <button className={mode === "status" ? "active" : ""} onClick={() => switchMode("status")}>
+              Status &amp; Dates
+            </button>
+            <button className={mode === "manhours" ? "active" : ""} onClick={() => switchMode("manhours")}>
+              Manhours (EVM)
+            </button>
           </div>
         </div>
-
-        {!hasActiveBaseline && (
-          <div className="banner" style={{ marginBottom: "1rem" }}>
-            <ClockIcon className="icon" style={{ color: "var(--warn)" }} />
-            <span style={{ fontSize: ".8125rem" }}>
-              No baseline is locked yet — progress can be entered, but submission requires an active baseline
-              (lock one from EVM / S-Curve first).
-            </span>
-          </div>
-        )}
 
         {activities.length === 0 ? (
           <div className="card">
             <p className="empty-state">No activities yet — import a schedule from Program Library.</p>
           </div>
         ) : (
-          <div className="card">
-            <div className="card-head" style={{ flexWrap: "wrap", gap: ".6rem" }}>
-              <div className="field" style={{ maxWidth: 200 }}>
-                <label htmlFor="entry-date">Entry date</label>
-                <input id="entry-date" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
-              </div>
-              <button className="btn btn-primary" onClick={submitProgress} disabled={submitting || pendingCount === 0 || !hasActiveBaseline}>
-                {submitting ? "Submitting…" : `Submit Progress (${pendingCount})`}
-              </button>
-            </div>
+          <>
+            <FilterPanel
+              criteria={criteria}
+              onChange={setCriteria}
+              nodes={wbsNodes}
+              savedFilters={savedFilters}
+              activeSavedId={activeSavedId}
+              filterDirty={filterDirty}
+              onSelectSaved={selectSaved}
+              onClearSaved={clearSaved}
+              onSaveNew={saveNewFilter}
+              onUpdateActive={updateActiveFilter}
+              onDeleteSaved={deleteSaved}
+            />
 
-            {groups.map((group) => {
-              const isCollapsed = collapsed.has(group.wbsId);
-              return (
-                <div key={group.wbsId}>
-                  <button
-                    onClick={() => toggleGroup(group.wbsId)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: ".4rem",
-                      width: "100%",
-                      padding: ".6rem 1.1rem",
-                      background: "var(--surface-2)",
-                      border: "none",
-                      borderBottom: "1px solid var(--border)",
-                      borderTop: "1px solid var(--border)",
-                      cursor: "pointer",
-                      fontSize: ".75rem",
-                      fontWeight: 700,
-                      textAlign: "left",
-                    }}
-                  >
-                    {isCollapsed ? <ChevronDownIcon className="icon" style={{ width: 14, height: 14 }} /> : <ChevronUpIcon className="icon" style={{ width: 14, height: 14 }} />}
-                    {group.label}
-                    <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>({group.activities.length})</span>
-                  </button>
-                  {!isCollapsed && (
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Activity</th>
-                            <th>Status</th>
-                            <th>% Complete</th>
-                            <th style={{ width: 160 }}>Burned Hours Today</th>
-                            <th style={{ width: 160 }}>New % Complete</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.activities.map((a) => (
-                            <tr key={a.id}>
-                              <td>
-                                <div className="subname">{a.name}</div>
-                                <div className="actid">{a.external_id}</div>
-                              </td>
-                              <td style={{ textTransform: "capitalize" }}>{a.status.replace("_", " ")}</td>
-                              <td className="num">{a.percent_complete}%</td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="0.5"
-                                  placeholder="0"
-                                  value={drafts[a.id]?.burnedHours ?? ""}
-                                  onChange={(e) => setDraft(a.id, "burnedHours", e.target.value)}
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  placeholder={String(a.percent_complete)}
-                                  value={drafts[a.id]?.physicalPct ?? ""}
-                                  onChange={(e) => setDraft(a.id, "physicalPct", e.target.value)}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+            <div className="card" style={{ padding: 0 }}>
+              <StatusDatesMode
+                hidden={mode !== "status"}
+                nodes={wbsNodes}
+                activities={filtered}
+                allActivities={activities}
+                dataDate={dataDate}
+                projectId={project.id}
+                canEdit={canEdit}
+                collapsed={collapsed}
+                onToggle={toggleCollapse}
+                onActivitiesUpdated={onActivitiesUpdated}
+                onDirtyChange={setStatusDirty}
+              />
+              <ManhoursMode
+                hidden={mode !== "manhours"}
+                nodes={wbsNodes}
+                activities={filtered}
+                projectId={project.id}
+                hasActiveBaseline={hasActiveBaseline}
+                collapsed={collapsed}
+                onToggle={toggleCollapse}
+                onDirtyChange={setManhoursDirty}
+              />
+            </div>
+          </>
         )}
       </div>
     </>

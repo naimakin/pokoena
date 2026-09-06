@@ -183,13 +183,26 @@ def import_xer(
         wbs_row.wbs_name = node.wbs_name
         wbs_row.seq_num = node.seq_num
 
-    # --- activities: upsert by (project_id, external_id==task_code) ---
-    existing_activities = {a.external_id: a for a in db.query(Activity).filter(Activity.project_id == project_id).all()}
+    # --- activities: upsert by (project_id, external_id==task_code), falling
+    # back to P6's internal task_id so an Activity-ID rename in P6 stays an
+    # UPDATE (preserving user-entered actual dates / % / status) instead of a
+    # delete + recreate that would silently drop those edits. ---
+    _all_activities = db.query(Activity).filter(Activity.project_id == project_id).all()
+    existing_activities = {a.external_id: a for a in _all_activities}
+    existing_by_p6_task_id = {a.p6_task_id: a for a in _all_activities if a.p6_task_id}
     task_id_to_row_id: dict[str, uuid.UUID] = {}
     critical_count = 0
+    incoming_task_codes = {a.task_code for a in parsed.activities}
 
     for act in parsed.activities:
         row = existing_activities.get(act.task_code)
+        if row is None and act.task_id:
+            renamed = existing_by_p6_task_id.get(act.task_id)
+            # Only treat it as a rename when the old code isn't itself still in
+            # this import (i.e. it really went away, not just got reassigned).
+            if renamed is not None and renamed.external_id not in incoming_task_codes:
+                row = renamed
+                row.external_id = act.task_code
         is_new = row is None
         if row is None:
             row = Activity(

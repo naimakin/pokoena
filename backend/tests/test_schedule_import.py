@@ -73,6 +73,45 @@ def test_reimport_preserves_subcontractor_owned_progress_fields(client, db_sessi
     assert refreshed.total_float_hours == 0
 
 
+def test_import_preserves_user_entered_actuals_including_rename(client, db_session):
+    """A company user enters actual dates on the Progress page, then a planner
+    re-imports the .xer — even one where the activity's P6 Activity ID changed.
+    The user's actuals + derived status must survive (matched by p6_task_id)."""
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    _upload(client, project.id)
+
+    a100 = db_session.query(Activity).filter(
+        Activity.project_id == project.id, Activity.external_id == "A100"
+    ).one()
+    patch = client.patch(
+        f"/activities/{a100.id}",
+        json={"actual_start": "2026-01-05", "actual_finish": "2026-01-06"},
+    )
+    assert patch.status_code == 200
+    assert patch.json()["status"] == "complete"
+
+    # Re-import with A100 renamed to A100X (task_id 1001 unchanged).
+    renamed = FIXTURE.read_bytes().decode("utf-8").replace("\tA100\t", "\tA100X\t")
+    resp = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("renamed.xer", renamed.encode("utf-8"), "application/octet-stream")},
+    )
+    assert resp.status_code == 201
+
+    db_session.expire_all()
+    same_row = db_session.query(Activity).filter(Activity.id == a100.id).one()
+    assert same_row.external_id == "A100X"
+    assert same_row.actual_start is not None
+    assert same_row.actual_finish is not None
+    assert same_row.status.value == "complete"
+    assert same_row.percent_complete == 100
+    # No orphaned duplicate left behind.
+    assert db_session.query(Activity).filter(
+        Activity.project_id == project.id, Activity.external_id == "A100"
+    ).count() == 0
+
+
 def test_first_import_auto_locks_baseline(client, db_session):
     tenant, project = _setup(db_session)
     client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})

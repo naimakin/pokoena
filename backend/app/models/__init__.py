@@ -25,6 +25,7 @@ from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
+from app.models.saved_activity_filter import SavedActivityFilter
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
@@ -79,6 +80,7 @@ __all__ = [
     "ProjectScope",
     "Resource",
     "ResourceAssignment",
+    "SavedActivityFilter",
     "ScopeSubmission",
     "SubcontractorOrganization",
     "SubcontractorScopeAssignment",

@@ -17,3 +17,7 @@ class WbsNodeOut(BaseModel):
     # direct_activity_count for this node plus every descendant (P6's
     # "Total Activities" rollup column)
     total_activity_count: int = 0
+    # --- hierarchy, computed by the route (nodes are returned in preorder) ---
+    depth: int = 0  # 0 = root
+    path_ids: list[str] = []  # root → this node, inclusive
+    outline_code: str = ""  # dotted-decimal, e.g. "1.2.1" — P6 "WBS Code" column

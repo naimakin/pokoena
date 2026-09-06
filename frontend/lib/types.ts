@@ -472,6 +472,10 @@ export interface WbsNode {
   seq_num: number | null;
   direct_activity_count: number;
   total_activity_count: number;
+  // Computed by the route; nodes are returned in preorder.
+  depth: number;
+  path_ids: string[];
+  outline_code: string;
 }
 
 export interface ScheduleImport {
@@ -772,4 +776,39 @@ export interface ProjectStatus {
   has_snapshots: boolean;
   summary: StatusSummary;
   priorities: Priorities;
+}
+
+// --- Execution → Progress: saved filters + batch activity update ---
+
+export interface SavedActivityFilter {
+  id: string;
+  project_id: string;
+  user_id: string;
+  view_key: string;
+  name: string;
+  criteria: Record<string, unknown>;
+  is_shared: boolean;
+  filter_version: number;
+  is_owner: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedFilterCreate {
+  name: string;
+  criteria: Record<string, unknown>;
+  is_shared?: boolean;
+  filter_version?: number;
+}
+
+export interface ActivityBatchItem {
+  id: string;
+  actual_start?: string | null;
+  actual_finish?: string | null;
+  percent_complete?: number | null;
+}
+
+export interface ActivityBatchResult {
+  saved: Activity[];
+  failed: { id: string; error: string }[];
 }
