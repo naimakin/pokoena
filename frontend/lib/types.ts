@@ -394,6 +394,8 @@ export interface WbsNode {
   wbs_short_name: string;
   wbs_name: string;
   seq_num: number | null;
+  direct_activity_count: number;
+  total_activity_count: number;
 }
 
 export interface ScheduleImport {
