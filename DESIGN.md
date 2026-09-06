@@ -1,37 +1,37 @@
 ---
 version: "1.0"
 name: Poko
-description: "A warm-light project management dashboard built around #f7f5f1 (cream/parchment canvas), #0F1A2A (deep navy ink), and #f59e0b (amber-500) as the single chromatic accent. The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, trustworthy, and quietly refined. Display type is Barlow Condensed (weight 600–700) for headers and column labels — compressed, industrial, authoritative. Body copy uses Outfit (Aptos is not an open/Google font, so Outfit — the documented fallback — is the primary body face here). Monospace data cells use Space Mono. Tables and activity rows carry amber left-border highlights on selection/hover. Critical path rows glow with #C0130A at 6–10% opacity. The amber accent appears on primary CTAs, selected rows, and data date markers — never decoratively. Float health is communicated through a five-step semantic color ramp from red (zero float) through green (high float)."
+description: "A warm-light project management dashboard built around #f7f5f1 (cream/parchment canvas), #0F1A2A (deep navy ink), and #f59e0b (amber-500) as the single chromatic accent. Warm paper, cool ink: the neutral ramp (surfaces, hairlines) is warm parchment/taupe while the ink ramp is a cool navy-slate — the way a set of architectural drawings reads. The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, trustworthy, and quietly refined. Display type is Barlow Condensed (weight 600–700) for headers and column labels — compressed, industrial, authoritative. Body copy uses Outfit (Aptos is not an open/Google font, so Outfit — the documented fallback — is the primary body face here). Monospace data cells use Space Mono with tabular-nums. Tables and nav rows carry a 3px amber left-border marker on selection. Critical path rows glow with #C0130A at 6% opacity behind a red left-border. The amber accent appears on primary CTAs, selected rows, focus rings, and data date markers — never decoratively. Float health is communicated through a five-step semantic color ramp from red (zero float) through green (high float). Elevation is a four-step soft, low-spread, faintly-warm shadow scale (xs resting / sm raised / md overlay / lg modal). Border radius is a consistent 2px-step scale (4/6/8/10/12 + pill)."
 
 colors:
-  primary: "#f59e0b"
-  on-primary: "#ffffff"
-  primary-hover: "#d97706"
-  primary-focus: "#b45309"
-  primary-muted: "rgba(245,158,11,0.10)"
-  primary-subtle: "rgba(245,158,11,0.04)"
-  ink: "#0F1A2A"
-  ink-muted: "#44403c"
-  ink-subtle: "#78716c"
-  ink-tertiary: "#a8a29e"
-  canvas: "#f7f5f1"
-  surface-1: "#ffffff"
-  surface-2: "#fafaf9"
-  surface-3: "#f5f5f4"
-  surface-4: "#e7e5e4"
-  hairline: "#d6d3d1"
-  hairline-strong: "#a8a29e"
-  critical: "#C0130A"
-  critical-muted: "rgba(192,19,10,0.06)"
-  critical-hover: "rgba(192,19,10,0.09)"
-  cerulean: "#0F6B8A"
-  violet: "#6D3FA0"
+  # CSS var name in globals.css is given in parentheses.
+  primary: "#f59e0b"              # --accent
+  on-primary: "#ffffff"           # --accent-contrast (light); #1a1206 in dark
+  primary-hover: "#d97706"        # --accent-strong (light); #fbbf24 in dark
+  primary-focus: "#b45309"        # --accent-focus (light); #fcd34d in dark
+  primary-muted: "rgba(245,158,11,0.10)"   # --accent-soft (light); 0.16 in dark
+  primary-subtle: "rgba(245,158,11,0.05)"  # --accent-subtle (light); 0.08 in dark
+  accent-line: "#f59e0b"          # --accent-line — the 3px row/nav selection marker
+  ink: "#0F1A2A"                  # --text-primary
+  ink-muted: "#3a4551"            # --text-secondary — cool navy-slate
+  ink-subtle: "#616a76"           # --text-muted — cool slate
+  ink-tertiary: "#99a0aa"         # --text-tertiary — placeholders, faintest labels
+  canvas: "#f7f5f1"               # --bg
+  surface-1: "#ffffff"            # --surface (raised cards)
+  surface-2: "#f3efe7"            # --surface-2 — warm recessed (thead, row hover, panels)
+  surface-3: "#ebe5da"            # --surface-3 — warm deeper (tracks, avatars, chips)
+  hairline: "#d8d1c0"             # --border — warm soft hairline
+  hairline-strong: "#ada38b"      # --border-strong — warm divider / input border
+  critical: "#C0130A"             # --crit
+  critical-muted: "rgba(192,19,10,0.06)"   # --crit-soft
+  critical-line: "rgba(192,19,10,0.30)"    # --crit-line — critical-row left-border
+  cerulean: "#0F6B8A"             # --info
   float-zero: "#C0130A"
   float-low: "#EA580C"
   float-medium: "#D97706"
   float-adequate: "#65A30D"
   float-high: "#16A34A"
-  selection-bg: "rgba(245,158,11,0.20)"
+  selection-bg: "rgba(245,158,11,0.10)"    # selected data-row tint (--accent-soft)
   selection-ink: "#92400e"
 
 typography:
@@ -101,17 +101,32 @@ spacing:
   3xl: 48px
 
 borders:
-  radius-sm: 4px
-  radius-md: 6px
-  radius-lg: 8px
+  # consistent 2px-step scale — CSS var name in parentheses
+  radius-xs: 4px    # (--radius-xs) chips-in-rows, small badges, btn-sm, focus outline
+  radius-sm: 6px    # (--radius-sm) buttons, inputs, nav rows, menu items
+  radius-md: 8px    # (--radius-md) dropdown menus, banners, modal-diff, toast, segmented
+  radius-lg: 10px   # (--radius-lg) cards, activity cards, dropzone
+  radius-xl: 12px   # (--radius-xl) modals, subcontractor frame corners
+  radius-pill: 999px
   activity-row-left: "3px solid transparent"
-  activity-row-selected: "3px solid #f59e0b"
-  activity-row-critical: "3px solid rgba(192,19,10,0.30)"
+  activity-row-selected: "inset 3px 0 0 #f59e0b (box-shadow) + rgba(245,158,11,0.10) tint"
+  activity-row-critical: "inset 3px 0 0 rgba(192,19,10,0.30) (box-shadow) + rgba(192,19,10,0.06) tint"
+  nav-active-marker: "3px amber bar, 16px tall, on ::before of .navitem.active"
 
 shadows:
-  card: "0 1px 3px rgba(15,26,42,0.08), 0 1px 2px rgba(15,26,42,0.04)"
-  dropdown: "0 4px 12px rgba(15,26,42,0.12)"
-  modal: "0 8px 24px rgba(15,26,42,0.15)"
+  # soft, low-spread, faintly warm (rgba(31,25,16,x) light / rgba(0,0,0,x) dark)
+  xs: "0 1px 2px rgba(31,25,16,0.06)"                                    # (--shadow-xs) resting — cards, topnav, brand mark
+  sm: "0 1px 2px rgba(31,25,16,0.05), 0 2px 5px rgba(31,25,16,0.06)"     # (--shadow-sm) raised — segmented active, primary-btn hover
+  md: "0 2px 6px rgba(31,25,16,0.07), 0 8px 20px rgba(31,25,16,0.10)"    # (--shadow-md) overlay — dropdowns, sticky sub-footer, login card
+  lg: "0 4px 12px rgba(24,19,12,0.10), 0 20px 44px rgba(24,19,12,0.16)"  # (--shadow-lg) modal, toast
+
+canvas-wash: "two faint radial washes on body — warm amber (top-left, ~4%) + cool navy (top-right, ~2.5%) over the solid --bg. Subtle; opaque full-bleed pages sit on top."
+
+motion:
+  ease: "cubic-bezier(.2,0,0,1)"   # (--ease)
+  dur-1: 120ms                     # (--dur-1) hover/color/border state changes
+  dur-2: 170ms                     # (--dur-2) dropzone, larger surface transitions
+  note: "all animation + transition globally disabled under prefers-reduced-motion"
 
 animations:
   page-in: "opacity 0 → 1, translateY 4px → 0, duration 200ms ease-out"
@@ -119,21 +134,27 @@ animations:
   shimmer: "background-position sweep, duration 2s linear infinite"
   saved-flash: "opacity 1 → 0.4 → 1, duration 600ms ease-in-out"
   spin: "rotate 360deg, duration 800ms linear infinite"
+  btn-press: "translateY(0.5px) on :active"
 
 patterns:
-  activity-table: "virtualized rows, 32px height, amber left border on hover/select, critical rows tinted red at 6% opacity, Space Mono for date/float/duration cells"
-  kpi-card: "white surface-1 card, shadow-card, amber accent top border on important metrics, Barlow Condensed stat values"
-  sidebar: "canvas background, amber indicator for active nav item, ink-subtle for inactive"
-  input: "surface-1 background, hairline border, amber focus ring"
+  activity-table: "virtualized rows, 32px height, warm surface-2 header, row hover → surface-2, selected row → inset 3px amber left-border + amber-soft tint (tr.selected / .row-selected), critical rows → inset 3px red left-border + crit-soft tint (tr.critical), Space Mono tabular-nums for date/float/duration cells"
+  kpi-card: "white surface-1 card, shadow-xs at rest, Barlow Condensed stat values with tabular-nums; optional amber top-edge marker via .card.accent-top (inset 0 2px 0 amber) on a headline metric"
+  sidebar: "surface background, active nav item → amber-soft fill + amber text + 3px amber ::before marker, ink-subtle for inactive, 120ms color/background transition"
+  input: "surface-1 background, hairline-strong border, hover → border ink-subtle, focus → 2px amber outline + 4px amber-soft halo"
   badge-float: "pill shape, float-* color ramp based on TF value, mono font"
+  focus-ring: "2px solid amber outline, 2px offset, plus 0 0 0 4px amber-soft halo — consistent across buttons, inputs, links, [tabindex]"
+  dashboard-widgets: "user-configurable widget grid (Dashboard menu). Categorical chart series never use free hex — they resolve to --dash-1..4, remapped by a [data-dash-theme] on the page root: 'calm' (info/good/warn/amber), 'high-contrast' (info/crit/amber-strong/ink), 'mono-amber' (amber tints). Theme + which widgets show + their order are chosen in the configure modal and saved per user per project."
 
 design_principles:
   - "Data density over decoration — tables are the primary canvas"
-  - "Amber is earned — only use on interactive state, CTA, or critical data marker"
+  - "Amber is earned — only use on interactive state, CTA, focus, or critical data marker"
+  - "Warm paper, cool ink — parchment/taupe neutral ramp against a navy-slate ink ramp"
   - "Barlow Condensed for headings creates professional authority without heaviness"
   - "Warm cream canvas (#f7f5f1) distinguishes from cold-gray SaaS tools"
+  - "Elevation is layered, not outlined — a coherent xs/sm/md/lg soft warm shadow scale"
   - "Float health color ramp is semantic, never decorative — always tied to TF values"
   - "Monospace type in data cells ensures column alignment at 1× screens"
+  - "Micro-interactions are fast (120–170ms) and crisp, and vanish under reduced-motion"
 ---
 
 # Poko Design System
@@ -157,9 +178,15 @@ those variables (`var(--accent)`, `var(--font-display)`, etc.). The three type f
 via `next/font/google` in `frontend/app/layout.tsx`.
 
 ## Component Conventions
-- All tables use `poko-activity-row` class with amber left-border selection pattern
-- Critical path activities: `critical` class modifier → red tint background
-- All numeric/date cells: `poko-mono-xs` (Space Mono 10px)
-- Section headers: Barlow Condensed, uppercase, 700 weight
-- Primary action buttons: amber-500 background, white text, md radius
+- Data rows: `tr.selected` / `.row-selected` → inset 3px amber left-border + amber-soft tint;
+  `tr.critical` → inset 3px red left-border + crit-soft tint (the signature selection pattern)
+- Active nav item: amber-soft fill + amber text + a 3px amber `::before` bar
+- All numeric/date cells: `.num` or `.mono` (Space Mono, `font-variant-numeric: tabular-nums`)
+- Section headers / display type: Barlow Condensed, weight 700, `letter-spacing: -0.015em`
+- Uppercase micro-labels: 0.06–0.11em tracking, weight 500–600, `--text-muted`
+- Primary action buttons: amber-500 background, white text, `--radius-sm`, `--shadow-xs` at rest →
+  `--shadow-sm` on hover, `--accent-focus` on `:active`
 - Destructive/warning badges: float-* color ramp, not generic red/green
+- Radius: use the `--radius-*` scale (xs 4 / sm 6 / md 8 / lg 10 / xl 12 / pill), never ad-hoc px
+- Elevation: use the `--shadow-*` scale (xs/sm/md/lg), never ad-hoc shadows
+- Focus: rely on the global `:focus-visible` rule (amber outline + amber-soft halo) — don't restyle per component
