@@ -471,6 +471,63 @@ export interface DashboardSummary {
   scope_status: ScopeSubmissionStatus[];
 }
 
+// ---- configurable dashboard ----
+
+export type DashboardWidgetKey =
+  | "update-period"
+  | "deadline"
+  | "scopes-submitted"
+  | "flagged"
+  | "health-badge"
+  | "s-curve"
+  | "risk-top3"
+  | "scope-table";
+
+export type DashboardThemeKey = "calm" | "high-contrast" | "mono-amber";
+
+export interface DashboardWidgetConfig {
+  key: DashboardWidgetKey;
+  order: number;
+  enabled: boolean;
+  options: Record<string, unknown>;
+}
+
+export interface DashboardLayout {
+  project_id: string;
+  user_id: string;
+  theme_key: DashboardThemeKey;
+  widgets: DashboardWidgetConfig[];
+  is_default: boolean;
+}
+
+export interface DashboardLayoutUpdate {
+  project_id: string;
+  theme_key: DashboardThemeKey;
+  widgets: DashboardWidgetConfig[];
+}
+
+export type HealthStatus = "good" | "warn" | "crit" | "unknown";
+
+export interface HealthFactor {
+  label: string;
+  status: HealthStatus;
+  detail: string;
+}
+
+export interface ProjectHealth {
+  score: number | null;
+  grade: string;
+  status: HealthStatus;
+  factors: HealthFactor[];
+}
+
+export interface RiskHighlight {
+  title: string;
+  detail: string;
+  severity: "low" | "medium" | "high";
+  source: string;
+}
+
 export interface InviteCreatePayload {
   email: string;
   full_name: string;

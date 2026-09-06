@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { DashboardSummary } from "@/lib/types";
-import { AlertTriangleIcon, BellIcon, CheckIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
+import type {
+  DashboardLayout,
+  DashboardSummary,
+  DashboardThemeKey,
+  DashboardWidgetConfig,
+  DashboardWidgetKey,
+  EvmScurve,
+  ProjectHealth,
+  RiskHighlight,
+} from "@/lib/types";
+import { AlertTriangleIcon, BellIcon, CheckIcon, SettingsIcon } from "@/components/icons";
+import {
+  WIDGET_REGISTRY,
+  WIDGET_ORDER,
+  type WidgetContext,
+} from "@/components/dashboard/DashboardWidgets";
+import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
@@ -13,16 +28,44 @@ function daysUntil(iso: string | null): number | null {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
+const DEFAULT_LAYOUT_WIDGETS: DashboardWidgetConfig[] = WIDGET_ORDER.map((key, i) => ({
+  key,
+  order: i,
+  enabled: true,
+  options: {},
+}));
+
 export default function DashboardPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
+
+  const [layout, setLayout] = useState<DashboardLayout | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [health, setHealth] = useState<ProjectHealth | null>(null);
+  const [risks, setRisks] = useState<RiskHighlight[] | null>(null);
+  const [scurve, setScurve] = useState<EvmScurve | null>(null);
+  const [scurveLocked, setScurveLocked] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  // Auto-open the configure modal once per project when no layout is saved yet.
+  const firstRunPromptedFor = useRef<string | null>(null);
 
-  async function load() {
+  const enabledKeys = useMemo<DashboardWidgetKey[]>(
+    () =>
+      (layout?.widgets ?? DEFAULT_LAYOUT_WIDGETS)
+        .filter((w) => w.enabled)
+        .sort((a, b) => a.order - b.order)
+        .map((w) => w.key),
+    [layout],
+  );
+
+  const load = useCallback(async () => {
     if (!project) {
+      setLayout(null);
       setSummary(null);
       setLoading(false);
       return;
@@ -30,19 +73,57 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const dashboardSummary = await api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`);
-      setSummary(dashboardSummary);
+      const [layoutRes, summaryRes] = await Promise.all([
+        api.get<DashboardLayout>(`/dashboard/layout?project_id=${project.id}`),
+        api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`),
+      ]);
+      setLayout(layoutRes);
+      setSummary(summaryRes);
+      if (layoutRes.is_default && firstRunPromptedFor.current !== project.id) {
+        firstRunPromptedFor.current = project.id;
+        setConfigOpen(true);
+      }
+
+      const wanted = new Set(layoutRes.widgets.filter((w) => w.enabled).map((w) => w.key));
+
+      if (wanted.has("health-badge")) {
+        api
+          .get<ProjectHealth>(`/dashboard/health?project_id=${project.id}`)
+          .then(setHealth)
+          .catch(() => setHealth(null));
+      }
+      if (wanted.has("risk-top3")) {
+        api
+          .get<RiskHighlight[]>(`/dashboard/risk-highlights?project_id=${project.id}`)
+          .then(setRisks)
+          .catch(() => setRisks(null));
+      }
+      if (wanted.has("s-curve")) {
+        setScurveLocked(false);
+        api
+          .get<EvmScurve>(`/projects/${project.id}/evm/scurve?granularity=monthly`)
+          .then((res) => {
+            setScurve(res);
+            setScurveLocked(false);
+          })
+          .catch((err) => {
+            setScurve(null);
+            setScurveLocked(err instanceof ApiError && err.status === 423);
+          });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load the dashboard.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [project]);
 
   useEffect(() => {
+    setHealth(null);
+    setRisks(null);
+    setScurve(null);
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project]);
+  }, [load]);
 
   async function handleRemind() {
     const periodId = summary?.active_period_id;
@@ -68,6 +149,26 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleSaveConfig(widgets: DashboardWidgetConfig[], theme: DashboardThemeKey) {
+    if (!project) return;
+    setSavingConfig(true);
+    try {
+      const saved = await api.put<DashboardLayout>("/dashboard/layout", {
+        project_id: project.id,
+        theme_key: theme,
+        widgets,
+      });
+      setLayout(saved);
+      setConfigOpen(false);
+      showToast("Dashboard saved.");
+      load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to save the dashboard.");
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="a-content">
@@ -87,17 +188,26 @@ export default function DashboardPage() {
   if (!project) {
     return (
       <div className="a-content">
-        <p className="page-desc">No projects yet — create one from the project switcher in the sidebar.</p>
+        <p className="page-desc">No projects yet — create one from the project switcher in the top bar.</p>
       </div>
     );
   }
 
   const pendingCount = summary ? summary.orgs_total - summary.orgs_submitted : 0;
-  const deadlineAt = summary?.deadline_at ?? null;
-  const deadlineDays = daysUntil(deadlineAt);
-  const deadlineDateLabel = deadlineAt ? `Deadline ${new Date(deadlineAt).toLocaleDateString()}` : "No deadline set";
-  const submittedPct =
-    summary && summary.orgs_total > 0 ? Math.round((summary.orgs_submitted / summary.orgs_total) * 100) : 0;
+  const deadlineDays = daysUntil(summary?.deadline_at ?? null);
+
+  const ctx: WidgetContext = {
+    project,
+    summary,
+    health,
+    risks,
+    scurve,
+    scurveLocked,
+    deadlineDays,
+  };
+
+  const kpiKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span === "kpi");
+  const blockKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span !== "kpi");
 
   return (
     <>
@@ -113,13 +223,16 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="a-content">
+      <div className="a-content" data-dash-theme={layout?.theme_key ?? "calm"}>
         <div className="page-head">
           <div>
             <div className="page-title">Dashboard</div>
             <div className="page-desc">{summary?.active_period_label ?? "No open update period"}</div>
           </div>
           <div style={{ display: "flex", gap: ".55rem" }}>
+            <button className="btn btn-secondary" onClick={() => setConfigOpen(true)}>
+              <SettingsIcon className="icon" /> Configure
+            </button>
             <button className="btn btn-secondary" onClick={handleRemind} disabled={!summary?.active_period_id}>
               <BellIcon className="icon" /> Send Reminder
             </button>
@@ -153,121 +266,52 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="kpi-row">
-          <div className="card kpi">
-            <div className="kpi-top">
-              <span className="kpi-label">Update Period</span>
-              <div className="kpi-icon" style={{ background: "var(--good-soft)", color: "var(--good)" }}>
-                <CheckIcon className="icon" />
-              </div>
-            </div>
-            <div className="kpi-value" style={{ fontSize: "1.4rem" }}>
-              {summary?.active_period_status === "open" ? "Open" : summary?.active_period_status === "closed" ? "Closed" : "—"}
-            </div>
-            <div className="kpi-sub">
-              {deadlineDateLabel}
-            </div>
+        {enabledKeys.length === 0 ? (
+          <div className="card">
+            <p className="empty-state">
+              No widgets selected. <button className="btn btn-ghost btn-sm" onClick={() => setConfigOpen(true)}>Configure the dashboard</button>
+            </p>
           </div>
+        ) : (
+          <>
+            {kpiKeys.length > 0 && (
+              <div className="kpi-row">
+                {kpiKeys.map((key) => (
+                  <Fragment key={key}>{WIDGET_REGISTRY[key].render(ctx)}</Fragment>
+                ))}
+              </div>
+            )}
 
-          <div className="card kpi">
-            <div className="kpi-top">
-              <span className="kpi-label">Deadline Countdown</span>
-              <div className="kpi-icon" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
-                <ClockIcon className="icon" />
-              </div>
-            </div>
-            <div className="kpi-value">
-              {deadlineDays ?? "—"}
-              {deadlineDays !== null && (
-                <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)" }}> days</span>
-              )}
-            </div>
-            <div className="kpi-sub">Until this period closes</div>
-          </div>
-
-          <div className="card kpi">
-            <div className="kpi-top">
-              <span className="kpi-label">Scopes Submitted</span>
-              <div className="kpi-icon" style={{ background: "var(--info-soft)", color: "var(--info)" }}>
-                <UsersIcon className="icon" />
-              </div>
-            </div>
-            <div className="kpi-value">
-              {summary?.orgs_submitted ?? 0}
-              <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-                {" "}
-                / {summary?.orgs_total ?? 0}
-              </span>
-            </div>
-            <div className="progress">
-              <span style={{ width: `${submittedPct}%`, background: "var(--info)" }} />
-            </div>
-          </div>
-
-          <div className="card kpi">
-            <div className="kpi-top">
-              <span className="kpi-label">Flagged for Review</span>
-              <div className="kpi-icon" style={{ background: "var(--crit-soft)", color: "var(--crit)" }}>
-                <FlagIcon className="icon" />
-              </div>
-            </div>
-            <div className="kpi-value">{summary?.flagged_pending ?? 0}</div>
-            <div className="kpi-sub">Awaiting admin decision</div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Scope submission status</div>
-              <div className="card-title-sub">
-                {summary?.orgs_total ?? 0} subcontractors &middot; {summary?.active_period_label ?? "—"}
-              </div>
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Subcontractor</th>
-                  <th>Discipline</th>
-                  <th>Status</th>
-                  <th>Activities</th>
-                  <th>Avg % Complete</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary && summary.scope_status.length > 0 ? (
-                  summary.scope_status.map((row) => (
-                    <tr key={row.subcontractor_org_id}>
-                      <td>
-                        <div className="cell-flex">
-                          <div className="subrow-avatar">{row.org_name.slice(0, 2).toUpperCase()}</div>
-                          <span className="subname">{row.org_name}</span>
+            {blockKeys.length > 0 && (
+              <div className="dash-grid">
+                {blockKeys.map((key) => {
+                  const def = WIDGET_REGISTRY[key];
+                  return (
+                    <div key={key} className={`card${def.span === "full" ? " dash-cell-full" : ""}`}>
+                      <div className="card-head">
+                        <div>
+                          <div className="card-title">{def.title}</div>
+                          <div className="card-title-sub">{def.description}</div>
                         </div>
-                      </td>
-                      <td>{row.discipline}</td>
-                      <td>
-                        <span className={`chip ${row.submitted ? "chip-good" : "chip-neutral"}`}>
-                          {row.submitted ? "Submitted" : "Pending"}
-                        </span>
-                      </td>
-                      <td className="num">{row.activity_count}</td>
-                      <td className="num">{row.avg_percent_complete}%</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="empty-state">
-                      No subcontractor scopes on this project yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      </div>
+                      {def.pad ? <div style={{ padding: "1.1rem" }}>{def.render(ctx)}</div> : def.render(ctx)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      <DashboardConfigModal
+        open={configOpen}
+        initialWidgets={layout?.widgets ?? DEFAULT_LAYOUT_WIDGETS}
+        initialTheme={layout?.theme_key ?? "calm"}
+        saving={savingConfig}
+        onCancel={() => setConfigOpen(false)}
+        onSave={handleSaveConfig}
+      />
     </>
   );
 }

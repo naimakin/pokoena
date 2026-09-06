@@ -8,6 +8,7 @@ from app.models.audit_log import AuditLog
 from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve, BaselineStatus
 from app.models.calendar import Calendar
 from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLevel
+from app.models.dashboard_layout import DashboardLayout
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.invite import Invite, InviteStatus
 from app.models.password_reset import PasswordReset
@@ -53,6 +54,7 @@ __all__ = [
     "ChangeRequest",
     "ChangeRequestStatus",
     "RiskLevel",
+    "DashboardLayout",
     "EvmSnapshot",
     "Invite",
     "InviteStatus",
