@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
-import { ArrowRightIcon, DownloadIcon } from "@/components/icons";
+import { ArrowRightIcon, CompareIcon, DownloadIcon } from "@/components/icons";
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
 
 type SectionKey = "added" | "removed" | "renamed" | "modified" | "logic";
@@ -34,6 +34,7 @@ export default function ScheduleChangesPage() {
 
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
+  const [comparing, setComparing] = useState(false);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [hidden, setHidden] = useState<Set<SectionKey>>(new Set());
@@ -46,30 +47,40 @@ export default function ScheduleChangesPage() {
       .catch(() => setImports([]));
   }, [project]);
 
-  const load = useCallback(async () => {
-    if (!project) {
-      setReport(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams();
-    if (fromId) params.set("from_import_id", fromId);
-    if (toId) params.set("to_import_id", toId);
-    const qs = params.toString();
-    try {
-      setReport(await api.get<ScheduleChangeReport>(`/projects/${project.id}/schedule-changes${qs ? `?${qs}` : ""}`));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to compare the schedules.");
-    } finally {
-      setLoading(false);
-    }
-  }, [project, fromId, toId]);
+  const runCompare = useCallback(
+    async (from: string, to: string) => {
+      if (!project) {
+        setReport(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setComparing(true);
+      setError(null);
+      const params = new URLSearchParams();
+      if (from) params.set("from_import_id", from);
+      if (to) params.set("to_import_id", to);
+      const qs = params.toString();
+      try {
+        setReport(await api.get<ScheduleChangeReport>(`/projects/${project.id}/schedule-changes${qs ? `?${qs}` : ""}`));
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to compare the schedules.");
+      } finally {
+        setLoading(false);
+        setComparing(false);
+      }
+    },
+    [project],
+  );
 
+  // Initial view = the default (auto) comparison; the selectors + Compare button re-run it.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (project) {
+      setFromId("");
+      setToId("");
+      runCompare("", "");
+    }
+  }, [project, runCompare]);
 
   const modifiedRows = useMemo(() => {
     const rows = report?.activities.modified ?? [];
@@ -170,14 +181,27 @@ export default function ScheduleChangesPage() {
                 ))}
               </select>
             </label>
+            <button
+              className="btn btn-primary"
+              disabled={comparing || (fromId !== "" && fromId === toId)}
+              onClick={() => runCompare(fromId, toId)}
+            >
+              <CompareIcon className="icon" /> {comparing ? "Comparing…" : "Compare"}
+            </button>
+            {fromId !== "" && fromId === toId && (
+              <span style={{ fontSize: ".7rem", color: "var(--text-muted)", marginBottom: ".5rem" }}>
+                Pick two different updates.
+              </span>
+            )}
           </div>
         )}
 
         {noData ? (
           <div className="card">
             <p className="empty-state">
-              Upload at least two schedule updates from Program Library. Changes compares the two
-              most recent (or pick a pair above).
+              {imports.length >= 2
+                ? "The two updates being compared don't both carry an activity snapshot yet — snapshots are captured from now on, so upload one more .xer from Program Library and the comparison will work."
+                : "Upload at least two schedule updates (.xer) from Program Library. Changes compares the two most recent, or pick a pair above."}
             </p>
           </div>
         ) : (
