@@ -647,6 +647,19 @@ tr.resolved{opacity:.45}
 .filter-cond{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .filter-cond select,.filter-cond input{height:30px}
 
+/* ---------- print (Recovery Plan report) ---------- */
+@media print{
+  .a-topnav,.a-sidebar,.a-topbar,.no-print,.segmented,button{display:none!important}
+  .a-content{padding:0;gap:.75rem;overflow:visible}
+  .card{box-shadow:none;border:1px solid var(--border);break-inside:avoid}
+  .table-wrap{overflow:visible}
+  body{background:#fff}
+  .recovery-print::before{
+    content:"RECOVERY PLAN";display:block;font-family:var(--font-display);font-weight:700;
+    font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
+  }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width:900px){
   .kpi-row{grid-template-columns:repeat(2,1fr)}

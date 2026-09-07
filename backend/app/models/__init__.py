@@ -23,6 +23,12 @@ from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.recovery_plan import (
+    RecoveryItemStatus,
+    RecoveryPlan,
+    RecoveryPlanItem,
+    RecoveryPlanStatus,
+)
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.saved_activity_filter import SavedActivityFilter
@@ -78,6 +84,10 @@ __all__ = [
     "Project",
     "ProjectMembership",
     "ProjectScope",
+    "RecoveryPlan",
+    "RecoveryPlanItem",
+    "RecoveryPlanStatus",
+    "RecoveryItemStatus",
     "Resource",
     "ResourceAssignment",
     "SavedActivityFilter",

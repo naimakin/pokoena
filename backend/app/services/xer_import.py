@@ -45,6 +45,7 @@ from app.models.calendar import Calendar as CalendarModel
 from app.models.project import Project
 from app.models.resource import Resource as ResourceModel
 from app.models.resource_assignment import ResourceAssignment as ResourceAssignmentModel
+from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.models.wbs_node import WbsNode
@@ -193,6 +194,11 @@ def import_xer(
     task_id_to_row_id: dict[str, uuid.UUID] = {}
     critical_count = 0
     incoming_task_codes = {a.task_code for a in parsed.activities}
+    # Frozen per-activity finish/criticality/status for "vs previous UPD" slip
+    # comparison (engine/diff/slip_diff.py) — the live table is overwritten each
+    # import so this is the only history.
+    activities_snapshot: list[dict] = []
+    renamed_external_ids: list[tuple[str, str]] = []  # (old, new) for recovery-plan re-linking
 
     for act in parsed.activities:
         row = existing_activities.get(act.task_code)
@@ -202,6 +208,7 @@ def import_xer(
             # this import (i.e. it really went away, not just got reassigned).
             if renamed is not None and renamed.external_id not in incoming_task_codes:
                 row = renamed
+                renamed_external_ids.append((row.external_id, act.task_code))
                 row.external_id = act.task_code
         is_new = row is None
         if row is None:
@@ -255,6 +262,30 @@ def import_xer(
 
         db.flush()
         task_id_to_row_id[act.task_id] = row.id
+        activities_snapshot.append(
+            {
+                "external_id": row.external_id,
+                "p6_task_id": row.p6_task_id,
+                "name": row.name,
+                "wbs_path": row.wbs_path,
+                "planned_finish": row.planned_finish.isoformat() if row.planned_finish else None,
+                "early_finish": row.early_finish.isoformat() if row.early_finish else None,
+                "actual_finish": row.actual_finish.isoformat() if row.actual_finish else None,
+                "is_critical": bool(row.is_critical),
+                "is_longest_path": bool(row.is_longest_path),
+                "total_float_hours": row.total_float_hours,
+                "status": row.status.value,
+                "percent_complete": int(row.percent_complete or 0),
+            }
+        )
+
+    # Re-link any recovery plans whose activity was renamed in P6 so their
+    # durable key (activity_external_id) keeps pointing at the same activity.
+    for old_code, new_code in renamed_external_ids:
+        db.query(RecoveryPlan).filter(
+            RecoveryPlan.project_id == project_id,
+            RecoveryPlan.activity_external_id == old_code,
+        ).update({RecoveryPlan.activity_external_id: new_code}, synchronize_session=False)
 
     # --- relationships: the .xer is a full network snapshot, so replace wholesale ---
     db.query(ActivityRelationship).filter(ActivityRelationship.project_id == project_id).delete()
@@ -414,6 +445,7 @@ def import_xer(
     schedule_import.critical_count = critical_count
     schedule_import.warnings = parsed.parse_log
     schedule_import.relationships_snapshot = relationships_snapshot
+    schedule_import.activities_snapshot = activities_snapshot
 
     # Program Library: a project's very first .xer upload auto-locks as its
     # baseline (see services/baseline.py) — later uploads just keep

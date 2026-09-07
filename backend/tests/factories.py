@@ -85,3 +85,70 @@ def create_project_scope(
     db.add(scope)
     db.commit()
     return scope
+
+
+def create_activity(db: Session, tenant: Tenant, project: Project, external_id: str, **kw):
+    from datetime import date
+
+    from app.models.activity import Activity, ActivityStatus
+
+    row = Activity(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        project_id=project.id,
+        external_id=external_id,
+        name=kw.pop("name", f"Activity {external_id}"),
+        discipline=kw.pop("discipline", "General"),
+        status=kw.pop("status", ActivityStatus.not_started),
+        percent_complete=kw.pop("percent_complete", 0),
+        remaining_duration_days=kw.pop("remaining_duration_days", 5),
+        planned_finish=kw.pop("planned_finish", date(2026, 6, 1)),
+        **kw,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def create_schedule_import(
+    db: Session, tenant: Tenant, project: Project, user, *, revision_no=None, revision_label=None, snapshot=None
+):
+    from datetime import datetime, timezone
+
+    from app.models.schedule_import import ScheduleImport
+
+    row = ScheduleImport(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        project_id=project.id,
+        filename=f"{revision_label or 'baseline'}.xer",
+        imported_by_user_id=user.id,
+        imported_at=datetime.now(timezone.utc),
+        revision_no=revision_no,
+        revision_label=revision_label,
+        activities_snapshot=snapshot or [],
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def create_update_period(db: Session, tenant: Tenant, project: Project, *, number=1, status_open=True):
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
+
+    now = datetime.now(timezone.utc)
+    row = UpdatePeriod(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        project_id=project.id,
+        period_number=number,
+        label=f"UPD-{number}",
+        opens_at=now,
+        deadline_at=now + timedelta(days=7),
+        status=UpdatePeriodStatus.open if status_open else UpdatePeriodStatus.closed,
+    )
+    db.add(row)
+    db.commit()
+    return row

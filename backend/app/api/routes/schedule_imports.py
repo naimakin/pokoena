@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
@@ -27,6 +27,12 @@ def list_schedule_imports(
     require_project_permission(db, project_id, ctx)
     return (
         db.query(ScheduleImport)
+        # The two frozen snapshots are fat JSONB and never serialized by
+        # ScheduleImportOut — don't pull them into memory for the sync-log list.
+        .options(
+            defer(ScheduleImport.relationships_snapshot),
+            defer(ScheduleImport.activities_snapshot),
+        )
         .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
         .order_by(ScheduleImport.imported_at.desc())
         .all()

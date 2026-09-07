@@ -112,6 +112,50 @@ def test_import_preserves_user_entered_actuals_including_rename(client, db_sessi
     ).count() == 0
 
 
+def test_import_relinks_recovery_plan_on_rename(client, db_session):
+    import uuid as _uuid
+
+    from app.models.recovery_plan import RecoveryPlan
+    from tests.factories import create_user
+
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    _upload(client, project.id)
+
+    author = create_user(db_session, "rp-relink@example.com", "secret123")
+    plan = RecoveryPlan(
+        id=_uuid.uuid4(), tenant_id=tenant.id, project_id=project.id,
+        activity_external_id="A100", activity_name="Mobilization",
+        created_by_user_id=author.id,
+    )
+    db_session.add(plan)
+    db_session.commit()
+
+    renamed = FIXTURE.read_bytes().decode("utf-8").replace("\tA100\t", "\tA100X\t")
+    resp = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("renamed.xer", renamed.encode("utf-8"), "application/octet-stream")},
+    )
+    assert resp.status_code == 201
+    db_session.expire_all()
+    assert db_session.query(RecoveryPlan).filter(RecoveryPlan.id == plan.id).one().activity_external_id == "A100X"
+
+
+def test_import_writes_activities_snapshot(client, db_session):
+    from app.models.schedule_import import ScheduleImport
+
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    _upload(client, project.id)
+
+    imp = db_session.query(ScheduleImport).filter(ScheduleImport.project_id == project.id).one()
+    snap = imp.activities_snapshot
+    assert len(snap) == 6
+    row = next(a for a in snap if a["external_id"] == "A300")
+    assert set(row) >= {"external_id", "planned_finish", "is_critical", "status", "percent_complete"}
+    assert row["is_critical"] is True
+
+
 def test_first_import_auto_locks_baseline(client, db_session):
     tenant, project = _setup(db_session)
     client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})

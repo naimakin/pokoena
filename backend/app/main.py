@@ -21,6 +21,7 @@ from app.api.routes import (
     platform_auth,
     project_status,
     projects,
+    recovery_plans,
     risk,
     saved_activity_filters,
     schedule_imports,
@@ -91,6 +92,7 @@ app.include_router(metadata.router)
 app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 app.include_router(project_status.router)
+app.include_router(recovery_plans.router)
 app.include_router(saved_activity_filters.router)
 
 

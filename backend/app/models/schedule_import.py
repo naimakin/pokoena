@@ -47,3 +47,9 @@ class ScheduleImport(Base):
     # (engine/diff/logic_diff.py) to compare two imports without a full
     # versioned schedule graph. See services/xer_import.py for how it's built.
     relationships_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    # Frozen per-activity finish dates / criticality / status at import time —
+    # the only place a "vs previous UPD" slip comparison can come from, since
+    # the live `activities` table is overwritten wholesale on every import.
+    # Consumed by engine/diff/slip_diff.py. Built in services/xer_import.py
+    # alongside relationships_snapshot.
+    activities_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)

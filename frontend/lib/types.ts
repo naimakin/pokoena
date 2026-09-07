@@ -812,3 +812,98 @@ export interface ActivityBatchResult {
   saved: Activity[];
   failed: { id: string; error: string }[];
 }
+
+// --- Execution → Recovery Plan ---
+
+export type RecoveryPlanStatusValue = "draft" | "submitted" | "accepted" | "needs_revision";
+export type RecoveryItemStatusValue = "open" | "in_progress" | "done" | "dropped";
+
+export interface PlanLink {
+  id: string;
+  status: RecoveryPlanStatusValue;
+  revision_no: number;
+  item_count: number;
+  submitted_at: string | null;
+}
+
+export interface SlipRow {
+  external_id: string;
+  p6_task_id: string | null;
+  name: string | null;
+  wbs_path: string | null;
+  prev_finish: string | null;
+  curr_finish: string | null;
+  slip_days: number;
+  is_critical: boolean;
+  is_longest_path: boolean;
+  status: string | null;
+  percent_complete: number;
+  activity_id: string | null;
+  scope_id: string | null;
+  scope_name: string | null;
+  plan_required: boolean;
+  needs_attention: boolean;
+  plan: PlanLink | null;
+}
+
+export interface SlipImportRef {
+  id: string;
+  revision_label: string | null;
+  data_date: string | null;
+  imported_at: string;
+}
+
+export interface SlipReport {
+  project_id: string;
+  comparison_basis: "previous_upd" | "baseline_programme" | "none";
+  from_import: SlipImportRef | null;
+  to_import: SlipImportRef | null;
+  threshold_days: number;
+  coverage: { from_snapshot: boolean; to_snapshot: boolean };
+  summary: {
+    slipped_count: number;
+    critical_slipped_count: number;
+    worst_slip_days: number;
+    total_added: number;
+    total_removed: number;
+    plans_required: number;
+    plans_submitted: number;
+    plans_accepted: number;
+  };
+  slipped: SlipRow[];
+}
+
+export interface RecoveryPlanItem {
+  id: string;
+  recovery_plan_id: string;
+  order_index: number;
+  action: string;
+  owner_name: string | null;
+  target_date: string | null;
+  status: RecoveryItemStatusValue;
+  completed_at: string | null;
+}
+
+export interface RecoveryPlan {
+  id: string;
+  project_id: string;
+  activity_external_id: string;
+  activity_id: string | null;
+  activity_name: string;
+  wbs_path: string | null;
+  project_scope_id: string | null;
+  status: RecoveryPlanStatusValue;
+  revision_no: number;
+  summary: string | null;
+  created_by_user_id: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_user_id: string | null;
+  review_note: string | null;
+  slip_days_at_creation: number | null;
+  created_at: string;
+  updated_at: string;
+  author_name: string | null;
+  scope_name: string | null;
+  items?: RecoveryPlanItem[];
+}

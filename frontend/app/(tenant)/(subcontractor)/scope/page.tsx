@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { ActivityCard } from "@/components/ActivityCard";
 import { FlagReviewModal } from "@/components/FlagReviewModal";
+import Link from "next/link";
 import { BuildingIcon, ClockIcon, XIcon } from "@/components/icons";
 import type {
   Activity,
@@ -13,6 +14,7 @@ import type {
   ActivityUpdatePayload,
   ChangeRequest,
   Project,
+  SlipReport,
   UpdatePeriod,
   User,
 } from "@/lib/types";
@@ -44,6 +46,7 @@ export default function ScopePage() {
   const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
   const [flagSubmitting, setFlagSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [slippedCount, setSlippedCount] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -79,6 +82,13 @@ export default function ScopePage() {
       if (openPeriod) {
         const crs = await api.get<ChangeRequest[]>(`/change-requests?update_period_id=${openPeriod.id}`);
         setChangeRequests(crs);
+      }
+
+      try {
+        const slip = await api.get<SlipReport>(`/projects/${active.id}/recovery-plan`);
+        setSlippedCount(slip.slipped.length);
+      } catch {
+        setSlippedCount(0);
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load your scope.");
@@ -209,6 +219,13 @@ export default function ScopePage() {
         </div>
 
         <div className="sub-body">
+          {slippedCount > 0 && (
+            <Link href="/scope/recovery-plan" className="deadline-banner" style={{ textDecoration: "none", marginBottom: ".8rem" }}>
+              <ClockIcon className="icon" />
+              {slippedCount} of your activities slipped — submit a recovery plan
+              <span className="d">Open ›</span>
+            </Link>
+          )}
           {activities.length === 0 && <p className="empty-state">No activities are assigned to your scope yet.</p>}
           {activities.map((activity) => (
             <ActivityCard

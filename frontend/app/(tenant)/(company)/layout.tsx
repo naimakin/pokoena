@@ -104,7 +104,7 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always },
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/progress", label: "Progress", icon: ClockIcon, visible: always },
-      { href: "/completion-plan", label: "Completion Plan", icon: FlagIcon, visible: always },
+      { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
       { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always },
       { href: "/execution/lookahead", label: "Lookahead", icon: CalendarIcon, visible: always },
       { href: "/execution/issues", label: "Issues", icon: AlertTriangleIcon, visible: always },
