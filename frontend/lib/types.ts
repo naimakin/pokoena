@@ -233,6 +233,80 @@ export interface LogicDiffReport {
   changes: LogicDiffChange[];
 }
 
+// --- Execution → Changes: schedule comparison between two imports ---
+
+export interface ChangeImportRef {
+  id: string;
+  filename: string;
+  revision_label: string | null;
+  data_date: string | null;
+  imported_at: string;
+}
+
+export interface FieldChange {
+  field: string;
+  label: string;
+  old: string | number | null;
+  new: string | number | null;
+  delta_days: number | null;
+  delta_hours: number | null;
+}
+
+export interface ActivityChange {
+  external_id: string;
+  name: string | null;
+  wbs_path: string | null;
+  is_critical: boolean;
+  fields: FieldChange[];
+}
+
+export interface AddedActivity {
+  external_id: string;
+  name: string | null;
+  wbs_path: string | null;
+  planned_finish: string | null;
+  is_critical: boolean;
+}
+
+export interface RemovedActivity {
+  external_id: string;
+  name: string | null;
+  was_critical: boolean;
+}
+
+export interface RenamedActivity {
+  old_external_id: string;
+  new_external_id: string;
+  name: string | null;
+}
+
+export interface ScheduleChangeReport {
+  project_id: string;
+  comparison_basis: "previous_upd" | "baseline_programme" | "none";
+  from_import: ChangeImportRef | null;
+  to_import: ChangeImportRef | null;
+  coverage: { from_snapshot: boolean; to_snapshot: boolean };
+  thresholds: Record<string, number>;
+  summary: {
+    activities_added: number;
+    activities_removed: number;
+    activities_renamed: number;
+    activities_modified: number;
+    date_changes: number;
+    criticality_changes: number;
+    relationships_added: number;
+    relationships_removed: number;
+    relationships_modified: number;
+  };
+  activities: {
+    added: AddedActivity[];
+    removed: RemovedActivity[];
+    renamed: RenamedActivity[];
+    modified: ActivityChange[];
+  };
+  relationships: { summary: LogicDiffSummary; changes: LogicDiffChange[] };
+}
+
 export interface ActivityEvm {
   activity_id: string;
   external_id: string;

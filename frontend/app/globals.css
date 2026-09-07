@@ -662,6 +662,10 @@ tr.resolved{opacity:.45}
     content:"MITIGATION PLAN";display:block;font-family:var(--font-display);font-weight:700;
     font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
   }
+  .changes-print::before{
+    content:"SCHEDULE CHANGES";display:block;font-family:var(--font-display);font-weight:700;
+    font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
+  }
 }
 
 /* ---------- Risk Matrix ---------- */

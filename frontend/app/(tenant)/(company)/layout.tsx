@@ -105,10 +105,11 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/progress", label: "Progress", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
+      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
       { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always },
       { href: "/execution/lookahead", label: "Lookahead", icon: CalendarIcon, visible: always },
       { href: "/execution/issues", label: "Issues", icon: AlertTriangleIcon, visible: always },
-      { href: "/review-queue", label: "Changes", icon: CompareIcon, visible: isCompanyAdmin },
+      { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: isCompanyAdmin },
     ],
   },
   {

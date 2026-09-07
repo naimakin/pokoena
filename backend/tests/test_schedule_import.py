@@ -152,7 +152,10 @@ def test_import_writes_activities_snapshot(client, db_session):
     snap = imp.activities_snapshot
     assert len(snap) == 6
     row = next(a for a in snap if a["external_id"] == "A300")
-    assert set(row) >= {"external_id", "planned_finish", "is_critical", "status", "percent_complete"}
+    assert set(row) >= {
+        "external_id", "planned_start", "planned_finish", "target_duration_hours",
+        "constraint_type", "task_type", "is_critical", "status", "percent_complete",
+    }
     assert row["is_critical"] is True
 
 
