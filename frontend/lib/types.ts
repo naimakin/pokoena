@@ -282,7 +282,7 @@ export interface RenamedActivity {
 
 export interface ScheduleChangeReport {
   project_id: string;
-  comparison_basis: "previous_upd" | "baseline_programme" | "none";
+  comparison_basis: "previous_upd" | "baseline_programme" | "baseline_frozen" | "none";
   from_import: ChangeImportRef | null;
   to_import: ChangeImportRef | null;
   coverage: { from_snapshot: boolean; to_snapshot: boolean };

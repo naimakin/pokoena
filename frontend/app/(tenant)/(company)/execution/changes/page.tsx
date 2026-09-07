@@ -206,6 +206,14 @@ export default function ScheduleChangesPage() {
           </div>
         ) : (
           <>
+            {report.comparison_basis === "baseline_frozen" && (
+              <div className="banner warn">
+                <span className="banner-text">
+                  The previous update predates activity snapshots — comparing against the frozen
+                  baseline programme instead (dates &amp; WBS only).
+                </span>
+              </div>
+            )}
             <div className="card" style={{ padding: "0.9rem 1.1rem", display: "flex", gap: ".5rem", alignItems: "center", flexWrap: "wrap" }}>
               {CHIPS.map((c) => (
                 <button

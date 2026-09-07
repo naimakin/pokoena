@@ -93,6 +93,42 @@ def test_unknown_import_400(client, db_session):
     assert r.status_code == 400
 
 
+def test_falls_back_to_frozen_baseline_when_prev_has_no_snapshot(client, db_session):
+    """Pre-feature projects: the older import carries no activities_snapshot, so
+    the diff compares against the frozen baseline_activities instead."""
+    from pathlib import Path
+
+    from app.models.schedule_import import ScheduleImport
+
+    fixture = Path(__file__).parent / "fixtures" / "synthetic_project.xer"
+    tenant, project, admin = _setup(db_session)
+    client.post("/auth/login", json={"email": "chg-admin@example.com", "password": "secret123"})
+
+    def _upload():
+        with open(fixture, "rb") as f:
+            return client.post(
+                f"/projects/{project.id}/schedule-imports",
+                files={"file": ("synthetic_project.xer", f.read(), "application/octet-stream")},
+            )
+
+    assert _upload().status_code == 201  # first import → auto-locks baseline
+    # simulate that the baseline import predates the snapshot column
+    baseline_import = (
+        db_session.query(ScheduleImport)
+        .filter(ScheduleImport.project_id == project.id)
+        .order_by(ScheduleImport.imported_at)
+        .first()
+    )
+    baseline_import.activities_snapshot = []
+    db_session.commit()
+
+    assert _upload().status_code == 201  # UPD-1, has a snapshot
+
+    body = client.get(f"/projects/{project.id}/schedule-changes").json()
+    assert body["comparison_basis"] == "baseline_frozen"
+    assert body["coverage"] == {"from_snapshot": True, "to_snapshot": True}
+
+
 def test_cross_tenant_project_404(client, db_session):
     tenant, project, _ = _setup(db_session)
     other = create_tenant(db_session, name="Other", slug="other-changes")

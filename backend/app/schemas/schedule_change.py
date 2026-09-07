@@ -82,7 +82,7 @@ class ScheduleChangeReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     project_id: uuid.UUID
-    comparison_basis: Literal["previous_upd", "baseline_programme", "none"]
+    comparison_basis: Literal["previous_upd", "baseline_programme", "baseline_frozen", "none"]
     from_import: ChangeImportRefOut | None
     to_import: ChangeImportRefOut | None
     coverage: dict
