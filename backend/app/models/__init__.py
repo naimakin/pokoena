@@ -31,6 +31,14 @@ from app.models.recovery_plan import (
 )
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
+from app.models.risk_item import (
+    MitigationStatus,
+    MitigationStrategy,
+    RiskActionItem,
+    RiskActionStatus,
+    RiskItem,
+    RiskStatus,
+)
 from app.models.saved_activity_filter import SavedActivityFilter
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
@@ -90,6 +98,12 @@ __all__ = [
     "RecoveryItemStatus",
     "Resource",
     "ResourceAssignment",
+    "RiskItem",
+    "RiskActionItem",
+    "RiskStatus",
+    "MitigationStatus",
+    "MitigationStrategy",
+    "RiskActionStatus",
     "SavedActivityFilter",
     "ScopeSubmission",
     "SubcontractorOrganization",

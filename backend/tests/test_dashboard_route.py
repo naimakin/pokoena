@@ -166,3 +166,16 @@ def test_risk_highlights_flags_overdue_and_negative_float(client, db_session):
     health = client.get(f"/dashboard/health?project_id={project.id}").json()
     cp = next(f for f in health["factors"] if f["label"] == "Critical path")
     assert cp["status"] == "crit"
+
+
+def test_risk_highlights_include_high_score_register_risks(client, db_session):
+    tenant, project = _setup(db_session)
+    admin = create_user(db_session, "dash-r2@example.com", "secret123")
+    add_membership(db_session, admin, tenant, TenantRole.company_admin)
+    from tests.factories import create_risk_item
+
+    create_risk_item(db_session, tenant, project, admin, code="R-1", title="Crane availability", probability=5, impact=4)
+    _login(client)
+
+    risks = client.get(f"/dashboard/risk-highlights?project_id={project.id}").json()
+    assert any(r["source"] == "Risk register" and "Crane availability" in r["title"] for r in risks)

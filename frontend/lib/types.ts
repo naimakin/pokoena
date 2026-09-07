@@ -884,6 +884,55 @@ export interface RecoveryPlanItem {
   completed_at: string | null;
 }
 
+// --- Risk register + mitigation plans ---
+
+export type RiskStatusValue = "open" | "mitigating" | "closed" | "occurred";
+export type MitigationStatusValue = "none" | "draft" | "submitted" | "accepted" | "needs_revision";
+export type MitigationStrategyValue = "mitigate" | "avoid" | "transfer" | "accept";
+
+export interface RiskActionItem {
+  id: string;
+  risk_item_id: string;
+  order_index: number;
+  action: string;
+  owner_name: string | null;
+  target_date: string | null;
+  status: "open" | "in_progress" | "done" | "dropped";
+  completed_at: string | null;
+}
+
+export interface RiskItem {
+  id: string;
+  project_id: string;
+  code: string;
+  title: string;
+  description: string | null;
+  cause: string | null;
+  effect: string | null;
+  category: string | null;
+  probability: number;
+  impact: number;
+  score: number;
+  status: RiskStatusValue;
+  owner_name: string | null;
+  wbs_path: string | null;
+  activity_external_ids: string[];
+  mitigation_strategy: MitigationStrategyValue | null;
+  mitigation_status: MitigationStatusValue;
+  mitigation_summary: string | null;
+  revision_no: number;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_user_id: string | null;
+  review_note: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+  action_item_count: number;
+  created_by_name: string | null;
+  items?: RiskActionItem[];
+}
+
 export interface RecoveryPlan {
   id: string;
   project_id: string;

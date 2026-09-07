@@ -23,6 +23,7 @@ from app.api.routes import (
     projects,
     recovery_plans,
     risk,
+    risks,
     saved_activity_filters,
     schedule_imports,
     subcontractor_organizations,
@@ -93,6 +94,7 @@ app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 app.include_router(project_status.router)
 app.include_router(recovery_plans.router)
+app.include_router(risks.router)
 app.include_router(saved_activity_filters.router)
 
 

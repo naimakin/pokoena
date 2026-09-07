@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { ClockIcon } from "@/components/icons";
-import { ActionItems } from "@/components/recovery/ActionItems";
+import { ActionItems } from "@/components/ActionItems";
 import type { Project, RecoveryPlan, SlipReport, SlipRow, UpdatePeriod } from "@/lib/types";
 
 function fmt(iso: string | null | undefined): string {
@@ -142,8 +142,7 @@ export default function SubRecoveryPlanPage() {
                         style={{ width: "100%", minHeight: 44 }}
                       />
                       <ActionItems
-                        projectId={project!.id}
-                        planId={plan.id}
+                        basePath={`/projects/${project!.id}/recovery-plan/plans/${plan.id}`}
                         items={plan.items ?? []}
                         editable={editable && ["draft", "needs_revision"].includes(plan.status)}
                         trackable={plan.status === "accepted"}

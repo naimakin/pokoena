@@ -13,6 +13,7 @@ from app.models.dashboard_layout import DashboardLayout
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.project import Project
 from app.models.project_scope import ProjectScope
+from app.models.risk_item import RiskItem, RiskStatus
 from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
@@ -240,9 +241,9 @@ def put_dashboard_layout(
 
 # ---------------------------------------------------------------------------
 # Derived widgets: project health composite + risk highlights.
-# Both are heuristics over data already on hand (scope submissions, EVM
-# snapshots, CPM float). A real Risk Register model doesn't exist yet —
-# TODO: feed get_risk_highlights from it once modelled.
+# The health composite is heuristics over data on hand (scope submissions, EVM
+# snapshots, CPM float). Risk highlights blend those heuristics with the real
+# Risk Register (models/risk_item.py) — high-score open risks rank first.
 # ---------------------------------------------------------------------------
 
 _STATUS_SCORE = {"good": 100, "warn": 60, "crit": 20}
@@ -454,6 +455,32 @@ def get_risk_highlights(
     activities: list[Activity] = s["activities"]
     _SEV_RANK = {"high": 0, "medium": 1, "low": 2}
     candidates: list[tuple[float, RiskHighlight]] = []
+
+    # Risk register — high-score open/mitigating risks outrank the heuristics.
+    register_risks = (
+        db.query(RiskItem)
+        .filter(
+            RiskItem.tenant_id == ctx.tenant_id,
+            RiskItem.project_id == project_id,
+            RiskItem.status.in_([RiskStatus.open, RiskStatus.mitigating]),
+            RiskItem.score >= 12,
+        )
+        .order_by(RiskItem.score.desc())
+        .limit(3)
+        .all()
+    )
+    for r in register_risks:
+        candidates.append(
+            (
+                r.score * 40,
+                RiskHighlight(
+                    title=f"{r.code} {r.title}",
+                    detail=f"P{r.probability}×I{r.impact} (score {r.score}) · {r.status.value}",
+                    severity="high" if r.score >= 15 else "medium",
+                    source="Risk register",
+                ),
+            )
+        )
 
     # Negative float on the critical path — the sharpest schedule signal.
     for a in sorted(_negative_float_activities(activities), key=lambda x: x.total_float_hours or 0)[:5]:

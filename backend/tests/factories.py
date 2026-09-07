@@ -133,6 +133,29 @@ def create_schedule_import(
     return row
 
 
+def create_risk_item(db: Session, tenant: Tenant, project: Project, user, *, code="R-1", **kw):
+    from app.models.risk_item import RiskItem, RiskStatus
+
+    p = kw.pop("probability", 3)
+    i = kw.pop("impact", 3)
+    row = RiskItem(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        project_id=project.id,
+        code=code,
+        title=kw.pop("title", "Steel delivery delay"),
+        probability=p,
+        impact=i,
+        score=p * i,
+        status=kw.pop("status", RiskStatus.open),
+        created_by_user_id=user.id,
+        **kw,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
 def create_update_period(db: Session, tenant: Tenant, project: Project, *, number=1, status_open=True):
     from datetime import datetime, timedelta, timezone
 

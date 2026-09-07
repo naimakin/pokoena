@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { RecoveryPlan, SlipReport, SlipRow, User } from "@/lib/types";
-import { ActionItems } from "@/components/recovery/ActionItems";
+import { ActionItems } from "@/components/ActionItems";
 import { AlertTriangleIcon, DownloadIcon } from "@/components/icons";
 
 type Grouping = "contractor" | "wbs" | "flat";
@@ -351,8 +351,7 @@ export default function RecoveryPlanPage() {
                                           />
                                         )}
                                         <ActionItems
-                                          projectId={project.id}
-                                          planId={plan.id}
+                                          basePath={`/projects/${project.id}/recovery-plan/plans/${plan.id}`}
                                           items={plan.items ?? []}
                                           editable={canAuthor && ["draft", "needs_revision"].includes(plan.status)}
                                           trackable={plan.status === "accepted"}

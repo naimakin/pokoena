@@ -4,34 +4,42 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "@/components/icons";
-import type { RecoveryItemStatusValue, RecoveryPlanItem } from "@/lib/types";
 
-const STATUS_GLYPH: Record<RecoveryItemStatusValue, string> = {
+// Shared itemised-action-list editor for Recovery Plan and Risk Mitigation.
+// `basePath` is the plan/risk URL; this appends /items, /items/{id}, /items/order.
+export interface ActionItemShape {
+  id: string;
+  order_index: number;
+  action: string;
+  owner_name: string | null;
+  target_date: string | null;
+  status: "open" | "in_progress" | "done" | "dropped";
+  completed_at: string | null;
+}
+
+const STATUS_GLYPH: Record<ActionItemShape["status"], string> = {
   open: "○",
   in_progress: "◐",
   done: "✓",
   dropped: "✕",
 };
-const STATUS_CYCLE: RecoveryItemStatusValue[] = ["open", "in_progress", "done", "dropped"];
+const STATUS_CYCLE: ActionItemShape["status"][] = ["open", "in_progress", "done", "dropped"];
 
 export function ActionItems({
-  projectId,
-  planId,
+  basePath,
   items,
   editable,
   trackable,
   onChanged,
 }: {
-  projectId: string;
-  planId: string;
-  items: RecoveryPlanItem[];
-  editable: boolean; // full edit (author, plan in draft/needs_revision)
-  trackable: boolean; // may cycle item status even on an accepted plan
+  basePath: string;
+  items: ActionItemShape[];
+  editable: boolean; // full edit (author, plan editable)
+  trackable: boolean; // may cycle item status even once accepted
   onChanged: () => void;
 }) {
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
-  const base = `/projects/${projectId}/recovery-plan/plans/${planId}`;
 
   async function call(fn: () => Promise<unknown>) {
     if (busy) return;
@@ -47,11 +55,14 @@ export function ActionItems({
   }
 
   const patchItem = (id: string, body: Record<string, unknown>) =>
-    call(() => api.patch(`${base}/items/${id}`, body));
+    call(() => api.patch(`${basePath}/items/${id}`, body));
 
-  function cycleStatus(item: RecoveryPlanItem) {
+  function cycleStatus(item: ActionItemShape) {
     const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(item.status) + 1) % STATUS_CYCLE.length];
-    patchItem(item.id, { status: next, completed_at: next === "done" ? new Date().toISOString().slice(0, 10) : null });
+    patchItem(item.id, {
+      status: next,
+      completed_at: next === "done" ? new Date().toISOString().slice(0, 10) : null,
+    });
   }
 
   function move(idx: number, dir: -1 | 1) {
@@ -59,7 +70,7 @@ export function ActionItems({
     const j = idx + dir;
     if (j < 0 || j >= next.length) return;
     [next[idx], next[j]] = [next[j], next[idx]];
-    call(() => api.put(`${base}/items/order`, { ordered_item_ids: next.map((i) => i.id) }));
+    call(() => api.put(`${basePath}/items/order`, { ordered_item_ids: next.map((i) => i.id) }));
   }
 
   return (
@@ -68,18 +79,25 @@ export function ActionItems({
         <p className="empty-state" style={{ padding: ".5rem 0" }}>No action items.</p>
       )}
       {items.map((item, idx) => (
-        <div
-          key={item.id}
-          style={{ display: "flex", alignItems: "center", gap: ".4rem", padding: ".15rem 0" }}
-        >
+        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: ".4rem", padding: ".15rem 0" }}>
           <span className="mono" style={{ color: "var(--text-muted)", width: 16, flex: "none" }}>{idx + 1}</span>
           <button
             onClick={() => (trackable || editable) && cycleStatus(item)}
             title={item.status}
+            aria-label={`Status: ${item.status}`}
             style={{
-              background: "none", border: "none", cursor: trackable || editable ? "pointer" : "default",
-              fontSize: "1rem", width: 22, flex: "none",
-              color: item.status === "done" ? "var(--good)" : item.status === "dropped" ? "var(--text-muted)" : "var(--text-secondary)",
+              background: "none",
+              border: "none",
+              cursor: trackable || editable ? "pointer" : "default",
+              fontSize: "1rem",
+              width: 22,
+              flex: "none",
+              color:
+                item.status === "done"
+                  ? "var(--good)"
+                  : item.status === "dropped"
+                    ? "var(--text-muted)"
+                    : "var(--text-secondary)",
             }}
           >
             {STATUS_GLYPH[item.status]}
@@ -117,7 +135,7 @@ export function ActionItems({
               </button>
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => call(() => api.delete(`${base}/items/${item.id}`))}
+                onClick={() => call(() => api.delete(`${basePath}/items/${item.id}`))}
                 aria-label="Remove"
               >
                 <XIcon className="icon" style={{ width: 12, height: 12 }} />
@@ -131,7 +149,7 @@ export function ActionItems({
           className="btn btn-secondary btn-sm"
           style={{ alignSelf: "flex-start", marginTop: ".3rem" }}
           disabled={busy}
-          onClick={() => call(() => api.post(`${base}/items`, { action: "New action" }))}
+          onClick={() => call(() => api.post(`${basePath}/items`, { action: "New action" }))}
         >
           + Add action item
         </button>
