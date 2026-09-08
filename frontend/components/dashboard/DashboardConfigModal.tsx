@@ -8,7 +8,7 @@ import { ChevronDownIcon, ChevronUpIcon, GridIcon, SparkleIcon } from "@/compone
 const THEMES: { key: DashboardThemeKey; label: string }[] = [
   { key: "calm", label: "Calm" },
   { key: "high-contrast", label: "High contrast" },
-  { key: "mono-amber", label: "Mono amber" },
+  { key: "mono-amber", label: "Mono accent" },
 ];
 
 interface Props {

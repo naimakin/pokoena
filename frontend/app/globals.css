@@ -7,48 +7,49 @@ a{color:inherit}
 
 /* ---------- tokens : light (default) ----------
    Palette/type from the reference Poko design system (DESIGN.md): warm
-   parchment canvas + deep-navy ink + amber as the single chromatic accent.
-   Aptos isn't an open/Google font, so Outfit (their own documented
-   fallback) is loaded as the primary body face instead.
+   parchment canvas + deep teal-ink + slate teal as the single chromatic
+   accent. Aptos isn't an open/Google font, so Outfit (their own
+   documented fallback) is loaded as the primary body face instead.
 
    The neutral ramp is deliberately warm (parchment/taupe) while the ink
-   ramp is cool (navy-slate) — warm paper, cool ink, the way a set of
-   architectural drawings reads. Amber (#f59e0b) is the only chromatic
-   accent and is spent only on interactive state, CTAs and data markers. */
+   ramp is cool (teal-slate) — warm paper, cool ink, the way a set of
+   architectural drawings reads. Slate teal (#0e7c74) is the only
+   chromatic accent and is spent only on interactive state, CTAs and
+   data markers. */
 :root{
   /* neutral ramp — warm parchment surfaces */
-  --bg:#f7f5f1;
+  --bg:#f4f3ee;
   --surface:#ffffff;
-  --surface-2:#f3efe7;
-  --surface-3:#ebe5da;
-  --border:#d8d1c0;
-  --border-strong:#ada38b;
+  --surface-2:#ebeae3;
+  --surface-3:#dedcd2;
+  --border:#d4d2c6;
+  --border-strong:#b8b6a8;
 
-  /* ink ramp — cool navy-slate, tiered */
-  --text-primary:#0F1A2A;
-  --text-secondary:#3a4551;
-  --text-muted:#616a76;
-  --text-tertiary:#99a0aa;
+  /* ink ramp — cool teal-slate, tiered */
+  --text-primary:#0E1F1D;
+  --text-secondary:#3f5350;
+  --text-muted:#748580;
+  --text-tertiary:#96a099;
 
-  /* amber — the single chromatic accent */
-  --accent:#f59e0b;
-  --accent-strong:#d97706;
-  --accent-focus:#b45309;
-  --accent-soft:rgba(245,158,11,.10);
-  --accent-subtle:rgba(245,158,11,.05);
-  --accent-line:#f59e0b;
+  /* slate teal — the single chromatic accent */
+  --accent:#0e7c74;
+  --accent-strong:#0a625c;
+  --accent-focus:#084d49;
+  --accent-soft:rgba(14,124,116,.10);
+  --accent-subtle:rgba(14,124,116,.05);
+  --accent-line:#0e7c74;
   --accent-contrast:#ffffff;
 
   /* semantic — hues fixed, used only for status/risk */
-  --good:#16A34A;
-  --good-soft:rgba(22,163,74,.10);
-  --warn:#EA580C;
-  --warn-soft:rgba(234,88,12,.10);
+  --good:#2E9E5B;
+  --good-soft:rgba(46,158,91,.10);
+  --warn:#D97706;
+  --warn-soft:rgba(217,119,6,.10);
   --crit:#C0130A;
   --crit-soft:rgba(192,19,10,.06);
   --crit-line:rgba(192,19,10,.30);
-  --info:#0F6B8A;
-  --info-soft:rgba(15,107,138,.10);
+  --info:#3B7EA1;
+  --info-soft:rgba(59,126,161,.10);
 
   /* elevation — soft, low-spread, faintly warm */
   --shadow-xs:0 1px 2px rgba(31,25,16,.06);
@@ -69,36 +70,36 @@ a{color:inherit}
   --dur-1:120ms;
   --dur-2:170ms;
 
-  --focus:#f59e0b;
+  --focus:#0e7c74;
 
   --font-display:var(--font-barlow),"Barlow Condensed",-apple-system,sans-serif;
   --font-ui:var(--font-outfit),Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-mono:var(--font-space-mono),"Space Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
 /* Dark variant: not defined by the (light-only) reference DESIGN.md — derived
-   to keep the same ink/amber identity. Warm-navy elevated surfaces (less blue
-   than the canvas), warm off-white ink, not a flat inversion. */
+   to keep the same ink/accent identity. Warm-teal elevated surfaces (less
+   blue than a plain navy), warm off-white ink, not a flat inversion. */
 @media (prefers-color-scheme:dark){
   :root{
-    --bg:#0F1A2A;
-    --surface:#182230;
-    --surface-2:#1f2a38;
-    --surface-3:#283443;
-    --border:#2c3742;
-    --border-strong:#3d4a58;
+    --bg:#0E1F1D;
+    --surface:#16302c;
+    --surface-2:#1c3b36;
+    --surface-3:#244a43;
+    --border:#2c5750;
+    --border-strong:#3d6b62;
 
-    --text-primary:#F2EFE9;
-    --text-secondary:#c3bfb4;
-    --text-muted:#8a8479;
-    --text-tertiary:#7e786c;
+    --text-primary:#F0F3F1;
+    --text-secondary:#c2ccc7;
+    --text-muted:#8ca39b;
+    --text-tertiary:#708983;
 
-    --accent:#f59e0b;
-    --accent-strong:#fbbf24;
-    --accent-focus:#fcd34d;
-    --accent-soft:rgba(245,158,11,.16);
-    --accent-subtle:rgba(245,158,11,.08);
-    --accent-line:#f59e0b;
-    --accent-contrast:#1a1206;
+    --accent:#16a398;
+    --accent-strong:#3fc2b5;
+    --accent-focus:#6ed9ce;
+    --accent-soft:rgba(22,163,152,.16);
+    --accent-subtle:rgba(22,163,152,.08);
+    --accent-line:#16a398;
+    --accent-contrast:#06211d;
 
     --good:#4ADE80;
     --good-soft:rgba(74,222,128,.15);
@@ -107,15 +108,15 @@ a{color:inherit}
     --crit:#F87171;
     --crit-soft:rgba(248,113,113,.15);
     --crit-line:rgba(248,113,113,.35);
-    --info:#38BDF8;
-    --info-soft:rgba(56,189,248,.15);
+    --info:#5B9BD5;
+    --info-soft:rgba(91,155,213,.15);
 
     --shadow-xs:0 1px 2px rgba(0,0,0,.4);
     --shadow-sm:0 1px 2px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
     --shadow-md:0 3px 10px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.45);
     --shadow-lg:0 8px 20px rgba(0,0,0,.5),0 24px 52px rgba(0,0,0,.55);
 
-    --focus:#f59e0b;
+    --focus:#16a398;
   }
 }
 
@@ -127,7 +128,7 @@ body{
      opaque full-bleed pages (login, subcontractor) simply sit on top. */
   background:
     radial-gradient(1400px 900px at 12% -8%,var(--accent-subtle),transparent 55%),
-    radial-gradient(1200px 1000px at 100% -2%,rgba(15,26,42,.025),transparent 50%),
+    radial-gradient(1200px 1000px at 100% -2%,rgba(14,31,29,.025),transparent 50%),
     var(--bg);
   font-family:var(--font-ui);
   font-size:14px;
@@ -139,8 +140,8 @@ body{
 @media (prefers-color-scheme:dark){
   body{
     background:
-      radial-gradient(1400px 900px at 12% -8%,rgba(245,158,11,.05),transparent 55%),
-      radial-gradient(1200px 1000px at 100% -2%,rgba(56,120,180,.05),transparent 50%),
+      radial-gradient(1400px 900px at 12% -8%,rgba(22,163,152,.06),transparent 55%),
+      radial-gradient(1200px 1000px at 100% -2%,rgba(91,155,213,.05),transparent 50%),
       var(--bg);
   }
 }
@@ -262,7 +263,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .navitem:hover{background:var(--surface-2);color:var(--text-primary)}
 .navitem.active{background:var(--accent-soft);color:var(--accent-strong)}
 .navitem.active .icon{color:var(--accent-strong)}
-/* signature amber left-marker on the active nav row */
+/* signature accent left-marker on the active nav row */
 .navitem.active::before{
   content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:3px;height:16px;border-radius:0 var(--radius-xs) var(--radius-xs) 0;background:var(--accent-line);
@@ -323,7 +324,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 /* ---------- kpi / cards ---------- */
 .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xs)}
-/* optional: amber top-edge marker on a headline metric card (DESIGN.md kpi pattern) */
+/* optional: accent top-edge marker on a headline metric card (DESIGN.md kpi pattern) */
 .card.accent-top{box-shadow:inset 0 2px 0 var(--accent),var(--shadow-xs)}
 .kpi{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.6rem}
 .kpi-top{display:flex;align-items:center;justify-content:space-between}
@@ -357,7 +358,7 @@ tbody td{padding:.7rem 1.1rem;border-bottom:1px solid var(--border);font-size:.8
 tbody tr:last-child td{border-bottom:none}
 tbody tr{transition:background var(--dur-1) var(--ease)}
 tbody tr:hover{background:var(--surface-2)}
-/* signature amber left-border on a selected data row */
+/* signature accent left-border on a selected data row */
 tbody tr.selected,.row-selected{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent-line)}
 /* critical-path data row — red tint + red left-border, per DESIGN.md */
 tbody tr.critical{background:var(--crit-soft);box-shadow:inset 3px 0 0 var(--crit-line)}
@@ -519,7 +520,7 @@ tr.resolved{opacity:.45}
 
 /* ---------- dashboard : configurable widgets ----------
    Categorical series colours are selected by the user from a fixed set of
-   tokens (config modal → theme). Never free hex; amber stays the accent. */
+   tokens (config modal → theme). Never free hex; --accent stays the accent. */
 [data-dash-theme]{
   --dash-1:var(--info);
   --dash-2:var(--good);
