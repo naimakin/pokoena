@@ -48,8 +48,8 @@ class Settings(BaseModel):
 
     jwt_secret: str = _secret("JWT_SECRET", "dev-insecure-secret-change-me")
     jwt_algorithm: str = "HS256"
-    jwt_access_expires_minutes: int = int(os.getenv("JWT_ACCESS_EXPIRES_MINUTES", "15"))
-    jwt_refresh_expires_days: int = int(os.getenv("JWT_REFRESH_EXPIRES_DAYS", "14"))
+    jwt_access_expires_minutes: int = int(os.getenv("JWT_ACCESS_EXPIRES_MINUTES", "60"))
+    jwt_refresh_expires_days: int = int(os.getenv("JWT_REFRESH_EXPIRES_DAYS", "30"))
 
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))

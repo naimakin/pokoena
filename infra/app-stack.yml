@@ -82,6 +82,8 @@ services:
       DATABASE_URL_FILE: /run/secrets/db_url_app
       DATABASE_URL_BYPASS_FILE: /run/secrets/db_url_bypass
       JWT_SECRET_FILE: /run/secrets/jwt_secret
+      JWT_ACCESS_EXPIRES_MINUTES: "60"
+      JWT_REFRESH_EXPIRES_DAYS: "30"
       CORS_ORIGINS: "https://pokoena.com,https://www.pokoena.com"
       COOKIE_DOMAIN: ".pokoena.com"
       FRONTEND_URL: "https://pokoena.com"
