@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, ScheduleImport, SyncLogEntry } from "@/lib/types";
-import { CheckIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
+import { CheckIcon, LockIcon, UploadCloudIcon, XIcon } from "@/components/icons";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -16,6 +16,16 @@ const selectStyle: CSSProperties = {
   borderRadius: 6,
   color: "var(--text-primary)",
 };
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// P6 convention (DD-MMM-YYYY) — see CLAUDE.md.
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+}
 
 export default function ProgramLibraryPage() {
   const { showToast } = useToast();
@@ -29,6 +39,9 @@ export default function ProgramLibraryPage() {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ScheduleImport | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [baselineLabel, setBaselineLabel] = useState("Baseline");
+  const [baselineBusy, setBaselineBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -97,6 +110,47 @@ export default function ProgramLibraryPage() {
     e.target.value = "";
   }
 
+  async function deleteImport(imp: ScheduleImport) {
+    if (!project) return;
+    if (!window.confirm(`Delete import "${imp.revision_label ?? imp.filename}"? This can't be undone.`)) return;
+    setDeletingId(imp.id);
+    try {
+      await api.delete(`/projects/${project.id}/schedule-imports/${imp.id}`);
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not delete this import.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function lockBaseline() {
+    if (!project || !baselineLabel.trim()) return;
+    setBaselineBusy(true);
+    try {
+      await api.post(`/projects/${project.id}/evm/baseline`, { version_label: baselineLabel.trim() });
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not lock the baseline.");
+    } finally {
+      setBaselineBusy(false);
+    }
+  }
+
+  async function relockBaseline() {
+    if (!project || !baselineStatus?.active_baseline || !baselineLabel.trim()) return;
+    setBaselineBusy(true);
+    try {
+      await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
+      await api.post(`/projects/${project.id}/evm/baseline`, { version_label: baselineLabel.trim() });
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not change the baseline.");
+    } finally {
+      setBaselineBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="a-content">
@@ -127,8 +181,8 @@ export default function ProgramLibraryPage() {
             <div className="page-title">Program Library</div>
             <div className="page-desc">
               Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
-              float, and critical path. The baseline programme is managed on <b>Planning → Baselines</b>; uploads
-              here update the live schedule and are compared back to that baseline.
+              float, and critical path. Lock the current import as the baseline below (or manage it in more detail
+              on <b>Planning → Baselines</b>) — later uploads update the live schedule and are compared back to it.
             </div>
           </div>
         </div>
@@ -145,14 +199,69 @@ export default function ProgramLibraryPage() {
                 <div className="banner-text">
                   Baseline locked (<b>{baselineStatus.active_baseline?.version_label}</b>) — new uploads update the
                   live schedule; the baseline itself stays fixed for comparison.
+                  {imports[0] && baselineStatus.active_baseline?.schedule_import_id !== imports[0].id && (
+                    <span style={{ color: "var(--warn)" }}> A newer import exists — the baseline still reflects an older one.</span>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="banner warn">
                 <LockIcon className="icon" />
                 <div className="banner-text">
-                  No baseline programme yet — set one on <b>Planning → Baselines</b> before uploading updates here.
+                  No baseline programme yet — lock the current import as baseline below, or set one on{" "}
+                  <b>Planning → Baselines</b>.
                 </div>
+              </div>
+            )}
+
+            {imports.length > 0 && (
+              <div
+                style={{
+                  marginTop: ".6rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: ".5rem",
+                  flexWrap: "wrap",
+                  fontSize: ".75rem",
+                }}
+              >
+                <label htmlFor="baseline-label" style={{ color: "var(--text-muted)" }}>
+                  {baselineStatus?.has_active ? "New baseline label" : "Baseline label"}
+                </label>
+                <input
+                  id="baseline-label"
+                  type="text"
+                  style={{ width: 160 }}
+                  value={baselineLabel}
+                  onChange={(e) => setBaselineLabel(e.target.value)}
+                  disabled={baselineBusy}
+                />
+                {baselineStatus?.has_active ? (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={
+                      baselineBusy ||
+                      !baselineLabel.trim() ||
+                      imports[0]?.id === baselineStatus.active_baseline?.schedule_import_id
+                    }
+                    title={
+                      imports[0]?.id === baselineStatus.active_baseline?.schedule_import_id
+                        ? "The baseline already reflects the current import"
+                        : undefined
+                    }
+                    onClick={relockBaseline}
+                  >
+                    {baselineBusy ? "Working…" : "Lock latest import as baseline"}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={baselineBusy || !baselineLabel.trim()}
+                    onClick={lockBaseline}
+                  >
+                    {baselineBusy ? "Locking…" : "Lock latest import as baseline"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -234,42 +343,65 @@ export default function ProgramLibraryPage() {
                       <th>Critical</th>
                       <th>Imported</th>
                       <th>Baseline</th>
+                      <th style={{ width: 48 }} />
                     </tr>
                   </thead>
                   <tbody>
                     {imports.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="empty-state">
+                        <td colSpan={8} className="empty-state">
                           No schedule imported yet.
                         </td>
                       </tr>
                     )}
-                    {imports.map((imp) => (
-                      <tr key={imp.id}>
-                        <td>
-                          <span className="mono">{imp.revision_label ?? "—"}</span>
-                          {imp.roundtrip_from_export_id && syncExports.find((e) => e.id === imp.roundtrip_from_export_id) && (
-                            <div className="actid">
-                              from {syncExports.find((e) => e.id === imp.roundtrip_from_export_id)!.label}
+                    {imports.map((imp, i) => {
+                      const isLatest = i === 0;
+                      const isBaselineLinked = imp.id === baselineStatus?.active_baseline?.schedule_import_id;
+                      return (
+                        <tr key={imp.id}>
+                          <td>
+                            <span className="mono">{imp.revision_label ?? "—"}</span>
+                            {imp.roundtrip_from_export_id && syncExports.find((e) => e.id === imp.roundtrip_from_export_id) && (
+                              <div className="actid">
+                                from {syncExports.find((e) => e.id === imp.roundtrip_from_export_id)!.label}
+                              </div>
+                            )}
+                          </td>
+                          <td>{imp.filename}</td>
+                          <td>{fmtDate(imp.data_date)}</td>
+                          <td className="num">{imp.activity_count}</td>
+                          <td className="num">{imp.critical_count}</td>
+                          <td>{new Date(imp.imported_at).toLocaleString()}</td>
+                          <td>
+                            {isBaselineLinked ? (
+                              <span className="chip chip-good">
+                                <LockIcon className="icon" /> Baseline
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <div className="actions" style={{ justifyContent: "flex-end" }}>
+                              <button
+                                className="act-btn act-reject"
+                                title={
+                                  isLatest
+                                    ? "Can't delete the current schedule"
+                                    : isBaselineLinked
+                                      ? "Locked as a baseline — can't be deleted"
+                                      : "Delete this import"
+                                }
+                                disabled={isLatest || isBaselineLinked || deletingId === imp.id}
+                                onClick={() => deleteImport(imp)}
+                              >
+                                <XIcon className="icon" />
+                              </button>
                             </div>
-                          )}
-                        </td>
-                        <td>{imp.filename}</td>
-                        <td>{imp.data_date ? new Date(imp.data_date).toLocaleDateString() : "—"}</td>
-                        <td>{imp.activity_count}</td>
-                        <td>{imp.critical_count}</td>
-                        <td>{new Date(imp.imported_at).toLocaleString()}</td>
-                        <td>
-                          {imp.id === baselineStatus?.active_baseline?.schedule_import_id ? (
-                            <span className="chip chip-good">
-                              <LockIcon className="icon" /> Baseline
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -68,6 +68,15 @@ def _to_date(dt: datetime | None) -> date | None:
     return dt.date() if dt else None
 
 
+def _is_critical(total_float_hr_cnt: float | None, status_code: str) -> bool:
+    """A finished activity has no remaining work to protect, so it's never
+    "critical" regardless of the total float P6 computed for it — matches P6's
+    own convention of excluding completed activities from the critical filter."""
+    if status_code == "TK_Complete":
+        return False
+    return total_float_hr_cnt is not None and total_float_hr_cnt <= _TOL
+
+
 def _derive_status(status_code: str, phys_complete_pct: float) -> tuple[ActivityStatus, int]:
     """Map P6's status_code/phys_complete_pct onto our simplified ActivityStatus +
     percent_complete (0-100 int) — used only when CREATING a new activity row."""
@@ -237,7 +246,7 @@ def import_xer(
         row.late_finish = _to_date(act.late_end_date)
         row.total_float_hours = act.total_float_hr_cnt
         row.free_float_hours = act.free_float_hr_cnt
-        is_critical = act.total_float_hr_cnt is not None and act.total_float_hr_cnt <= _TOL
+        is_critical = _is_critical(act.total_float_hr_cnt, act.status_code)
         row.is_critical = is_critical
         row.constraint_type = act.cstr_type
         row.constraint_date = _to_date(act.cstr_date)
@@ -332,14 +341,10 @@ def import_xer(
                 "link_type": link_type.value,
                 "lag_hours": rel.lag_hr_cnt,
                 "pred_critical": bool(
-                    pred_act
-                    and pred_act.total_float_hr_cnt is not None
-                    and pred_act.total_float_hr_cnt <= _TOL
+                    pred_act and _is_critical(pred_act.total_float_hr_cnt, pred_act.status_code)
                 ),
                 "succ_critical": bool(
-                    succ_act
-                    and succ_act.total_float_hr_cnt is not None
-                    and succ_act.total_float_hr_cnt <= _TOL
+                    succ_act and _is_critical(succ_act.total_float_hr_cnt, succ_act.status_code)
                 ),
             }
         )

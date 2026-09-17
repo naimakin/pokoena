@@ -1,10 +1,14 @@
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.models.activity import Activity
+from app.models.schedule_import import ScheduleImport
 from app.models.user_tenant_role import TenantRole
 from tests.factories import add_membership, create_project, create_tenant, create_user
 
 FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_project.xer"
+COMPLETED_FIXTURE = Path(__file__).parent / "fixtures" / "completed_not_critical.xer"
 
 
 def _setup(db_session):
@@ -13,6 +17,15 @@ def _setup(db_session):
     admin = create_user(db_session, "xer-admin@example.com", "secret123")
     add_membership(db_session, admin, tenant, TenantRole.company_admin)
     return tenant, project
+
+
+def _set_imported_at(db_session, import_id: str, dt: datetime) -> None:
+    # SQLite's CURRENT_TIMESTAMP (unlike Postgres's now() in production) only
+    # has second resolution, so back-to-back uploads in a test can tie on
+    # imported_at — force a deterministic order for "which one is latest".
+    row = db_session.query(ScheduleImport).filter(ScheduleImport.id == uuid.UUID(import_id)).one()
+    row.imported_at = dt
+    db_session.commit()
 
 
 def _upload(client, project_id):
@@ -53,6 +66,29 @@ def test_activities_reflect_cpm_results_after_import(client, db_session):
     assert by_code["A200"]["early_start"] == "2026-01-05"
     assert by_code["A100"]["status"] == "not_started"
     assert by_code["A100"]["remaining_duration_days"] == 1
+
+
+def test_completed_activity_is_not_critical_even_at_zero_float(client, db_session):
+    # The CPM scheduler force-sets total_float_hr_cnt=0.0 for every TK_Complete
+    # task (app/engine/cpm/scheduler.py) regardless of actual slack — that's a
+    # display convention, not a signal that finished work is still "critical".
+    # A finished activity with no remaining work should never show as critical,
+    # even though its raw total float reads 0, same as a genuinely critical one.
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+
+    with open(COMPLETED_FIXTURE, "rb") as f:
+        response = client.post(
+            f"/projects/{project.id}/schedule-imports",
+            files={"file": ("completed_not_critical.xer", f.read(), "application/octet-stream")},
+        )
+    assert response.status_code == 201
+    assert response.json()["critical_count"] == 1  # only the not-yet-started successor
+
+    by_code = {a["external_id"]: a for a in client.get(f"/activities?project_id={project.id}").json()}
+    assert by_code["C100"]["total_float_hours"] == 0  # scheduler's display convention
+    assert by_code["C100"]["is_critical"] is False  # but it's finished, so not critical
+    assert by_code["C200"]["is_critical"] is True  # genuinely on the critical path
 
 
 def test_reimport_preserves_subcontractor_owned_progress_fields(client, db_session):
@@ -281,3 +317,48 @@ def test_unexpected_import_error_returns_a_proper_500_with_cors_headers(client, 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
     assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_delete_schedule_import_blocks_the_current_one(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    latest = _upload(client, project.id).json()
+
+    response = client.delete(f"/projects/{project.id}/schedule-imports/{latest['id']}")
+
+    assert response.status_code == 409
+    assert "current schedule" in response.json()["detail"]
+
+
+def test_delete_schedule_import_blocks_a_baseline_linked_one(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    base = datetime.now(timezone.utc)
+    first = _upload(client, project.id).json()  # auto-locked as the baseline
+    _set_imported_at(db_session, first["id"], base)
+    second = _upload(client, project.id).json()  # now the current one
+    _set_imported_at(db_session, second["id"], base + timedelta(minutes=1))
+
+    response = client.delete(f"/projects/{project.id}/schedule-imports/{first['id']}")
+
+    assert response.status_code == 409
+    assert "baseline" in response.json()["detail"]
+
+
+def test_delete_schedule_import_removes_a_superseded_one(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    base = datetime.now(timezone.utc)
+    first = _upload(client, project.id).json()  # #1, auto-locked as the baseline
+    _set_imported_at(db_session, first["id"], base)
+    middle = _upload(client, project.id).json()  # #2, deletable
+    _set_imported_at(db_session, middle["id"], base + timedelta(minutes=1))
+    last = _upload(client, project.id).json()  # #3, the current one
+    _set_imported_at(db_session, last["id"], base + timedelta(minutes=2))
+
+    response = client.delete(f"/projects/{project.id}/schedule-imports/{middle['id']}")
+
+    assert response.status_code == 204
+    remaining_ids = {i["id"] for i in client.get(f"/projects/{project.id}/schedule-imports").json()}
+    assert middle["id"] not in remaining_ids
+    assert len(remaining_ids) == 2

@@ -7,9 +7,13 @@ from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
+from app.models.activity import Activity
+from app.models.baseline import Baseline
 from app.models.project import Project
+from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
+from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ScheduleImportOut
 from app.services.xer_import import import_xer
@@ -81,3 +85,48 @@ def upload_schedule(
         )
     except NoWorkingDayError as e:
         raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
+
+
+@router.delete("/{import_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_schedule_import(
+    project_id: uuid.UUID,
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> None:
+    """Removes a mis-uploaded or no-longer-wanted import from history. Two
+    imports can never be deleted: the most recent one (it *is* the live
+    schedule — activities/relationships were overwritten wholesale from it,
+    see services/xer_import.py) and one a baseline is locked from (baselines
+    are a permanent commitment, never silently discarded). Deleting any other
+    import also drops its ScheduleStatusSnapshot trend point and clears the
+    now-dangling references on activities/recovery plans."""
+    row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
+    if row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleImport not found")
+    require_project_permission(db, project_id, ctx, need_edit=True)
+
+    latest = (
+        db.query(ScheduleImport.id)
+        .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
+        .order_by(ScheduleImport.imported_at.desc())
+        .first()
+    )
+    if latest is not None and latest[0] == import_id:
+        raise HTTPException(status_code=409, detail="Can't delete the current schedule — upload a corrected file to replace it")
+
+    baseline_ref = (
+        db.query(Baseline.id)
+        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.schedule_import_id == import_id)
+        .first()
+    )
+    if baseline_ref is not None:
+        raise HTTPException(status_code=409, detail="This import is locked as a baseline and can't be deleted")
+
+    db.query(ScheduleStatusSnapshot).filter(ScheduleStatusSnapshot.schedule_import_id == import_id).delete()
+    db.query(Activity).filter(Activity.last_import_id == import_id).update({Activity.last_import_id: None})
+    db.query(RecoveryPlan).filter(RecoveryPlan.from_import_id == import_id).update({RecoveryPlan.from_import_id: None})
+    db.query(RecoveryPlan).filter(RecoveryPlan.to_import_id == import_id).update({RecoveryPlan.to_import_id: None})
+
+    db.delete(row)
+    db.commit()
