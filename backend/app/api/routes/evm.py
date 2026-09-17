@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,7 @@ from app.services.baseline import (
     lock_baseline_for_project,
     overwrite_active_baseline,
 )
-from app.services.xer_import import import_xer
+from app.services.xer_import import DataDateRegressionError, import_xer
 from app.schemas.evm import (
     BaselineOut,
     BaselineProgramResultOut,
@@ -238,6 +238,7 @@ def get_baseline_status(
 def upload_baseline_program(
     project_id: uuid.UUID,
     file: UploadFile = File(...),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
 ) -> BaselineProgramResultOut:
@@ -246,7 +247,13 @@ def upload_baseline_program(
     later upload here overwrites it in place (same baseline row, recomputed
     activities / PV curve / frozen resources — the owner's choice over
     versioning). Also refreshes EVM snapshots when progress already exists so
-    a replace doesn't leave stale metrics."""
+    a replace doesn't leave stale metrics.
+
+    This ALSO overwrites the project's live activities/relationships (there's
+    no separate storage for "the baseline's own data" — see services/
+    baseline.py), so uploading a file older than what's already live would
+    silently regress Execution/Progress; force=False (the default) blocks
+    that instead — see DataDateRegressionError."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
     if not file.filename or not file.filename.lower().endswith(".xer"):
@@ -255,7 +262,7 @@ def upload_baseline_program(
     file_bytes = file.file.read()
     try:
         schedule_import = import_xer(
-            db, project_id, ctx, file.filename, file_bytes, revision_kind="baseline"
+            db, project_id, ctx, file.filename, file_bytes, revision_kind="baseline", force=force
         )
     except XerParseError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -266,6 +273,8 @@ def upload_baseline_program(
         )
     except NoWorkingDayError as e:
         raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
+    except DataDateRegressionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
     active = (
         db.query(Baseline)

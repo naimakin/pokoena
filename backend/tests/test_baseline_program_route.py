@@ -113,6 +113,28 @@ def test_non_admin_cannot_upload_baseline_program(client, db_session):
     assert response.status_code == 403
 
 
+def test_upload_blocks_a_data_date_regression_unless_forced(client, db_session):
+    # Replacing the baseline also overwrites the live schedule (see
+    # services/xer_import.py) — uploading an older-dated file here would
+    # silently regress Execution/Progress just like it would through Program
+    # Library, so the same guard applies.
+    _tenant, project = _setup(db_session)
+    _login(client)
+    _upload(client, project.id, FIXTURE.read_bytes(), name="bsl_v2.xer")  # data date 2026-01-05
+
+    older = FIXTURE.read_bytes().replace(b"2026-01-05 08:00", b"2025-06-01 08:00")
+    blocked = _upload(client, project.id, older, name="bsl_v1_again.xer")
+    assert blocked.status_code == 409
+    assert "data date" in blocked.json()["detail"]
+
+    forced = client.post(
+        f"/projects/{project.id}/evm/baseline/program",
+        files={"file": ("bsl_v1_again.xer", older, "application/octet-stream")},
+        data={"force": "true"},
+    )
+    assert forced.status_code == 201
+
+
 def test_rejects_non_xer(client, db_session):
     _tenant, project = _setup(db_session)
     _login(client)

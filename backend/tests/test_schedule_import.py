@@ -9,6 +9,7 @@ from tests.factories import add_membership, create_project, create_tenant, creat
 
 FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_project.xer"
 COMPLETED_FIXTURE = Path(__file__).parent / "fixtures" / "completed_not_critical.xer"
+OLDER_FIXTURE = Path(__file__).parent / "fixtures" / "older_data_date.xer"
 
 
 def _setup(db_session):
@@ -362,3 +363,41 @@ def test_delete_schedule_import_removes_a_superseded_one(client, db_session):
     remaining_ids = {i["id"] for i in client.get(f"/projects/{project.id}/schedule-imports").json()}
     assert middle["id"] not in remaining_ids
     assert len(remaining_ids) == 2
+
+
+def test_upload_blocks_a_data_date_regression(client, db_session):
+    # synthetic_project.xer's data date (2026-01-05) is newer than
+    # older_data_date.xer's (2025-06-01) — uploading the older file next would
+    # silently move the live schedule backward, so it must be blocked by
+    # default.
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    _upload(client, project.id)
+
+    with open(OLDER_FIXTURE, "rb") as f:
+        response = client.post(
+            f"/projects/{project.id}/schedule-imports",
+            files={"file": ("older_data_date.xer", f.read(), "application/octet-stream")},
+        )
+
+    assert response.status_code == 409
+    assert "data date" in response.json()["detail"]
+
+    # The live schedule must be untouched — still the original 6 activities.
+    assert len(client.get(f"/activities?project_id={project.id}").json()) == 6
+
+
+def test_upload_data_date_regression_can_be_forced(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    _upload(client, project.id)
+
+    with open(OLDER_FIXTURE, "rb") as f:
+        response = client.post(
+            f"/projects/{project.id}/schedule-imports",
+            files={"file": ("older_data_date.xer", f.read(), "application/octet-stream")},
+            data={"force": "true"},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["activity_count"] == 1

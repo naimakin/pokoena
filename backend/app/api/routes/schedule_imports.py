@@ -16,7 +16,7 @@ from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ScheduleImportOut
-from app.services.xer_import import import_xer
+from app.services.xer_import import DataDateRegressionError, import_xer
 
 router = APIRouter(prefix="/projects/{project_id}/schedule-imports", tags=["schedule-imports"])
 
@@ -48,6 +48,7 @@ def upload_schedule(
     project_id: uuid.UUID,
     file: UploadFile = File(...),
     roundtrip_from_export_id: uuid.UUID | None = Form(None),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ScheduleImport:
@@ -74,7 +75,7 @@ def upload_schedule(
     try:
         return import_xer(
             db, project_id, ctx, file.filename, file_bytes,
-            roundtrip_from_export_id=roundtrip_from_export_id,
+            roundtrip_from_export_id=roundtrip_from_export_id, force=force,
         )
     except XerParseError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -85,6 +86,8 @@ def upload_schedule(
         )
     except NoWorkingDayError as e:
         raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
+    except DataDateRegressionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.delete("/{import_id}", status_code=status.HTTP_204_NO_CONTENT)

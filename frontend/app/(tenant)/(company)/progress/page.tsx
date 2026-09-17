@@ -14,6 +14,16 @@ type Mode = "status" | "manhours";
 const MODE_KEY = "poko:progress:mode";
 const VIEW = "progress";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// P6 convention (DD-MMM-YYYY) — see CLAUDE.md.
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+}
+
 export default function ProgressPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
@@ -23,6 +33,7 @@ export default function ProgressPage() {
   const [savedFilters, setSavedFilters] = useState<SavedActivityFilter[]>([]);
   const [hasActiveBaseline, setHasActiveBaseline] = useState(false);
   const [dataDate, setDataDate] = useState<string | null>(null);
+  const [currentImport, setCurrentImport] = useState<ScheduleImport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +100,7 @@ export default function ProgressPage() {
         setActivities(acts);
         setWbsNodes(nodes);
         setHasActiveBaseline(baseline.has_active);
+        setCurrentImport(imports[0] ?? null);
         setDataDate(imports[0]?.data_date ?? null);
         loadFilters();
       } catch (err) {
@@ -105,6 +117,7 @@ export default function ProgressPage() {
     () => applyFilter(activities, nodeByWbsId, criteria),
     [activities, nodeByWbsId, criteria],
   );
+  const completedCount = useMemo(() => activities.filter((a) => a.status === "complete").length, [activities]);
 
   const setCriteria = useCallback(
     (next: FilterCriteria) => {
@@ -227,8 +240,12 @@ export default function ProgressPage() {
           <div>
             <div className="page-title">Progress</div>
             <div className="page-desc">
-              {filtered.length} of {activities.length} activities
-              {dataDate ? ` · data date ${new Date(dataDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+              {filtered.length !== activities.length
+                ? `${filtered.length} of ${activities.length} activities shown`
+                : `${activities.length} activities`}
+              {` · ${completedCount} completed`}
+              {dataDate ? ` · data date ${fmtDate(dataDate)}` : ""}
+              {currentImport?.revision_label ? ` · current: ${currentImport.revision_label}` : ""}
             </div>
           </div>
           <div className="segmented">
@@ -236,7 +253,7 @@ export default function ProgressPage() {
               Status &amp; Dates
             </button>
             <button className={mode === "manhours" ? "active" : ""} onClick={() => switchMode("manhours")}>
-              Manhours (EVM)
+              Burned MH Loading
             </button>
           </div>
         </div>

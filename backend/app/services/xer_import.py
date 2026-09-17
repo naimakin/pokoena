@@ -68,6 +68,22 @@ def _to_date(dt: datetime | None) -> date | None:
     return dt.date() if dt else None
 
 
+class DataDateRegressionError(ValueError):
+    """Raised when an import's data date is older than the project's current
+    live schedule's — importing it would move activity dates/progress
+    backward, almost always an accidental upload of a stale file (e.g. an old
+    baseline re-uploaded after a newer update programme already came in).
+    Callers pass force=True to import anyway."""
+
+    def __init__(self, new_data_date: datetime, current_data_date: datetime):
+        self.new_data_date = new_data_date
+        self.current_data_date = current_data_date
+        super().__init__(
+            f"This file's data date ({new_data_date.date()}) is older than the project's current "
+            f"data date ({current_data_date.date()}) — importing it will move the live schedule backward."
+        )
+
+
 def _is_critical(total_float_hr_cnt: float | None, status_code: str) -> bool:
     """A finished activity has no remaining work to protect, so it's never
     "critical" regardless of the total float P6 computed for it — matches P6's
@@ -97,12 +113,29 @@ def import_xer(
     *,
     revision_kind: str = "update",
     roundtrip_from_export_id: uuid.UUID | None = None,
+    force: bool = False,
 ) -> ScheduleImport:
     """`revision_kind` drives the sync-log label: "update" (Program Library)
     gets the next per-project UPD-n; "baseline" (Planning → Baselines) and the
-    project's very first upload are the unnumbered "Baseline programme"."""
+    project's very first upload are the unnumbered "Baseline programme".
+
+    `force=False` (the default) raises DataDateRegressionError instead of
+    importing when the file's data date is older than the project's current
+    one — every import overwrites the live activities/relationships tables
+    wholesale (see module docstring), baseline uploads included, so an
+    out-of-order upload silently regresses live progress otherwise."""
     parsed: ParsedSchedule = parse_xer(file_bytes)
     schedule(parsed)
+
+    if not force and parsed.meta.data_date is not None:
+        current = (
+            db.query(ScheduleImport)
+            .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
+            .order_by(ScheduleImport.imported_at.desc())
+            .first()
+        )
+        if current is not None and current.data_date is not None and parsed.meta.data_date < current.data_date:
+            raise DataDateRegressionError(parsed.meta.data_date, current.data_date)
 
     import_id = uuid.uuid4()
 

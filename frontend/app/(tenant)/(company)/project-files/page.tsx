@@ -74,7 +74,7 @@ export default function ProgramLibraryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
-  async function upload(file: File) {
+  async function upload(file: File, force = false) {
     if (!project) return;
     if (!file.name.toLowerCase().endsWith(".xer")) {
       showToast("Only .xer files are supported");
@@ -85,12 +85,18 @@ export default function ProgramLibraryPage() {
       const formData = new FormData();
       formData.append("file", file);
       if (linkExportId) formData.append("roundtrip_from_export_id", linkExportId);
+      if (force) formData.append("force", "true");
       const result = await api.postFile<ScheduleImport>(`/projects/${project.id}/schedule-imports`, formData);
       setLastResult(result);
       setLinkExportId("");
       showToast(`Imported ${result.activity_count} activities (${result.critical_count} critical)`);
       load();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && !force) {
+        setUploading(false);
+        if (window.confirm(`${err.message}\n\nImport it anyway?`)) await upload(file, true);
+        return;
+      }
       showToast(err instanceof ApiError ? err.message : "Failed to import schedule file.");
     } finally {
       setUploading(false);

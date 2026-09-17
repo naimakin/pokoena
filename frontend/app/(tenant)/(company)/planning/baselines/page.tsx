@@ -108,7 +108,7 @@ export default function BaselinesPage() {
     load();
   }, [load]);
 
-  async function upload(file: File) {
+  async function upload(file: File, force = false) {
     if (!project) return;
     if (!file.name.toLowerCase().endsWith(".xer")) {
       showToast("Only .xer files are supported");
@@ -118,6 +118,7 @@ export default function BaselinesPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      if (force) formData.append("force", "true");
       const result = await api.postFile<BaselineProgramResult>(
         `/projects/${project.id}/evm/baseline/program`,
         formData
@@ -131,6 +132,11 @@ export default function BaselinesPage() {
       await refreshBaseline();
       await load();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && !force) {
+        setUploading(false);
+        if (window.confirm(`${err.message}\n\nImport it anyway?`)) await upload(file, true);
+        return;
+      }
       showToast(err instanceof ApiError ? err.message : "Failed to upload the baseline programme.");
     } finally {
       setUploading(false);
