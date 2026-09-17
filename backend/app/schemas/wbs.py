@@ -1,6 +1,22 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class WbsNodeCreate(BaseModel):
+    # None = new root node. Otherwise must match an existing node's wbs_id
+    # within the same project (checked by the route, not here).
+    parent_wbs_id: str | None = None
+    wbs_short_name: str = Field(min_length=1, max_length=50)
+    wbs_name: str = Field(min_length=1, max_length=255)
+
+    @field_validator("wbs_short_name", "wbs_name")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("cannot be blank")
+        return v
 
 
 class WbsNodeOut(BaseModel):

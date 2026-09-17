@@ -110,6 +110,85 @@ def test_wbs_node_with_out_of_tree_parent_is_treated_as_root(client, db_session)
     assert rows["X"]["total_activity_count"] == 1
 
 
+def test_create_wbs_node_root_and_child(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "wbs-admin@example.com", "password": "secret123"})
+
+    root = client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": None, "wbs_short_name": "ROOT", "wbs_name": "New Root"},
+    )
+    assert root.status_code == 201
+    root_body = root.json()
+    assert root_body["parent_wbs_id"] is None
+    assert root_body["wbs_name"] == "New Root"
+
+    child = client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": root_body["wbs_id"], "wbs_short_name": "CHILD", "wbs_name": "New Child"},
+    )
+    assert child.status_code == 201
+    assert child.json()["parent_wbs_id"] == root_body["wbs_id"]
+
+    rows = {r["wbs_id"]: r for r in client.get(f"/projects/{project.id}/wbs-nodes").json()}
+    assert rows[root_body["wbs_id"]]["depth"] == 0
+    assert rows[child.json()["wbs_id"]]["depth"] == 1
+
+
+def test_create_wbs_node_rejects_unknown_parent(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "wbs-admin@example.com", "password": "secret123"})
+
+    response = client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": "GHOST", "wbs_short_name": "X", "wbs_name": "Orphan"},
+    )
+    assert response.status_code == 400
+
+
+def test_delete_wbs_node(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "wbs-admin@example.com", "password": "secret123"})
+
+    created = client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": None, "wbs_short_name": "TMP", "wbs_name": "Temp"},
+    ).json()
+
+    response = client.delete(f"/projects/{project.id}/wbs-nodes/{created['id']}")
+    assert response.status_code == 204
+    assert client.get(f"/projects/{project.id}/wbs-nodes").json() == []
+
+
+def test_delete_wbs_node_blocked_when_it_has_children(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "wbs-admin@example.com", "password": "secret123"})
+
+    root = client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": None, "wbs_short_name": "ROOT", "wbs_name": "Root"},
+    ).json()
+    client.post(
+        f"/projects/{project.id}/wbs-nodes",
+        json={"parent_wbs_id": root["wbs_id"], "wbs_short_name": "CHILD", "wbs_name": "Child"},
+    )
+
+    response = client.delete(f"/projects/{project.id}/wbs-nodes/{root['id']}")
+    assert response.status_code == 409
+
+
+def test_delete_wbs_node_blocked_when_it_has_activities(client, db_session):
+    tenant, project = _setup(db_session)
+    _wbs(db_session, tenant, project, "R", None, "Project", 1)
+    _activity(db_session, tenant, project, "A1", "R")
+    db_session.commit()
+    client.post("/auth/login", json={"email": "wbs-admin@example.com", "password": "secret123"})
+
+    node_id = client.get(f"/projects/{project.id}/wbs-nodes").json()[0]["id"]
+    response = client.delete(f"/projects/{project.id}/wbs-nodes/{node_id}")
+    assert response.status_code == 409
+
+
 def test_wbs_nodes_after_import_with_no_projwbs_table(client, db_session):
     # The Slice 1 synthetic fixture has no PROJWBS block (activities reference
     # "WBS1" via TASK.wbs_id, but nothing defines that node) — parse_xer's
