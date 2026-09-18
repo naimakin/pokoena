@@ -6,6 +6,7 @@ import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, EvmScurve, EvmSummary, Project } from "@/lib/types";
 import { CheckIcon, DownloadIcon, LockIcon, TrendingUpIcon } from "@/components/icons";
 import { ScurveChart, selectStyle } from "@/components/ScurveChart";
+import { ExpandableChartCard } from "@/components/ExpandableChartCard";
 
 const GRANULARITIES = ["daily", "weekly", "monthly"] as const;
 type Granularity = (typeof GRANULARITIES)[number];
@@ -240,30 +241,31 @@ export default function EvmPage() {
               </div>
             )}
 
-            <div className="card" style={{ marginTop: "1rem" }}>
-              <div className="card-head">
-                <div>
-                  <div className="card-title">
+            <div style={{ marginTop: "1rem" }}>
+              <ExpandableChartCard
+                title={
+                  <span style={{ display: "flex", alignItems: "center" }}>
                     <TrendingUpIcon className="icon" style={{ marginRight: ".35rem" }} />
                     S-Curve
-                  </div>
-                  <div className="card-title-sub">Planned vs. Earned vs. Actual (cumulative manhours)</div>
-                </div>
-                <select style={selectStyle} value={granularity} onChange={(e) => setGranularity(e.target.value as Granularity)}>
-                  {GRANULARITIES.map((g) => (
-                    <option key={g} value={g}>
-                      {g[0].toUpperCase() + g.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ padding: "1rem 1.1rem" }}>
+                  </span>
+                }
+                subtitle="Planned vs. Earned vs. Actual (cumulative manhours)"
+                headerExtra={
+                  <select style={selectStyle} value={granularity} onChange={(e) => setGranularity(e.target.value as Granularity)}>
+                    {GRANULARITIES.map((g) => (
+                      <option key={g} value={g}>
+                        {g[0].toUpperCase() + g.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                }
+              >
                 {scurve && scurve.series.length > 0 ? (
                   <ScurveChart series={scurve.series} />
                 ) : (
                   <p className="empty-state">No progress entries yet — submit progress from the Progress Input page.</p>
                 )}
-              </div>
+              </ExpandableChartCard>
             </div>
 
             {baselineStatus.all_baselines.filter((b) => b.status !== "active").length > 0 && (
