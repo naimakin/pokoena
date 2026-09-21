@@ -348,9 +348,6 @@ export default function ProgramLibraryPage() {
                 <div className="banner-text">
                   Baseline locked (<b>{baselineStatus.active_baseline?.version_label}</b>) — new uploads update the
                   live schedule; the baseline itself stays fixed for comparison.
-                  {currentImport && baselineStatus.active_baseline?.schedule_import_id !== currentImport.id && (
-                    <span style={{ color: "var(--warn)" }}> The baseline is a different import from the current update — that's fine, they are compared.</span>
-                  )}
                 </div>
               </div>
             ) : (
