@@ -166,6 +166,15 @@ def test_risk_highlights_flags_overdue_and_negative_float(client, db_session):
     health = client.get(f"/dashboard/health?project_id={project.id}").json()
     cp = next(f for f in health["factors"] if f["label"] == "Critical path")
     assert cp["status"] == "crit"
+    # Every factor carries the stable key the dashboard uses to link to its detail page.
+    assert cp["key"] == "critical_path"
+    assert {f["key"] for f in health["factors"]} <= {
+        "scope_submissions",
+        "evm",
+        "critical_path",
+        "pending_reviews",
+        "overdue",
+    }
 
 
 def test_risk_highlights_include_high_score_register_risks(client, db_session):

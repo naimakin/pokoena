@@ -5,6 +5,7 @@ import type {
   DashboardSummary,
   DashboardWidgetKey,
   EvmScurve,
+  HealthFactorKey,
   Project,
   ProjectHealth,
   RiskHighlight,
@@ -31,6 +32,17 @@ interface WidgetDef {
   pad?: boolean;
   render: (ctx: WidgetContext) => ReactNode;
 }
+
+// Where each Project Health factor's detail lives. Schedule takes a preset filter
+// (see schedule/page.tsx) so the critical-path / overdue rows land on the exact
+// activity list behind the number.
+const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
+  scope_submissions: "/update-period-control",
+  evm: "/evm",
+  critical_path: "/schedule?filter=critical",
+  pending_reviews: "/review-queue",
+  overdue: "/schedule?filter=overdue",
+};
 
 function Kpi({
   label,
@@ -174,11 +186,18 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
           </div>
           <div className="health-factors">
             {health.factors.map((f) => (
-              <div key={f.label} className="health-factor">
+              <a
+                key={f.label}
+                className="health-factor"
+                href={HEALTH_FACTOR_HREF[f.key]}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open details in a new tab"
+              >
                 <span className={`dot ${f.status}`} />
                 <span className="fl">{f.label}</span>
                 <span className="fd">{f.detail}</span>
-              </div>
+              </a>
             ))}
           </div>
         </div>

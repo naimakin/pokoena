@@ -694,7 +694,15 @@ export interface DashboardLayoutUpdate {
 
 export type HealthStatus = "good" | "warn" | "crit" | "unknown";
 
+export type HealthFactorKey =
+  | "scope_submissions"
+  | "evm"
+  | "critical_path"
+  | "pending_reviews"
+  | "overdue";
+
 export interface HealthFactor {
+  key: HealthFactorKey;
   label: string;
   status: HealthStatus;
   detail: string;

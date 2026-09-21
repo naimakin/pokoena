@@ -359,14 +359,14 @@ def get_project_health(
         status = "good" if rate >= 0.9 else "warn" if rate >= 0.5 else "crit"
         factors.append(
             HealthFactor(
-                label="Scope submissions",
+                key="scope_submissions", label="Scope submissions",
                 status=status,
                 detail=f"{s['orgs_submitted']} of {s['orgs_total']} scopes submitted this period",
             )
         )
     else:
         factors.append(
-            HealthFactor(label="Scope submissions", status="unknown", detail="No open update period with subcontractor scopes")
+            HealthFactor(key="scope_submissions", label="Scope submissions", status="unknown", detail="No open update period with subcontractor scopes")
         )
 
     # 2 & 3. EVM schedule + cost performance.
@@ -374,22 +374,22 @@ def get_project_health(
     if snap is not None:
         factors.append(
             HealthFactor(
-                label="Schedule performance (SPI)",
+                key="evm", label="Schedule performance (SPI)",
                 status=_index_status(snap.spi),
                 detail=f"SPI {snap.spi:.2f}" if snap.spi is not None else "Not enough progress data",
             )
         )
         factors.append(
             HealthFactor(
-                label="Cost performance (CPI)",
+                key="evm", label="Cost performance (CPI)",
                 status=_index_status(snap.cpi),
                 detail=f"CPI {snap.cpi:.2f}" if snap.cpi is not None else "Not enough progress data",
             )
         )
     elif s["baseline"] is not None:
-        factors.append(HealthFactor(label="EVM performance", status="unknown", detail="Baseline locked, no progress submitted yet"))
+        factors.append(HealthFactor(key="evm", label="EVM performance", status="unknown", detail="Baseline locked, no progress submitted yet"))
     else:
-        factors.append(HealthFactor(label="EVM performance", status="unknown", detail="No baseline locked"))
+        factors.append(HealthFactor(key="evm", label="EVM performance", status="unknown", detail="No baseline locked"))
 
     # 4. Critical path float.
     if any(a.total_float_hours is not None for a in activities):
@@ -397,15 +397,15 @@ def get_project_health(
         if negative:
             factors.append(
                 HealthFactor(
-                    label="Critical path",
+                    key="critical_path", label="Critical path",
                     status="crit",
                     detail=f"{len(negative)} activit{'y' if len(negative) == 1 else 'ies'} with negative float",
                 )
             )
         else:
-            factors.append(HealthFactor(label="Critical path", status="good", detail="No negative float on the network"))
+            factors.append(HealthFactor(key="critical_path", label="Critical path", status="good", detail="No negative float on the network"))
     else:
-        factors.append(HealthFactor(label="Critical path", status="unknown", detail="No schedule imported"))
+        factors.append(HealthFactor(key="critical_path", label="Critical path", status="unknown", detail="No schedule imported"))
 
     # 5. Pending change reviews — only a meaningful signal once a period exists
     # to flag changes against; otherwise "0 pending" isn't really good news.
@@ -413,26 +413,26 @@ def get_project_health(
     if s["period"]:
         factors.append(
             HealthFactor(
-                label="Pending reviews",
+                key="pending_reviews", label="Pending reviews",
                 status="good" if pending == 0 else "warn" if pending < 5 else "crit",
                 detail=f"{pending} change request{'' if pending == 1 else 's'} awaiting a decision",
             )
         )
     else:
-        factors.append(HealthFactor(label="Pending reviews", status="unknown", detail="No update period opened yet"))
+        factors.append(HealthFactor(key="pending_reviews", label="Pending reviews", status="unknown", detail="No update period opened yet"))
 
     # 6. Overdue activities.
     if activities:
         overdue = _overdue_activities(activities, s["today"])
         factors.append(
             HealthFactor(
-                label="Overdue activities",
+                key="overdue", label="Overdue activities",
                 status="good" if not overdue else "warn" if len(overdue) <= 5 else "crit",
                 detail=f"{len(overdue)} activit{'y' if len(overdue) == 1 else 'ies'} past planned finish",
             )
         )
     else:
-        factors.append(HealthFactor(label="Overdue activities", status="unknown", detail="No activities yet"))
+        factors.append(HealthFactor(key="overdue", label="Overdue activities", status="unknown", detail="No activities yet"))
 
     scored = [_STATUS_SCORE[f.status] for f in factors if f.status in _STATUS_SCORE]
     if not scored:

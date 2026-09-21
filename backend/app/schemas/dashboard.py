@@ -63,6 +63,8 @@ HealthStatus = Literal["good", "warn", "crit", "unknown"]
 
 
 class HealthFactor(BaseModel):
+    # Stable id the frontend maps to a detail page (labels are display copy and may change).
+    key: str
     label: str
     status: HealthStatus
     detail: str

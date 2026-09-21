@@ -25,7 +25,22 @@ export default function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [criticalOnly, setCriticalOnly] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  // Lowest float first puts the most schedule-critical activities on top.
+  const [floatAsc, setFloatAsc] = useState(false);
   const [page, setPage] = useState(1);
+
+  // Deep links from the dashboard's Project Health card: /schedule?filter=critical|overdue
+  useEffect(() => {
+    const preset = new URLSearchParams(window.location.search).get("filter");
+    if (preset === "critical") {
+      setCriticalOnly(true);
+      setFloatAsc(true);
+    } else if (preset === "overdue") {
+      setOverdueOnly(true);
+      setFloatAsc(true);
+    }
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -50,12 +65,23 @@ export default function SchedulePage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return activities.filter((a) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = activities.filter((a) => {
       if (criticalOnly && !a.is_critical) return false;
+      // Same definition as the dashboard's "Overdue activities": unfinished and past planned finish.
+      if (overdueOnly && (a.status === "complete" || !a.planned_finish || a.planned_finish.slice(0, 10) >= today)) {
+        return false;
+      }
       if (!q) return true;
       return a.external_id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
     });
-  }, [activities, query, criticalOnly]);
+    if (floatAsc) {
+      rows.sort(
+        (x, y) => (x.total_float_hours ?? Number.POSITIVE_INFINITY) - (y.total_float_hours ?? Number.POSITIVE_INFINITY),
+      );
+    }
+    return rows;
+  }, [activities, query, criticalOnly, overdueOnly, floatAsc]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -126,6 +152,17 @@ export default function SchedulePage() {
               />
               Critical path only
             </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={overdueOnly}
+                onChange={(e) => {
+                  setOverdueOnly(e.target.checked);
+                  setPage(1);
+                }}
+              />
+              Overdue only
+            </label>
           </div>
 
           <div className="table-wrap">
@@ -136,7 +173,16 @@ export default function SchedulePage() {
                   <th>Name</th>
                   <th>Early Start</th>
                   <th>Early Finish</th>
-                  <th>Total Float</th>
+                  <th
+                    onClick={() => {
+                      setFloatAsc((v) => !v);
+                      setPage(1);
+                    }}
+                    style={{ cursor: "pointer", userSelect: "none" }}
+                    title="Sort by total float, lowest first"
+                  >
+                    Total Float{floatAsc ? " ↑" : ""}
+                  </th>
                   <th>% Complete</th>
                   <th>Critical</th>
                 </tr>
@@ -152,7 +198,7 @@ export default function SchedulePage() {
                   </tr>
                 )}
                 {pageRows.map((a) => (
-                  <tr key={a.id}>
+                  <tr key={a.id} className={a.is_critical ? "critical" : undefined}>
                     <td className="actid">{a.external_id}</td>
                     <td>{a.name}</td>
                     <td>{fmtDate(a.early_start)}</td>
