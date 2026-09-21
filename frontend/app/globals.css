@@ -399,6 +399,8 @@ tr.resolved{opacity:.45}
 .act-btn:disabled{opacity:.4}
 .act-approve{color:var(--good)}
 .act-approve:hover:not(:disabled){background:var(--good-soft);border-color:transparent}
+.act-edit{color:var(--text-secondary)}
+.act-edit:hover:not(:disabled){background:var(--accent-soft);border-color:transparent;color:var(--accent-strong)}
 .act-reject{color:var(--crit)}
 .act-reject:hover:not(:disabled){background:var(--crit-soft);border-color:transparent}
 .who-cell{display:flex;align-items:center;gap:.5rem}

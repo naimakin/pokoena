@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, ScheduleImport, SyncLogEntry } from "@/lib/types";
-import { CheckIcon, LockIcon, UploadCloudIcon, XIcon } from "@/components/icons";
+import { CheckIcon, LockIcon, PencilIcon, UploadCloudIcon, XIcon } from "@/components/icons";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -19,12 +19,20 @@ const selectStyle: CSSProperties = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// P6 convention (DD-MMM-YYYY) — see CLAUDE.md.
+// P6-style short date on this page: DD-MMM-YY (e.g. 30-Apr-26).
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
+}
+
+// Same format plus a local HH:MM — for the moment an import happened.
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const date = `${String(d.getDate()).padStart(2, "0")}-${MONTHS[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
+  return `${date} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 export default function ProgramLibraryPage() {
@@ -40,6 +48,9 @@ export default function ProgramLibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ScheduleImport | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [baselineLabel, setBaselineLabel] = useState("Baseline");
   const [baselineBusy, setBaselineBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,6 +138,34 @@ export default function ProgramLibraryPage() {
       showToast(err instanceof ApiError ? err.message : "Could not delete this import.");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function startEdit(imp: ScheduleImport) {
+    setEditingId(imp.id);
+    setEditLabel(imp.revision_label ?? "");
+  }
+
+  async function saveEdit(imp: ScheduleImport) {
+    if (!project) return;
+    const label = editLabel.trim();
+    if (!label) {
+      showToast("Revision label can't be blank");
+      return;
+    }
+    if (label === (imp.revision_label ?? "")) {
+      setEditingId(null);
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await api.patch(`/projects/${project.id}/schedule-imports/${imp.id}`, { revision_label: label });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not rename this import.");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -349,7 +388,7 @@ export default function ProgramLibraryPage() {
                       <th>Critical</th>
                       <th>Imported</th>
                       <th>Baseline</th>
-                      <th style={{ width: 48 }} />
+                      <th style={{ width: 84 }} />
                     </tr>
                   </thead>
                   <tbody>
@@ -366,7 +405,24 @@ export default function ProgramLibraryPage() {
                       return (
                         <tr key={imp.id}>
                           <td>
-                            <span className="mono">{imp.revision_label ?? "—"}</span>
+                            {editingId === imp.id ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                maxLength={30}
+                                style={{ width: 170 }}
+                                value={editLabel}
+                                disabled={savingEdit}
+                                aria-label="Revision label"
+                                onChange={(e) => setEditLabel(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveEdit(imp);
+                                  if (e.key === "Escape") setEditingId(null);
+                                }}
+                              />
+                            ) : (
+                              <span className="mono">{imp.revision_label ?? "—"}</span>
+                            )}
                             {imp.roundtrip_from_export_id && syncExports.find((e) => e.id === imp.roundtrip_from_export_id) && (
                               <div className="actid">
                                 from {syncExports.find((e) => e.id === imp.roundtrip_from_export_id)!.label}
@@ -377,7 +433,7 @@ export default function ProgramLibraryPage() {
                           <td>{fmtDate(imp.data_date)}</td>
                           <td className="num">{imp.activity_count}</td>
                           <td className="num">{imp.critical_count}</td>
-                          <td>{new Date(imp.imported_at).toLocaleString()}</td>
+                          <td className="mono">{fmtDateTime(imp.imported_at)}</td>
                           <td>
                             {isBaselineLinked ? (
                               <span className="chip chip-good">
@@ -389,20 +445,50 @@ export default function ProgramLibraryPage() {
                           </td>
                           <td style={{ textAlign: "right" }}>
                             <div className="actions" style={{ justifyContent: "flex-end" }}>
-                              <button
-                                className="act-btn act-reject"
-                                title={
-                                  isLatest
-                                    ? "Can't delete the current schedule"
-                                    : isBaselineLinked
-                                      ? "Locked as a baseline — can't be deleted"
-                                      : "Delete this import"
-                                }
-                                disabled={isLatest || isBaselineLinked || deletingId === imp.id}
-                                onClick={() => deleteImport(imp)}
-                              >
-                                <XIcon className="icon" />
-                              </button>
+                              {editingId === imp.id ? (
+                                <>
+                                  <button
+                                    className="act-btn act-approve"
+                                    title="Save label"
+                                    disabled={savingEdit}
+                                    onClick={() => saveEdit(imp)}
+                                  >
+                                    <CheckIcon className="icon" />
+                                  </button>
+                                  <button
+                                    className="act-btn"
+                                    title="Cancel"
+                                    disabled={savingEdit}
+                                    onClick={() => setEditingId(null)}
+                                  >
+                                    <XIcon className="icon" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    className="act-btn act-edit"
+                                    title="Rename this revision"
+                                    onClick={() => startEdit(imp)}
+                                  >
+                                    <PencilIcon className="icon" />
+                                  </button>
+                                  <button
+                                    className="act-btn act-reject"
+                                    title={
+                                      isLatest
+                                        ? "Can't delete the current schedule"
+                                        : isBaselineLinked
+                                          ? "Locked as a baseline — can't be deleted"
+                                          : "Delete this import"
+                                    }
+                                    disabled={isLatest || isBaselineLinked || deletingId === imp.id}
+                                    onClick={() => deleteImport(imp)}
+                                  >
+                                    <XIcon className="icon" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

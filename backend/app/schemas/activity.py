@@ -91,6 +91,12 @@ class ActivityRelationshipOut(BaseModel):
     successor_external_id: str | None = None
 
 
+class ScheduleImportUpdate(BaseModel):
+    # Only the human label is editable — the data date, activities and counts come
+    # from the .xer itself and must keep matching it.
+    revision_label: str = Field(min_length=1, max_length=30)
+
+
 class ScheduleImportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

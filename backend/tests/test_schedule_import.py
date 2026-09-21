@@ -365,6 +365,35 @@ def test_delete_schedule_import_removes_a_superseded_one(client, db_session):
     assert len(remaining_ids) == 2
 
 
+def test_rename_schedule_import_updates_the_revision_label(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    imp = _upload(client, project.id).json()
+
+    response = client.patch(
+        f"/projects/{project.id}/schedule-imports/{imp['id']}", json={"revision_label": "  Mar close-out  "}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["revision_label"] == "Mar close-out"
+    listed = client.get(f"/projects/{project.id}/schedule-imports").json()
+    assert listed[0]["revision_label"] == "Mar close-out"
+    # Filename / data date are file-derived and untouched.
+    assert listed[0]["filename"] == imp["filename"]
+    assert listed[0]["data_date"] == imp["data_date"]
+
+
+def test_rename_schedule_import_rejects_a_blank_or_overlong_label(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    imp = _upload(client, project.id).json()
+    url = f"/projects/{project.id}/schedule-imports/{imp['id']}"
+
+    assert client.patch(url, json={"revision_label": ""}).status_code == 422
+    assert client.patch(url, json={"revision_label": "   "}).status_code == 400
+    assert client.patch(url, json={"revision_label": "x" * 31}).status_code == 422
+
+
 def test_upload_blocks_a_data_date_regression(client, db_session):
     # synthetic_project.xer's data date (2026-01-05) is newer than
     # older_data_date.xer's (2025-06-01) — uploading the older file next would

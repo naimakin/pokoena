@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -12,7 +22,7 @@ import type {
   EvmScurve,
   User,
 } from "@/lib/types";
-import { LockIcon, UploadCloudIcon } from "@/components/icons";
+import { ChevronDownIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
 import { ScurveChart } from "@/components/ScurveChart";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -44,6 +54,50 @@ function signed(days: number | null | undefined): string {
   return `${days > 0 ? "+" : ""}${days} d`;
 }
 
+// Card header that toggles its section open/closed. `children` sits on the right
+// (chips, filters) and doesn't toggle when interacted with.
+function SectionHead({
+  open,
+  onToggle,
+  title,
+  style,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  style?: CSSProperties;
+  children?: ReactNode;
+}) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onToggle();
+    }
+  }
+  return (
+    <div
+      className="card-head"
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      onClick={onToggle}
+      onKeyDown={onKeyDown}
+      style={{ cursor: "pointer", userSelect: "none", ...(open ? {} : { borderBottom: "none" }), ...style }}
+    >
+      <div className="card-title cell-flex">
+        <ChevronDownIcon
+          className="icon"
+          style={{ transform: open ? undefined : "rotate(-90deg)", transition: "transform var(--dur-1) var(--ease)" }}
+        />
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function BaselinesPage() {
   const { showToast } = useToast();
   const { project, refreshBaseline } = useProjectContext();
@@ -60,6 +114,15 @@ export default function BaselinesPage() {
   const [dragOver, setDragOver] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
   const [slippingOnly, setSlippingOnly] = useState(false);
+  // The long tables start collapsed so the page doesn't run off the bottom.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["resources", "variance"]));
+  const isOpen = (key: string) => !collapsed.has(key);
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -322,67 +385,74 @@ export default function BaselinesPage() {
             {/* 2. Resources in this baseline ------------------------------- */}
             {active && resources && (
               <div className="card" style={{ marginTop: "1rem" }}>
-                <div className="card-head">
-                  <div className="card-title">Resources in this baseline</div>
+                <SectionHead
+                  open={isOpen("resources")}
+                  onToggle={() => toggle("resources")}
+                  title="Resources in this baseline"
+                >
                   <div style={{ display: "flex", gap: ".4rem" }}>
                     <span className="chip chip-neutral">{resources.labor_count} Labor</span>
                     <span className="chip chip-neutral">{resources.material_count} Material</span>
                     <span className="chip chip-neutral">{resources.equipment_count} Equipment</span>
                   </div>
-                </div>
-                {resources.resource_count === 0 ? (
-                  <p className="empty-state">
-                    The baseline programme carried no P6 resources (RSRC / TASKRSRC).
-                  </p>
-                ) : (
+                </SectionHead>
+                {isOpen("resources") && (
                   <>
-                    <div className="kpi-row" style={{ padding: "1rem 1.1rem 0" }}>
-                      <div className="card" style={{ padding: ".9rem 1rem" }}>
-                        <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                          Budgeted labor
+                    {resources.resource_count === 0 ? (
+                      <p className="empty-state">
+                        The baseline programme carried no P6 resources (RSRC / TASKRSRC).
+                      </p>
+                    ) : (
+                      <>
+                        <div className="kpi-row" style={{ padding: "1rem 1.1rem 0" }}>
+                          <div className="card" style={{ padding: ".9rem 1rem" }}>
+                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                              Budgeted labor
+                            </div>
+                            <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
+                              {resources.total_budgeted_labor_hours.toFixed(1)} h
+                            </div>
+                          </div>
+                          <div className="card" style={{ padding: ".9rem 1rem" }}>
+                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                              Budgeted cost
+                            </div>
+                            <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
+                              {resources.total_budgeted_cost.toLocaleString()}
+                            </div>
+                          </div>
                         </div>
-                        <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
-                          {resources.total_budgeted_labor_hours.toFixed(1)} h
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Resource</th>
+                                <th>Type</th>
+                                <th>Unit</th>
+                                <th>Budgeted qty</th>
+                                <th>Budgeted cost</th>
+                                <th>Activities</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {resources.resources.map((r) => (
+                                <tr key={r.rsrc_id}>
+                                  <td>
+                                    <div className="subname">{r.name}</div>
+                                    {r.short_name && <div className="actid">{r.short_name}</div>}
+                                  </td>
+                                  <td>{RSRC_TYPE_LABEL[r.rsrc_type] ?? r.rsrc_type}</td>
+                                  <td>{r.unit_id ?? "—"}</td>
+                                  <td className="num">{r.budgeted_qty.toFixed(1)}</td>
+                                  <td className="num">{r.budgeted_cost.toLocaleString()}</td>
+                                  <td className="num">{r.assignment_count}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      </div>
-                      <div className="card" style={{ padding: ".9rem 1rem" }}>
-                        <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                          Budgeted cost
-                        </div>
-                        <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
-                          {resources.total_budgeted_cost.toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Resource</th>
-                            <th>Type</th>
-                            <th>Unit</th>
-                            <th>Budgeted qty</th>
-                            <th>Budgeted cost</th>
-                            <th>Activities</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {resources.resources.map((r) => (
-                            <tr key={r.rsrc_id}>
-                              <td>
-                                <div className="subname">{r.name}</div>
-                                {r.short_name && <div className="actid">{r.short_name}</div>}
-                              </td>
-                              <td>{RSRC_TYPE_LABEL[r.rsrc_type] ?? r.rsrc_type}</td>
-                              <td>{r.unit_id ?? "—"}</td>
-                              <td className="num">{r.budgeted_qty.toFixed(1)}</td>
-                              <td className="num">{r.budgeted_cost.toLocaleString()}</td>
-                              <td className="num">{r.assignment_count}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -467,11 +537,16 @@ export default function BaselinesPage() {
                   </div>
                 )}
 
-                <div className="card-head" style={{ borderTop: "1px solid var(--border)" }}>
-                  <div className="card-title">
-                    Activity date variance ({varRows.length})
-                  </div>
-                  <label style={{ display: "flex", alignItems: "center", gap: ".35rem", fontSize: ".75rem" }}>
+                <SectionHead
+                  open={isOpen("variance")}
+                  onToggle={() => toggle("variance")}
+                  title={`Activity date variance (${varRows.length})`}
+                  style={{ borderTop: "1px solid var(--border)" }}
+                >
+                  <label
+                    style={{ display: "flex", alignItems: "center", gap: ".35rem", fontSize: ".75rem" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <input
                       type="checkbox"
                       checked={slippingOnly}
@@ -479,108 +554,114 @@ export default function BaselinesPage() {
                     />
                     Slipping only
                   </label>
-                </div>
+                </SectionHead>
+                {isOpen("variance") && (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Activity</th>
+                          <th>Baseline finish</th>
+                          <th>Current finish</th>
+                          <th>Finish var</th>
+                          <th>Start var</th>
+                          <th>%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {varRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="empty-state">
+                              {slippingOnly ? "Nothing slipping against the baseline." : "No activities."}
+                            </td>
+                          </tr>
+                        ) : (
+                          varRows.map((r) => (
+                            <tr key={r.activity_id}>
+                              <td>
+                                <div className="subname">{r.name}</div>
+                                <div className="actid">
+                                  {r.external_id}
+                                  {r.is_critical && (
+                                    <span className="chip chip-crit" style={{ marginLeft: ".35rem" }}>
+                                      Critical
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="num">{fmtDate(r.baseline_finish)}</td>
+                              <td className="num">{fmtDate(r.current_finish)}</td>
+                              <td>
+                                <span className={`chip ${varianceChip(r.finish_variance_days)}`}>
+                                  {signed(r.finish_variance_days)}
+                                </span>
+                              </td>
+                              <td className="num">{signed(r.start_variance_days)}</td>
+                              <td className="num">{r.percent_complete}%</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. Baseline history --------------------------------------- */}
+            <div className="card" style={{ marginTop: "1rem" }}>
+              <SectionHead
+                open={isOpen("history")}
+                onToggle={() => toggle("history")}
+                title={`Baseline history${status ? ` (${status.all_baselines.length})` : ""}`}
+              />
+              {isOpen("history") && (
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th>Activity</th>
-                        <th>Baseline finish</th>
-                        <th>Current finish</th>
-                        <th>Finish var</th>
-                        <th>Start var</th>
-                        <th>%</th>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>BAC (hrs)</th>
+                        <th>Target start</th>
+                        <th>Target finish</th>
+                        <th>Activities</th>
+                        <th>Locked</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {varRows.length === 0 ? (
+                      {!status || status.all_baselines.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="empty-state">
-                            {slippingOnly ? "Nothing slipping against the baseline." : "No activities."}
+                          <td colSpan={7} className="empty-state">
+                            No baseline locked yet.
                           </td>
                         </tr>
                       ) : (
-                        varRows.map((r) => (
-                          <tr key={r.activity_id}>
-                            <td>
-                              <div className="subname">{r.name}</div>
-                              <div className="actid">
-                                {r.external_id}
-                                {r.is_critical && (
-                                  <span className="chip chip-crit" style={{ marginLeft: ".35rem" }}>
-                                    Critical
-                                  </span>
-                                )}
-                              </div>
+                        status.all_baselines.map((b) => (
+                          <tr key={b.id}>
+                            <td className="cell-flex">
+                              <LockIcon className="icon" />
+                              {b.version_label}
                             </td>
-                            <td className="num">{fmtDate(r.baseline_finish)}</td>
-                            <td className="num">{fmtDate(r.current_finish)}</td>
                             <td>
-                              <span className={`chip ${varianceChip(r.finish_variance_days)}`}>
-                                {signed(r.finish_variance_days)}
+                              <span
+                                className={`chip ${b.status === "active" ? "chip-good" : "chip-neutral"}`}
+                              >
+                                {b.status}
                               </span>
                             </td>
-                            <td className="num">{signed(r.start_variance_days)}</td>
-                            <td className="num">{r.percent_complete}%</td>
+                            <td className="num">{b.total_budget_manhours.toFixed(1)}</td>
+                            <td className="num">{fmtDate(b.target_start_date)}</td>
+                            <td className="num">{fmtDate(b.target_end_date)}</td>
+                            <td className="num">{b.activity_count}</td>
+                            <td className="num">{b.locked_at ? fmtDate(b.locked_at) : "—"}</td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
-
-            {/* 4. Baseline history --------------------------------------- */}
-            <div className="card" style={{ marginTop: "1rem" }}>
-              <div className="card-head">
-                <div className="card-title">Baseline history</div>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Version</th>
-                      <th>Status</th>
-                      <th>BAC (hrs)</th>
-                      <th>Target start</th>
-                      <th>Target finish</th>
-                      <th>Activities</th>
-                      <th>Locked</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!status || status.all_baselines.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="empty-state">
-                          No baseline locked yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      status.all_baselines.map((b) => (
-                        <tr key={b.id}>
-                          <td className="cell-flex">
-                            <LockIcon className="icon" />
-                            {b.version_label}
-                          </td>
-                          <td>
-                            <span
-                              className={`chip ${b.status === "active" ? "chip-good" : "chip-neutral"}`}
-                            >
-                              {b.status}
-                            </span>
-                          </td>
-                          <td className="num">{b.total_budget_manhours.toFixed(1)}</td>
-                          <td className="num">{fmtDate(b.target_start_date)}</td>
-                          <td className="num">{fmtDate(b.target_end_date)}</td>
-                          <td className="num">{b.activity_count}</td>
-                          <td className="num">{b.locked_at ? fmtDate(b.locked_at) : "—"}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              )}
             </div>
           </>
         )}

@@ -15,7 +15,7 @@ from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
-from app.schemas.activity import ScheduleImportOut
+from app.schemas.activity import ScheduleImportOut, ScheduleImportUpdate
 from app.services.xer_import import DataDateRegressionError, import_xer
 
 router = APIRouter(prefix="/projects/{project_id}/schedule-imports", tags=["schedule-imports"])
@@ -88,6 +88,35 @@ def upload_schedule(
         raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
     except DataDateRegressionError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.patch("/{import_id}", response_model=ScheduleImportOut)
+def update_schedule_import(
+    project_id: uuid.UUID,
+    import_id: uuid.UUID,
+    payload: ScheduleImportUpdate,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> ScheduleImport:
+    """Renames an import's revision label (e.g. "UPD-3" → "UPD-3 Mar close-out").
+    The UPD sequence itself runs off revision_no, so a rename never disturbs the
+    numbering of later uploads."""
+    row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
+    if row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleImport not found")
+    require_project_permission(db, project_id, ctx, need_edit=True)
+
+    label = payload.revision_label.strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Revision label can't be blank")
+    row.revision_label = label
+    # The trend snapshot keeps its own copy of the label (Project Status chart axis).
+    db.query(ScheduleStatusSnapshot).filter(ScheduleStatusSnapshot.schedule_import_id == import_id).update(
+        {ScheduleStatusSnapshot.revision_label: label}
+    )
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @router.delete("/{import_id}", status_code=status.HTTP_204_NO_CONTENT)
