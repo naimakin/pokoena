@@ -10,8 +10,8 @@ from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
-from app.models.schedule_import import ScheduleImport
 from app.schemas.risk import MonteCarloRequest, MonteCarloResultOut
+from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/projects/{project_id}/risk", tags=["risk"])
 
@@ -40,12 +40,7 @@ def run_monte_carlo_simulation(
     calendars_by_id = {c.id: c.hours_per_day for c in calendars}
     default_hpd = calendars[0].hours_per_day if calendars else 8.0
 
-    last_import = (
-        db.query(ScheduleImport)
-        .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
-        .order_by(ScheduleImport.imported_at.desc())
-        .first()
-    )
+    last_import = get_current_import(db, ctx.tenant_id, project_id)
     data_date = last_import.data_date if last_import else None
 
     overrides = [

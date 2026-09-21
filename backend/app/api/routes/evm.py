@@ -40,6 +40,7 @@ from app.services.baseline import (
     BaselineConflictError,
     BaselineValidationError,
     lock_baseline_for_project,
+    lock_baseline_from_snapshot,
     overwrite_active_baseline,
 )
 from app.services.xer_import import DataDateRegressionError, import_xer
@@ -60,6 +61,7 @@ from app.schemas.evm import (
     ProgressSubmitResultOut,
     QuickEvmOut,
 )
+from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/projects/{project_id}/evm", tags=["evm"])
 
@@ -83,12 +85,7 @@ def get_quick_evm(
     )
     calendars = db.query(Calendar).filter(Calendar.tenant_id == ctx.tenant_id, Calendar.project_id == project_id).all()
 
-    last_import = (
-        db.query(ScheduleImport)
-        .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
-        .order_by(ScheduleImport.imported_at.desc())
-        .first()
-    )
+    last_import = get_current_import(db, ctx.tenant_id, project_id)
     data_date = last_import.data_date if last_import else None
 
     result = calculate_evm(activities, assignments, calendars, data_date)
@@ -420,12 +417,7 @@ def lock_baseline(
     shared with the Program Library page's auto-lock-on-first-import."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
-    last_import = (
-        db.query(ScheduleImport)
-        .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
-        .order_by(ScheduleImport.imported_at.desc())
-        .first()
-    )
+    last_import = get_current_import(db, ctx.tenant_id, project_id)
     if last_import is None:
         raise HTTPException(status_code=422, detail="No schedule has been imported for this project yet.")
 
@@ -444,6 +436,69 @@ def lock_baseline(
         status="locked", baseline_id=baseline.id, version_label=baseline.version_label,
         bac=round(baseline.total_budget_manhours, 2), activity_count=baseline.activity_count,
         target_start=baseline.target_start_date, target_end=baseline.target_end_date,
+    )
+
+
+@router.post("/baseline/from-import/{import_id}", response_model=LockBaselineResultOut, status_code=201)
+def set_baseline_from_import(
+    project_id: uuid.UUID,
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> LockBaselineResultOut:
+    """Program Library: make the chosen import the project's baseline, replacing
+    the active one (which is kept as `superseded`, not deleted). If this import
+    was the baseline before, that exact frozen baseline is restored, including its
+    resources and EVM history, so an unlock is fully reversible. Otherwise a new
+    baseline is frozen from it: from the live schedule when it is the current
+    update, else from its saved activity snapshot (no resources, see
+    lock_baseline_from_snapshot)."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    schedule_import = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
+    if schedule_import.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleImport not found")
+
+    baselines = db.query(Baseline).filter(Baseline.tenant_id == ctx.tenant_id, Baseline.project_id == project_id)
+    active = baselines.filter(Baseline.status == BaselineStatus.active).first()
+    if active is None or active.schedule_import_id != import_id:
+        restorable = (
+            baselines.filter(Baseline.status == BaselineStatus.superseded, Baseline.schedule_import_id == import_id)
+            .order_by(Baseline.created_at.desc())
+            .first()
+        )
+        if active is not None:
+            active.status = BaselineStatus.superseded
+            db.flush()
+        if restorable is not None:
+            restorable.status = BaselineStatus.active
+            active = restorable
+        else:
+            current = get_current_import(db, ctx.tenant_id, project_id)
+            label = _unique_baseline_label(db, project_id)
+            try:
+                if current is not None and current.id == import_id:
+                    active = lock_baseline_for_project(
+                        db, ctx.tenant_id, project_id, import_id, ctx.user.id, version_label=label
+                    )
+                else:
+                    active = lock_baseline_from_snapshot(
+                        db, ctx.tenant_id, project_id, schedule_import, ctx.user.id, label
+                    )
+            except BaselineValidationError as e:
+                db.rollback()
+                raise HTTPException(status_code=422, detail=str(e))
+            except BaselineConflictError as e:
+                db.rollback()
+                raise HTTPException(status_code=409, detail=str(e))
+        if db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).first() is not None:
+            _recalculate_evm_snapshots(db, ctx, project_id, active)
+        db.commit()
+        db.refresh(active)
+
+    return LockBaselineResultOut(
+        status="locked", baseline_id=active.id, version_label=active.version_label,
+        bac=round(active.total_budget_manhours, 2), activity_count=active.activity_count,
+        target_start=active.target_start_date, target_end=active.target_end_date,
     )
 
 

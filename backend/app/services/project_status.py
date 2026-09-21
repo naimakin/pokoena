@@ -27,6 +27,7 @@ from app.models.calendar import Calendar
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
+from app.services.schedule_current import get_current_import
 
 # An activity is "Important" if it's on/near the critical path.
 _IMPORTANT_FLOAT_DAYS = 5
@@ -232,12 +233,7 @@ def load_status_inputs(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID)
     )
     hours_per_day = calendar.hours_per_day if calendar and calendar.hours_per_day else 8.0
 
-    last_import = (
-        db.query(ScheduleImport)
-        .filter(ScheduleImport.tenant_id == tenant_id, ScheduleImport.project_id == project_id)
-        .order_by(ScheduleImport.imported_at.desc())
-        .first()
-    )
+    last_import = get_current_import(db, tenant_id, project_id)
     latest_snapshot = (
         db.query(EvmSnapshot)
         .filter(EvmSnapshot.tenant_id == tenant_id, EvmSnapshot.project_id == project_id)

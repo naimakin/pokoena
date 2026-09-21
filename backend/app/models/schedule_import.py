@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +38,17 @@ class ScheduleImport(Base):
         ForeignKey("schedule_exports.id"), nullable=True
     )
     imported_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # The import that IS the project's live schedule right now ("Current update"
+    # in Program Library). A new upload becomes current automatically; the user can
+    # re-point it at any import that still has its source file (`has_source_file`),
+    # which rebuilds the live tables from that file. At most one per project
+    # (app-enforced — see services/schedule_current.py).
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.false())
+    # Gzipped original .xer, kept so the live schedule can be rebuilt exactly from
+    # this import later. NULL for uploads made before file storage existed. Deferred:
+    # it's megabytes and only the set-current path ever reads it.
+    has_source_file: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.false())
+    source_file: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     activity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     critical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ from app.models.baseline import (
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
+from app.models.schedule_import import ScheduleImport
 
 
 class BaselineLockError(ValueError):
@@ -155,6 +157,30 @@ def lock_baseline_for_project(
     if dup:
         raise BaselineConflictError(f"Version label '{version_label}' already used.")
 
+    baseline_id = _insert_baseline_row(
+        db, tenant_id, project_id, schedule_import_id, locked_by_user_id, version_label, notes,
+        eligible, bac, target_start_date, target_end_date,
+    )
+    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _snapshot_baseline_resources(db, tenant_id, baseline_id, project_id)
+
+    db.flush()
+    return db.get(Baseline, baseline_id)
+
+
+def _insert_baseline_row(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    schedule_import_id: uuid.UUID,
+    locked_by_user_id: uuid.UUID,
+    version_label: str,
+    notes: str | None,
+    eligible: list,
+    bac: float,
+    target_start_date: date,
+    target_end_date: date,
+) -> uuid.UUID:
     baseline_id = uuid.uuid4()
     db.add(
         Baseline(
@@ -165,10 +191,59 @@ def lock_baseline_for_project(
         )
     )
     db.flush()
+    return baseline_id
 
+
+def _iso_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
+
+
+def lock_baseline_from_snapshot(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    schedule_import: ScheduleImport,
+    locked_by_user_id: uuid.UUID,
+    version_label: str,
+) -> Baseline:
+    """Lock an EARLIER import (not the live schedule) as the baseline, using the
+    per-activity dates/durations frozen on its `activities_snapshot`. Each entry is
+    matched to the live activity row by external_id (BaselineActivity points at live
+    rows), so activities that no longer exist are skipped. The snapshot doesn't carry
+    P6 resource assignments, so a baseline built this way has no frozen resources
+    (Baselines -> "Resources in this baseline" reads empty); baselines made from the
+    current import via lock_baseline_for_project keep them."""
+    snapshot = schedule_import.activities_snapshot or []
+    if not snapshot:
+        raise BaselineValidationError("This import has no saved activity snapshot to build a baseline from.")
+
+    live = {
+        a.external_id: a
+        for a in db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id)
+    }
+    items = []
+    for entry in snapshot:
+        row = live.get(entry.get("external_id"))
+        if row is None:
+            continue
+        items.append(
+            SimpleNamespace(
+                id=row.id,
+                target_duration_hours=entry.get("target_duration_hours"),
+                planned_start=_iso_date(entry.get("planned_start")),
+                early_start=_iso_date(entry.get("early_start")),
+                planned_finish=_iso_date(entry.get("planned_finish")),
+                early_finish=_iso_date(entry.get("early_finish")),
+                wbs_path=entry.get("wbs_path"),
+            )
+        )
+    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(items)
+
+    baseline_id = _insert_baseline_row(
+        db, tenant_id, project_id, schedule_import.id, locked_by_user_id, version_label, None,
+        eligible, bac, target_start_date, target_end_date,
+    )
     _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
-    _snapshot_baseline_resources(db, tenant_id, baseline_id, project_id)
-
     db.flush()
     return db.get(Baseline, baseline_id)
 

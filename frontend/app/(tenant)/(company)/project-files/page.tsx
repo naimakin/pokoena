@@ -27,6 +27,29 @@ function fmtDate(iso: string | null | undefined): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
 }
 
+const MONTH_INDEX: Record<string, number> = Object.fromEntries(MONTHS.map((m, i) => [m.toLowerCase(), i]));
+
+// Reads what a user types into the Data date box: DD-MMM-YY (30-Apr-26), DD-MMM-YYYY
+// or ISO (2026-04-30). Returns an ISO date, or null when it isn't a real calendar date.
+function parseDateInput(text: string): string | null {
+  const t = text.trim();
+  let y: number, m: number, d: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  const dmy = /^(\d{1,2})[-\s/]([A-Za-z]{3})[-\s/](\d{2}|\d{4})$/.exec(t);
+  if (iso) {
+    [y, m, d] = [Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])];
+  } else if (dmy) {
+    const month = MONTH_INDEX[dmy[2].toLowerCase()];
+    if (month === undefined) return null;
+    [y, m, d] = [dmy[3].length === 2 ? 2000 + Number(dmy[3]) : Number(dmy[3]), month, Number(dmy[1])];
+  } else {
+    return null;
+  }
+  const check = new Date(Date.UTC(y, m, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m || check.getUTCDate() !== d) return null;
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 // Same format plus a local HH:MM — for the moment an import happened.
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
@@ -48,12 +71,19 @@ export default function ProgramLibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ScheduleImport | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState("");
+  // The row being edited: label / data date as typed, plus the roles it should hold once saved.
+  const [edit, setEdit] = useState<{
+    id: string;
+    label: string;
+    dataDate: string;
+    baseline: boolean;
+    current: boolean;
+  } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [baselineLabel, setBaselineLabel] = useState("Baseline");
   const [baselineBusy, setBaselineBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentImport = imports.find((i) => i.is_current) ?? imports[0];
 
   async function load() {
     if (!project) {
@@ -142,30 +172,104 @@ export default function ProgramLibraryPage() {
   }
 
   function startEdit(imp: ScheduleImport) {
-    setEditingId(imp.id);
-    setEditLabel(imp.revision_label ?? "");
+    setEdit({
+      id: imp.id,
+      label: imp.revision_label ?? "",
+      dataDate: imp.data_date ? fmtDate(imp.data_date) : "",
+      baseline: imp.id === baselineStatus?.active_baseline?.schedule_import_id,
+      current: imp.is_current,
+    });
   }
 
   async function saveEdit(imp: ScheduleImport) {
-    if (!project) return;
-    const label = editLabel.trim();
+    if (!project || !edit) return;
+    const label = edit.label.trim();
     if (!label) {
       showToast("Revision label can't be blank");
       return;
     }
-    if (label === (imp.revision_label ?? "")) {
-      setEditingId(null);
-      return;
+    const wasBaseline = imp.id === baselineStatus?.active_baseline?.schedule_import_id;
+    const labelChanged = label !== (imp.revision_label ?? "");
+    const typedDate = edit.dataDate.trim();
+    let newDate: string | null = null;
+    if (typedDate && typedDate !== (imp.data_date ? fmtDate(imp.data_date) : "")) {
+      newDate = parseDateInput(typedDate);
+      if (!newDate) {
+        showToast("Data date must look like 30-Apr-26");
+        return;
+      }
     }
+    const becomeCurrent = edit.current && !imp.is_current;
+    const becomeBaseline = edit.baseline && !wasBaseline;
+    const unlocking = !edit.baseline && wasBaseline;
+
+    // Say what the riskier changes do before making them, in one prompt.
+    const notes: string[] = [];
+    if (newDate) {
+      notes.push(
+        "Data date: EVM, DCMA and risk analysis use the new date straight away, but float and dates are NOT recomputed — re-upload the .xer for that.",
+      );
+    }
+    if (becomeCurrent) {
+      notes.push(
+        `Current update: the live schedule (dates, float, critical path) is rebuilt from ${imp.filename}. Progress already entered on matching activities is kept.`,
+      );
+    }
+    if (becomeBaseline) {
+      const from = baselineStatus?.active_baseline?.version_label;
+      notes.push(
+        from
+          ? `Baseline: replaces "${from}" — it stays in Baseline history and can be restored.`
+          : "Baseline: this import becomes the frozen plan.",
+      );
+    }
+    if (unlocking) {
+      notes.push("Unlock: Execution, Reporting, EVM, Risk and AI stay locked until a baseline is set again. Tick Baseline again to restore it.");
+    }
+    if (notes.length > 0 && !window.confirm(`${notes.join("\n\n")}\n\nContinue?`)) return;
+
     setSavingEdit(true);
     try {
-      await api.patch(`/projects/${project.id}/schedule-imports/${imp.id}`, { revision_label: label });
-      setEditingId(null);
-      await load();
+      if (labelChanged || newDate) {
+        await api.patch(`/projects/${project.id}/schedule-imports/${imp.id}`, {
+          ...(labelChanged ? { revision_label: label } : {}),
+          ...(newDate ? { data_date: newDate } : {}),
+        });
+      }
+      // Current first: a baseline taken from the current update keeps its P6 resources.
+      if (becomeCurrent) await api.post(`/projects/${project.id}/schedule-imports/${imp.id}/set-current`);
+      if (becomeBaseline) await api.post(`/projects/${project.id}/evm/baseline/from-import/${imp.id}`);
+      if (unlocking && baselineStatus?.active_baseline) {
+        await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
+      }
+      setEdit(null);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not rename this import.");
+      showToast(err instanceof ApiError ? err.message : "Could not save this import.");
     } finally {
       setSavingEdit(false);
+      await load();
+    }
+  }
+
+  async function unlockBaseline() {
+    if (!project || !baselineStatus?.active_baseline) return;
+    const label = baselineStatus.active_baseline.version_label;
+    if (
+      !window.confirm(
+        `Unlock baseline "${label}"? Execution, Reporting, EVM, Risk and AI stay locked until a baseline is set again. ` +
+          "It is kept in Baseline history — tick Baseline on its import (edit the row) to restore it exactly.",
+      )
+    ) {
+      return;
+    }
+    setBaselineBusy(true);
+    try {
+      await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
+      await load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not unlock the baseline.");
+    } finally {
+      setBaselineBusy(false);
     }
   }
 
@@ -244,8 +348,8 @@ export default function ProgramLibraryPage() {
                 <div className="banner-text">
                   Baseline locked (<b>{baselineStatus.active_baseline?.version_label}</b>) — new uploads update the
                   live schedule; the baseline itself stays fixed for comparison.
-                  {imports[0] && baselineStatus.active_baseline?.schedule_import_id !== imports[0].id && (
-                    <span style={{ color: "var(--warn)" }}> A newer import exists — the baseline still reflects an older one.</span>
+                  {currentImport && baselineStatus.active_baseline?.schedule_import_id !== currentImport.id && (
+                    <span style={{ color: "var(--warn)" }}> The baseline is a different import from the current update — that's fine, they are compared.</span>
                   )}
                 </div>
               </div>
@@ -287,16 +391,16 @@ export default function ProgramLibraryPage() {
                     disabled={
                       baselineBusy ||
                       !baselineLabel.trim() ||
-                      imports[0]?.id === baselineStatus.active_baseline?.schedule_import_id
+                      currentImport?.id === baselineStatus.active_baseline?.schedule_import_id
                     }
                     title={
-                      imports[0]?.id === baselineStatus.active_baseline?.schedule_import_id
+                      currentImport?.id === baselineStatus.active_baseline?.schedule_import_id
                         ? "The baseline already reflects the current import"
                         : undefined
                     }
                     onClick={relockBaseline}
                   >
-                    {baselineBusy ? "Working…" : "Lock latest import as baseline"}
+                    {baselineBusy ? "Working…" : "Lock current update as baseline"}
                   </button>
                 ) : (
                   <button
@@ -304,7 +408,12 @@ export default function ProgramLibraryPage() {
                     disabled={baselineBusy || !baselineLabel.trim()}
                     onClick={lockBaseline}
                   >
-                    {baselineBusy ? "Locking…" : "Lock latest import as baseline"}
+                    {baselineBusy ? "Locking…" : "Lock current update as baseline"}
+                  </button>
+                )}
+                {baselineStatus?.has_active && (
+                  <button className="btn btn-secondary btn-sm" disabled={baselineBusy} onClick={unlockBaseline}>
+                    Unlock baseline
                   </button>
                 )}
               </div>
@@ -387,7 +496,7 @@ export default function ProgramLibraryPage() {
                       <th>Activities</th>
                       <th>Critical</th>
                       <th>Imported</th>
-                      <th>Baseline</th>
+                      <th>Role</th>
                       <th style={{ width: 84 }} />
                     </tr>
                   </thead>
@@ -399,57 +508,110 @@ export default function ProgramLibraryPage() {
                         </td>
                       </tr>
                     )}
-                    {imports.map((imp, i) => {
-                      const isLatest = i === 0;
+                    {imports.map((imp) => {
                       const isBaselineLinked = imp.id === baselineStatus?.active_baseline?.schedule_import_id;
+                      const editing = edit?.id === imp.id ? edit : null;
+                      const exportLabel = imp.roundtrip_from_export_id
+                        ? syncExports.find((e) => e.id === imp.roundtrip_from_export_id)?.label
+                        : undefined;
                       return (
                         <tr key={imp.id}>
                           <td>
-                            {editingId === imp.id ? (
+                            {editing ? (
                               <input
                                 type="text"
                                 autoFocus
                                 maxLength={30}
                                 style={{ width: 170 }}
-                                value={editLabel}
+                                value={editing.label}
                                 disabled={savingEdit}
                                 aria-label="Revision label"
-                                onChange={(e) => setEditLabel(e.target.value)}
+                                onChange={(e) => setEdit({ ...editing, label: e.target.value })}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") saveEdit(imp);
-                                  if (e.key === "Escape") setEditingId(null);
+                                  if (e.key === "Escape") setEdit(null);
                                 }}
                               />
                             ) : (
                               <span className="mono">{imp.revision_label ?? "—"}</span>
                             )}
-                            {imp.roundtrip_from_export_id && syncExports.find((e) => e.id === imp.roundtrip_from_export_id) && (
-                              <div className="actid">
-                                from {syncExports.find((e) => e.id === imp.roundtrip_from_export_id)!.label}
-                              </div>
-                            )}
+                            {exportLabel && <div className="actid">from {exportLabel}</div>}
                           </td>
                           <td>{imp.filename}</td>
-                          <td>{fmtDate(imp.data_date)}</td>
+                          <td>
+                            {editing ? (
+                              <input
+                                type="text"
+                                className="mono"
+                                style={{ width: 110 }}
+                                placeholder="30-Apr-26"
+                                value={editing.dataDate}
+                                disabled={savingEdit}
+                                aria-label="Data date"
+                                onChange={(e) => setEdit({ ...editing, dataDate: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveEdit(imp);
+                                  if (e.key === "Escape") setEdit(null);
+                                }}
+                              />
+                            ) : (
+                              fmtDate(imp.data_date)
+                            )}
+                          </td>
                           <td className="num">{imp.activity_count}</td>
                           <td className="num">{imp.critical_count}</td>
                           <td className="mono">{fmtDateTime(imp.imported_at)}</td>
                           <td>
-                            {isBaselineLinked ? (
-                              <span className="chip chip-good">
-                                <LockIcon className="icon" /> Baseline
-                              </span>
+                            {editing ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: ".25rem", fontSize: ".75rem" }}>
+                                <label className="checkbox-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={editing.baseline}
+                                    disabled={savingEdit}
+                                    onChange={(e) => setEdit({ ...editing, baseline: e.target.checked })}
+                                  />
+                                  Baseline
+                                </label>
+                                <label
+                                  className="checkbox-row"
+                                  title={
+                                    imp.is_current
+                                      ? "This is the current update — tick it on another import to change it"
+                                      : !imp.has_source_file
+                                        ? "Uploaded before file storage — upload the .xer again to make it current"
+                                        : undefined
+                                  }
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={editing.current}
+                                    disabled={savingEdit || imp.is_current || !imp.has_source_file}
+                                    onChange={(e) => setEdit({ ...editing, current: e.target.checked })}
+                                  />
+                                  Current update
+                                </label>
+                              </div>
+                            ) : isBaselineLinked || imp.is_current ? (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: ".25rem" }}>
+                                {isBaselineLinked && (
+                                  <span className="chip chip-good">
+                                    <LockIcon className="icon" /> Baseline
+                                  </span>
+                                )}
+                                {imp.is_current && <span className="chip chip-info">Current update</span>}
+                              </div>
                             ) : (
                               "—"
                             )}
                           </td>
                           <td style={{ textAlign: "right" }}>
                             <div className="actions" style={{ justifyContent: "flex-end" }}>
-                              {editingId === imp.id ? (
+                              {editing ? (
                                 <>
                                   <button
                                     className="act-btn act-approve"
-                                    title="Save label"
+                                    title="Save changes"
                                     disabled={savingEdit}
                                     onClick={() => saveEdit(imp)}
                                   >
@@ -459,7 +621,7 @@ export default function ProgramLibraryPage() {
                                     className="act-btn"
                                     title="Cancel"
                                     disabled={savingEdit}
-                                    onClick={() => setEditingId(null)}
+                                    onClick={() => setEdit(null)}
                                   >
                                     <XIcon className="icon" />
                                   </button>
@@ -468,7 +630,7 @@ export default function ProgramLibraryPage() {
                                 <>
                                   <button
                                     className="act-btn act-edit"
-                                    title="Rename this revision"
+                                    title="Edit label, data date and role"
                                     onClick={() => startEdit(imp)}
                                   >
                                     <PencilIcon className="icon" />
@@ -476,13 +638,13 @@ export default function ProgramLibraryPage() {
                                   <button
                                     className="act-btn act-reject"
                                     title={
-                                      isLatest
+                                      imp.is_current
                                         ? "Can't delete the current schedule"
                                         : isBaselineLinked
                                           ? "Locked as a baseline — can't be deleted"
                                           : "Delete this import"
                                     }
-                                    disabled={isLatest || isBaselineLinked || deletingId === imp.id}
+                                    disabled={imp.is_current || isBaselineLinked || deletingId === imp.id}
                                     onClick={() => deleteImport(imp)}
                                   >
                                     <XIcon className="icon" />

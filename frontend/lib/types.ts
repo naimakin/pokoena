@@ -567,6 +567,10 @@ export interface ScheduleImport {
   revision_no: number | null;
   revision_label: string | null;
   roundtrip_from_export_id: string | null;
+  // The import that is the live schedule ("Current update"). Only an import that
+  // still has its source .xer can be made current again.
+  is_current: boolean;
+  has_source_file: boolean;
 }
 
 export interface ScheduleExport {

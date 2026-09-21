@@ -30,6 +30,7 @@ can later be compared — see `engine/diff/logic_diff.py`.
 
 from __future__ import annotations
 
+import gzip
 import uuid
 from datetime import date, datetime
 
@@ -53,6 +54,7 @@ from app.parser.xer_models import ParsedSchedule
 from app.parser.xer_parser import parse_xer
 from app.services.baseline import BaselineLockError, lock_baseline_for_project
 from app.services.project_status import compute_status_rollup
+from app.services.schedule_current import get_current_import, mark_current
 
 _TOL = 0.01
 
@@ -118,6 +120,7 @@ def import_xer(
     revision_kind: str = "update",
     roundtrip_from_export_id: uuid.UUID | None = None,
     force: bool = False,
+    reuse_import: ScheduleImport | None = None,
 ) -> ScheduleImport:
     """`revision_kind` drives the sync-log label: "update" (Program Library)
     gets the next per-project UPD-n; "baseline" (Planning → Baselines) and the
@@ -127,21 +130,22 @@ def import_xer(
     importing when the file's data date is older than the project's current
     one — every import overwrites the live activities/relationships tables
     wholesale (see module docstring), baseline uploads included, so an
-    out-of-order upload silently regresses live progress otherwise."""
+    out-of-order upload silently regresses live progress otherwise.
+
+    `reuse_import` re-applies an earlier import's stored .xer to the live tables
+    ("Current update" re-pointed in Program Library): no new ScheduleImport row,
+    no regression check (the user chose it), no relabel / auto-baseline / status
+    snapshot — that import keeps the metadata and frozen snapshots it already has;
+    it just becomes the current one again."""
     parsed: ParsedSchedule = parse_xer(file_bytes)
     schedule(parsed)
 
-    if not force and parsed.meta.data_date is not None:
-        current = (
-            db.query(ScheduleImport)
-            .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
-            .order_by(ScheduleImport.imported_at.desc())
-            .first()
-        )
+    if not force and reuse_import is None and parsed.meta.data_date is not None:
+        current = get_current_import(db, ctx.tenant_id, project_id)
         if current is not None and current.data_date is not None and parsed.meta.data_date < current.data_date:
             raise DataDateRegressionError(parsed.meta.data_date, current.data_date)
 
-    import_id = uuid.uuid4()
+    import_id = reuse_import.id if reuse_import is not None else uuid.uuid4()
 
     # Created (and flushed) up front, not at the end: activities below stamp
     # last_import_id=import_id and get flushed per-row as they're upserted,
@@ -151,17 +155,23 @@ def import_xer(
     # default, so this only ever surfaced against a real Postgres import).
     # Its summary fields (activity_count, etc.) are filled in on this same
     # tracked instance at the end, once they're known.
-    schedule_import = ScheduleImport(
-        id=import_id,
-        tenant_id=ctx.tenant_id,
-        project_id=project_id,
-        filename=filename,
-        data_date=parsed.meta.data_date,
-        imported_by_user_id=ctx.user.id,
-        roundtrip_from_export_id=roundtrip_from_export_id,
-    )
-    db.add(schedule_import)
-    db.flush()
+    if reuse_import is not None:
+        schedule_import = reuse_import
+    else:
+        schedule_import = ScheduleImport(
+            id=import_id,
+            tenant_id=ctx.tenant_id,
+            project_id=project_id,
+            filename=filename,
+            data_date=parsed.meta.data_date,
+            imported_by_user_id=ctx.user.id,
+            roundtrip_from_export_id=roundtrip_from_export_id,
+            # Kept so "Current update" can later be re-pointed at this import.
+            source_file=gzip.compress(file_bytes),
+            has_source_file=True,
+        )
+        db.add(schedule_import)
+        db.flush()
 
     # --- calendars: upsert by (project_id, clndr_id) ---
     existing_calendars = {
@@ -491,6 +501,12 @@ def import_xer(
             )
         )
 
+    if reuse_import is not None:
+        mark_current(db, ctx.tenant_id, project_id, import_id)
+        db.commit()
+        db.refresh(schedule_import)
+        return schedule_import
+
     schedule_import.activity_count = len(parsed.activities)
     schedule_import.critical_count = critical_count
     schedule_import.warnings = parsed.parse_log
@@ -512,6 +528,9 @@ def import_xer(
             lock_baseline_for_project(db, ctx.tenant_id, project_id, import_id, ctx.user.id, version_label="Baseline")
         except BaselineLockError as e:
             schedule_import.warnings = [*schedule_import.warnings, f"Could not auto-lock baseline: {e}"]
+
+    # A fresh upload is always the new live schedule.
+    mark_current(db, ctx.tenant_id, project_id, import_id)
 
     # Sync-log label. The baseline programme (first upload, or any upload via
     # Planning → Baselines) stays out of the UPD sequence and keeps its own

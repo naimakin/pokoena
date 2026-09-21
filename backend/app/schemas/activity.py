@@ -92,9 +92,10 @@ class ActivityRelationshipOut(BaseModel):
 
 
 class ScheduleImportUpdate(BaseModel):
-    # Only the human label is editable — the data date, activities and counts come
-    # from the .xer itself and must keep matching it.
-    revision_label: str = Field(min_length=1, max_length=30)
+    # The label and the data date are the editable metadata; activities and counts
+    # come from the .xer itself and must keep matching it. At least one is required.
+    revision_label: str | None = Field(default=None, min_length=1, max_length=30)
+    data_date: date | None = None
 
 
 class ScheduleImportOut(BaseModel):
@@ -112,3 +113,5 @@ class ScheduleImportOut(BaseModel):
     revision_no: int | None = None
     revision_label: str | None = None
     roundtrip_from_export_id: uuid.UUID | None = None
+    is_current: bool = False
+    has_source_file: bool = False
