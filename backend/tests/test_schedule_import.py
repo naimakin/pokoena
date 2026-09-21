@@ -92,6 +92,20 @@ def test_completed_activity_is_not_critical_even_at_zero_float(client, db_sessio
     assert by_code["C200"]["is_critical"] is True  # genuinely on the critical path
 
 
+def test_is_critical_rule():
+    from app.services.xer_import import _is_critical
+
+    end = datetime(2026, 1, 5)
+    assert _is_critical(0.0, "TK_Active", None) is True
+    assert _is_critical(-16.0, "TK_NotStart", None) is True
+    assert _is_critical(8.0, "TK_Active", None) is False
+    assert _is_critical(None, "TK_NotStart", None) is False  # empty float is never critical
+    # An actual finish (or TK_Complete) rules criticality out whatever the float says.
+    assert _is_critical(0.0, "TK_Active", end) is False
+    assert _is_critical(-16.0, "TK_NotStart", end) is False
+    assert _is_critical(0.0, "TK_Complete", None) is False
+
+
 def test_reimport_preserves_subcontractor_owned_progress_fields(client, db_session):
     tenant, project = _setup(db_session)
     client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})

@@ -184,7 +184,7 @@ export default function SchedulePage() {
                     Total Float{floatAsc ? " ↑" : ""}
                   </th>
                   <th>% Complete</th>
-                  <th>Critical</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +206,9 @@ export default function SchedulePage() {
                     <td>{fmtFloat(a.total_float_hours)}</td>
                     <td>{a.percent_complete}%</td>
                     <td>
-                      {a.is_critical ? (
+                      {a.status === "complete" || a.actual_finish ? (
+                        <span className="chip chip-good">Completed</span>
+                      ) : a.is_critical ? (
                         <span className="chip chip-crit">Critical</span>
                       ) : (
                         <span className="chip chip-neutral">Float</span>

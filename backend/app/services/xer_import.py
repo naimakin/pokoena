@@ -84,11 +84,15 @@ class DataDateRegressionError(ValueError):
         )
 
 
-def _is_critical(total_float_hr_cnt: float | None, status_code: str) -> bool:
-    """A finished activity has no remaining work to protect, so it's never
-    "critical" regardless of the total float P6 computed for it — matches P6's
-    own convention of excluding completed activities from the critical filter."""
-    if status_code == "TK_Complete":
+def _is_critical(total_float_hr_cnt: float | None, status_code: str, act_end_date: datetime | None) -> bool:
+    """Critical = an unfinished activity whose total float is zero or negative.
+
+    An activity with an actual finish (act_end_date) — or P6's TK_Complete
+    status — has no remaining work to protect, so it's never critical whatever
+    total float the CPM run reports for it (the scheduler pins finished tasks
+    to 0.0 for display); this matches P6's own critical filter. An empty total
+    float is never critical either (P6 leaves it blank for finished work)."""
+    if act_end_date is not None or status_code == "TK_Complete":
         return False
     return total_float_hr_cnt is not None and total_float_hr_cnt <= _TOL
 
@@ -279,7 +283,7 @@ def import_xer(
         row.late_finish = _to_date(act.late_end_date)
         row.total_float_hours = act.total_float_hr_cnt
         row.free_float_hours = act.free_float_hr_cnt
-        is_critical = _is_critical(act.total_float_hr_cnt, act.status_code)
+        is_critical = _is_critical(act.total_float_hr_cnt, act.status_code, act.act_end_date)
         row.is_critical = is_critical
         row.constraint_type = act.cstr_type
         row.constraint_date = _to_date(act.cstr_date)
@@ -374,10 +378,10 @@ def import_xer(
                 "link_type": link_type.value,
                 "lag_hours": rel.lag_hr_cnt,
                 "pred_critical": bool(
-                    pred_act and _is_critical(pred_act.total_float_hr_cnt, pred_act.status_code)
+                    pred_act and _is_critical(pred_act.total_float_hr_cnt, pred_act.status_code, pred_act.act_end_date)
                 ),
                 "succ_critical": bool(
-                    succ_act and _is_critical(succ_act.total_float_hr_cnt, succ_act.status_code)
+                    succ_act and _is_critical(succ_act.total_float_hr_cnt, succ_act.status_code, succ_act.act_end_date)
                 ),
             }
         )
