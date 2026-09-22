@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { WbsNode } from "@/lib/types";
+import type { ScheduleImport, WbsNode } from "@/lib/types";
 import { ChevronDownIcon, XIcon } from "@/components/icons";
 
 interface TreeNode extends WbsNode {
@@ -43,12 +43,46 @@ function flatten(roots: TreeNode[], collapsed: Set<string>): TreeNode[] {
   return out;
 }
 
+// Every node regardless of collapse state — used to size the "Collapse to level"
+// list and to compute which nodes fall at or past a chosen level.
+function flattenAll(roots: TreeNode[]): TreeNode[] {
+  const out: TreeNode[] = [];
+  const walk = (list: TreeNode[]) => {
+    for (const n of list) {
+      out.push(n);
+      walk(n.children);
+    }
+  };
+  walk(roots);
+  return out;
+}
+
+const selectStyle: CSSProperties = {
+  fontSize: ".75rem",
+  height: 30,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
+}
+
 const EMPTY_DRAFT = { parentWbsId: "", shortName: "", name: "" };
 
 export default function WbsPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
   const [nodes, setNodes] = useState<WbsNode[]>([]);
+  const [currentImport, setCurrentImport] = useState<ScheduleImport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -59,14 +93,23 @@ export default function WbsPage() {
   const load = useCallback(async () => {
     if (!project) {
       setNodes([]);
+      setCurrentImport(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const rows = await api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`);
+      // The WBS tree always reflects the live schedule (the current update — see
+      // Program Library), never a baseline or an older import: WBS nodes are
+      // upserted in place on every import, not versioned per revision. This just
+      // fetches the current update's label to say so on the page.
+      const [rows, imports] = await Promise.all([
+        api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
+        api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`).catch(() => []),
+      ]);
       setNodes(rows);
+      setCurrentImport(imports.find((i) => i.is_current) ?? imports[0] ?? null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load the WBS.");
     } finally {
@@ -80,11 +123,15 @@ export default function WbsPage() {
   }, [load]);
 
   const roots = useMemo(() => buildTree(nodes), [nodes]);
+  const allNodes = useMemo(() => flattenAll(roots), [roots]);
   const visible = useMemo(() => flatten(roots, collapsed), [roots, collapsed]);
   const parentIds = useMemo(
     () => new Set(nodes.filter((n) => nodes.some((m) => m.parent_wbs_id === n.wbs_id)).map((n) => n.wbs_id)),
     [nodes],
   );
+  // Root nodes' totals sum to the whole program — every activity is under some WBS.
+  const totalActivities = useMemo(() => roots.reduce((sum, r) => sum + r.total_activity_count, 0), [roots]);
+  const maxLevel = useMemo(() => (allNodes.length ? Math.max(...allNodes.map((n) => n.depth)) + 1 : 1), [allNodes]);
 
   function toggle(wbsId: string) {
     setCollapsed((prev) => {
@@ -93,6 +140,14 @@ export default function WbsPage() {
       else next.add(wbsId);
       return next;
     });
+  }
+
+  // "Collapse to Level N" (matches P6's Group and Sort dialog): levels 1..N stay
+  // expanded, everything at level N and deeper collapses under its level-N parent.
+  function collapseToLevel(level: number) {
+    setCollapsed(
+      new Set(allNodes.filter((n) => n.children.length > 0 && n.depth + 1 >= level).map((n) => n.wbs_id)),
+    );
   }
 
   async function createNode() {
@@ -155,13 +210,37 @@ export default function WbsPage() {
             <div className="page-title">Work Breakdown Structure</div>
             <div className="page-desc">
               {nodes.length > 0
-                ? `${nodes.length} WBS ${nodes.length === 1 ? "node" : "nodes"} · imported from the project's P6 schedule`
+                ? `${totalActivities.toLocaleString()} total activities · ${nodes.length} WBS ${nodes.length === 1 ? "node" : "nodes"}` +
+                  (currentImport
+                    ? ` · Current update — ${currentImport.revision_label ?? currentImport.filename}` +
+                      (currentImport.data_date ? ` (${fmtDate(currentImport.data_date)})` : "")
+                    : "")
                 : "The project's work breakdown structure"}
             </div>
           </div>
-          <div style={{ display: "flex", gap: ".55rem" }}>
+          <div style={{ display: "flex", gap: ".55rem", alignItems: "center" }}>
             {nodes.length > 0 && (
               <>
+                <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                  Collapse to
+                  <select
+                    style={selectStyle}
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) collapseToLevel(Number(e.target.value));
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="" disabled>
+                      Level…
+                    </option>
+                    {Array.from({ length: maxLevel }, (_, i) => i + 1).map((level) => (
+                      <option key={level} value={level}>
+                        Level {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button className="btn btn-secondary btn-sm" onClick={() => setCollapsed(new Set())}>
                   Expand all
                 </button>
@@ -280,6 +359,11 @@ export default function WbsPage() {
                               </button>
                             ) : (
                               <span style={{ width: 16, flex: "none" }} />
+                            )}
+                            {hasChildren && (
+                              <span className="wbs-level-chip" title={`WBS level ${node.depth + 1}`}>
+                                L{node.depth + 1}
+                              </span>
                             )}
                             <span className={hasChildren ? "wbs-band-code" : "mono"} style={hasChildren ? undefined : { fontSize: ".75rem" }}>
                               {node.wbs_short_name || "—"}

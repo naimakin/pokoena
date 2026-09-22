@@ -654,10 +654,15 @@ tr.resolved{opacity:.45}
 .wbs-band .wbs-band-toggle{background:none;border:none;padding:0;display:flex;color:var(--text-muted);cursor:pointer}
 .wbs-band .wbs-band-code{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0}
 .wbs-band .wbs-band-roll{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0;font-weight:400}
-.wbs-band.d0 td{background:var(--surface-3);border-top-color:var(--border-strong);font-size:.8125rem;text-transform:uppercase;letter-spacing:.03em}
-.wbs-band.d1 td{background:var(--surface-2);border-top-color:var(--border-strong);font-size:.78rem;text-transform:uppercase}
-.wbs-band.d2 td{background:var(--surface);font-size:.78rem}
-.wbs-band.d3 td,.wbs-band.d4 td{background:transparent;font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-muted)}
+.wbs-band.d0 td{background:var(--surface-3);border-top:2px solid var(--border-strong);border-bottom-color:var(--border-strong);font-size:.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.wbs-band.d1 td{background:var(--surface-2);border-top-color:var(--border-strong);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.wbs-band.d2 td{background:var(--surface);font-size:.78rem;font-weight:600}
+/* d3/d4 use the ink token itself at very low opacity for one more graduated
+   step below the surface ramp — not a new color, the same rgb() as --text-primary. */
+.wbs-band.d3 td{background:rgba(14,31,29,.035);font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-secondary)}
+.wbs-band.d4 td{background:transparent;font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-muted)}
+.wbs-level-chip{font-family:var(--font-mono);font-size:.625rem;font-weight:700;letter-spacing:.02em;color:var(--text-muted);background:var(--surface-3);border:1px solid var(--border);border-radius:var(--radius-xs);padding:.05rem .3rem;flex:none}
+.wbs-band.d0 .wbs-level-chip{color:var(--text-secondary);border-color:var(--border-strong)}
 
 .pg-id{font-family:var(--font-mono);font-size:.75rem}
 .pg-id .pg-name{font-family:var(--font-ui);font-size:.8125rem;color:var(--text-primary);font-weight:500}
