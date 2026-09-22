@@ -1,5 +1,6 @@
 import gzip
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, time
 
@@ -19,7 +20,9 @@ from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ScheduleImportOut, ScheduleImportUpdate
+from app.schemas.wbs import WbsNodeOut
 from app.services.schedule_current import get_current_import, to_naive
+from app.services.wbs_tree import WbsNodeLite, build_wbs_tree
 from app.services.xer_import import DataDateRegressionError, import_xer
 
 router = APIRouter(prefix="/projects/{project_id}/schedule-imports", tags=["schedule-imports"])
@@ -59,11 +62,48 @@ def list_schedule_imports(
         .options(
             defer(ScheduleImport.relationships_snapshot),
             defer(ScheduleImport.activities_snapshot),
+            defer(ScheduleImport.wbs_snapshot),
         )
         .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
         .order_by(ScheduleImport.imported_at.desc())
         .all()
     )
+
+
+@router.get("/{import_id}/wbs-nodes", response_model=list[WbsNodeOut])
+def get_import_wbs_nodes(
+    project_id: uuid.UUID,
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[WbsNodeOut]:
+    """The WBS tree as it was AT this import, from its frozen wbs_snapshot /
+    activities_snapshot — for Planning > WBS's "view an earlier program"
+    selector. The live `wbs_nodes` table only ever holds the current update's
+    tree (wholesale-replaced on every import, see services/xer_import.py), so
+    an earlier program's structure only survives here. Node ids are
+    deterministic (uuid5 of this import + the P6 wbs_id), not real rows."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
+    if row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleImport not found")
+    require_project_permission(db, project_id, ctx)
+
+    direct = Counter(
+        a["wbs_path"] for a in row.activities_snapshot if a.get("wbs_path") is not None
+    )
+    lite = [
+        WbsNodeLite(
+            id=uuid.uuid5(import_id, n["wbs_id"]),
+            wbs_id=n["wbs_id"],
+            parent_wbs_id=n.get("parent_wbs_id"),
+            wbs_short_name=n["wbs_short_name"],
+            wbs_name=n["wbs_name"],
+            seq_num=n.get("seq_num"),
+        )
+        for n in row.wbs_snapshot
+    ]
+    return build_wbs_tree(lite, direct)
 
 
 @router.post("", response_model=ScheduleImportOut, status_code=status.HTTP_201_CREATED)

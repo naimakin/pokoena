@@ -53,6 +53,11 @@ class ScheduleImport(Base):
     activity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     critical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     warnings: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    # Frozen WBS structure (wbs_id/parent_wbs_id/short_name/name/seq_num) as of
+    # this import — wbs_nodes itself is wholesale-replaced on every import (see
+    # services/xer_import.py) so this is the only place an earlier import's WBS
+    # tree survives, for Planning > WBS's "view an earlier program" selector.
+    wbs_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
     # Frozen list of this import's relationships (pred/succ external_id, link
     # type, lag, criticality at import time) — enough for Logic Diff
     # (engine/diff/logic_diff.py) to compare two imports without a full

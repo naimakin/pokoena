@@ -226,9 +226,17 @@ def import_xer(
     project.p6_proj_id = parsed.meta.proj_id or project.p6_proj_id
     project.p6_proj_short_name = parsed.meta.proj_short_name or project.p6_proj_short_name
 
-    # --- WBS nodes: upsert by (project_id, wbs_id) — small, stable trees, no
-    # need for the delete-and-reinsert approach relationships use below. ---
+    # --- WBS nodes: upsert by (project_id, wbs_id), then delete whatever
+    # existed before but isn't part of THIS import (excluding manually-added
+    # nodes, wbs_id "manual-…" — see api/routes/wbs.py). The .xer is a full WBS
+    # snapshot, same as relationships/resource assignments below: without this,
+    # uploading a different program (or a P6 project whose root WBS id changed
+    # across revisions) left its old WBS tree behind forever, shown alongside
+    # the new one on Planning > WBS with no way to tell which was current.
+    # ScheduleImport.wbs_snapshot (below) is what still lets an earlier
+    # program's WBS be viewed on request once this table has moved on. ---
     existing_wbs = {n.wbs_id: n for n in db.query(WbsNode).filter(WbsNode.project_id == project_id).all()}
+    incoming_wbs_ids = {node.wbs_id for node in parsed.wbs_nodes}
     for node in parsed.wbs_nodes:
         wbs_row = existing_wbs.get(node.wbs_id)
         if wbs_row is None:
@@ -240,6 +248,11 @@ def import_xer(
         wbs_row.wbs_short_name = node.wbs_short_name
         wbs_row.wbs_name = node.wbs_name
         wbs_row.seq_num = node.seq_num
+    db.query(WbsNode).filter(
+        WbsNode.project_id == project_id,
+        WbsNode.wbs_id.notin_(incoming_wbs_ids),
+        ~WbsNode.wbs_id.startswith("manual-"),
+    ).delete(synchronize_session=False)
 
     # --- activities: upsert by (project_id, external_id==task_code), falling
     # back to P6's internal task_id so an Activity-ID rename in P6 stays an
@@ -513,6 +526,16 @@ def import_xer(
     schedule_import.warnings = parsed.parse_log
     schedule_import.relationships_snapshot = relationships_snapshot
     schedule_import.activities_snapshot = activities_snapshot
+    schedule_import.wbs_snapshot = [
+        {
+            "wbs_id": node.wbs_id,
+            "parent_wbs_id": node.parent_wbs_id,
+            "wbs_short_name": node.wbs_short_name,
+            "wbs_name": node.wbs_name,
+            "seq_num": node.seq_num,
+        }
+        for node in parsed.wbs_nodes
+    ]
 
     # Program Library: a project's very first .xer upload auto-locks as its
     # baseline (see services/baseline.py) — later uploads just keep

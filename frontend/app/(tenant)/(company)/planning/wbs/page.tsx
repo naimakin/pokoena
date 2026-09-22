@@ -82,45 +82,78 @@ export default function WbsPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
   const [nodes, setNodes] = useState<WbsNode[]>([]);
-  const [currentImport, setCurrentImport] = useState<ScheduleImport | null>(null);
+  const [imports, setImports] = useState<ScheduleImport[]>([]);
+  // Which uploaded program's WBS to show. Defaults to the current update once
+  // the import list loads; null only while nothing has loaded yet.
+  const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nodesLoading, setNodesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newOpen, setNewOpen] = useState(false);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadImports = useCallback(async () => {
     if (!project) {
-      setNodes([]);
-      setCurrentImport(null);
+      setImports([]);
+      setSelectedImportId(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      // The WBS tree always reflects the live schedule (the current update — see
-      // Program Library), never a baseline or an older import: WBS nodes are
-      // upserted in place on every import, not versioned per revision. This just
-      // fetches the current update's label to say so on the page.
-      const [rows, imports] = await Promise.all([
-        api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
-        api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`).catch(() => []),
-      ]);
-      setNodes(rows);
-      setCurrentImport(imports.find((i) => i.is_current) ?? imports[0] ?? null);
+      const list = await api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`);
+      setImports(list);
+      setSelectedImportId((prev) => {
+        if (prev && list.some((i) => i.id === prev)) return prev;
+        return (list.find((i) => i.is_current) ?? list[0])?.id ?? null;
+      });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load the WBS.");
+      setError(err instanceof ApiError ? err.message : "Failed to load the schedule imports.");
     } finally {
       setLoading(false);
     }
   }, [project]);
 
   useEffect(() => {
-    load();
+    loadImports();
+  }, [loadImports]);
+
+  const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
+  const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
+  // Program Library edits only ever touch the live schedule, so Add/Delete only
+  // make sense while viewing it — a historical program's tree is read-only.
+  const isViewingCurrent = selectedImportId !== null && selectedImportId === currentImportId;
+
+  const loadNodes = useCallback(async () => {
+    if (!project || !selectedImportId) {
+      setNodes([]);
+      return;
+    }
+    setNodesLoading(true);
+    try {
+      const path =
+        selectedImportId === currentImportId
+          ? `/projects/${project.id}/wbs-nodes`
+          : `/projects/${project.id}/schedule-imports/${selectedImportId}/wbs-nodes`;
+      const rows = await api.get<WbsNode[]>(path);
+      setNodes(rows);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to load this program's WBS.");
+      setNodes([]);
+    } finally {
+      setNodesLoading(false);
+    }
+  }, [project, selectedImportId, currentImportId, showToast]);
+
+  useEffect(() => {
+    loadNodes();
     setCollapsed(new Set());
-  }, [load]);
+    setNewOpen(false);
+    setDraft(EMPTY_DRAFT);
+  }, [loadNodes]);
 
   const roots = useMemo(() => buildTree(nodes), [nodes]);
   const allNodes = useMemo(() => flattenAll(roots), [roots]);
@@ -161,7 +194,7 @@ export default function WbsPage() {
       });
       setDraft(EMPTY_DRAFT);
       setNewOpen(false);
-      await load();
+      await loadNodes();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not create the WBS node.");
     } finally {
@@ -174,7 +207,7 @@ export default function WbsPage() {
     if (!window.confirm(`Delete WBS node "${node.wbs_name}"? This can't be undone.`)) return;
     try {
       await api.delete(`/projects/${project.id}/wbs-nodes/${node.id}`);
-      await load();
+      await loadNodes();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not delete the WBS node.");
     }
@@ -209,16 +242,33 @@ export default function WbsPage() {
           <div>
             <div className="page-title">Work Breakdown Structure</div>
             <div className="page-desc">
-              {nodes.length > 0
-                ? `${totalActivities.toLocaleString()} total activities · ${nodes.length} WBS ${nodes.length === 1 ? "node" : "nodes"}` +
-                  (currentImport
-                    ? ` · Current update — ${currentImport.revision_label ?? currentImport.filename}` +
-                      (currentImport.data_date ? ` (${fmtDate(currentImport.data_date)})` : "")
-                    : "")
-                : "The project's work breakdown structure"}
+              {nodesLoading
+                ? "Loading…"
+                : nodes.length > 0
+                  ? `${totalActivities.toLocaleString()} total activities · ${nodes.length} WBS ${nodes.length === 1 ? "node" : "nodes"}` +
+                    (!isViewingCurrent ? " · read-only — showing an earlier program" : "")
+                  : "The project's work breakdown structure"}
             </div>
           </div>
-          <div style={{ display: "flex", gap: ".55rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: ".55rem", alignItems: "center", flexWrap: "wrap" }}>
+            {imports.length > 0 && (
+              <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                Program
+                <select
+                  style={{ ...selectStyle, minWidth: 220 }}
+                  value={selectedImportId ?? ""}
+                  onChange={(e) => setSelectedImportId(e.target.value)}
+                >
+                  {imports.map((imp) => (
+                    <option key={imp.id} value={imp.id}>
+                      {imp.revision_label ?? imp.filename}
+                      {imp.data_date ? ` (${fmtDate(imp.data_date)})` : ""}
+                      {imp.id === currentImportId ? " — Current update" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {nodes.length > 0 && (
               <>
                 <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
@@ -252,13 +302,24 @@ export default function WbsPage() {
                 </button>
               </>
             )}
-            <button className="btn btn-primary btn-sm" disabled={!project} onClick={() => setNewOpen((v) => !v)}>
-              + Add WBS node
-            </button>
+            {isViewingCurrent && (
+              <button className="btn btn-primary btn-sm" disabled={!project} onClick={() => setNewOpen((v) => !v)}>
+                + Add WBS node
+              </button>
+            )}
           </div>
         </div>
 
-        {newOpen && (
+        {!isViewingCurrent && selectedImport && (
+          <div className="banner">
+            <div className="banner-text">
+              Showing <b>{selectedImport.revision_label ?? selectedImport.filename}</b>, an earlier program — read-only.
+              Switch <b>Program</b> back to the current update to edit the live WBS.
+            </div>
+          </div>
+        )}
+
+        {newOpen && isViewingCurrent && (
           <div className="card" style={{ padding: "1rem 1.1rem", display: "flex", flexDirection: "column", gap: ".6rem" }}>
             <div style={{ display: "flex", gap: ".6rem", flexWrap: "wrap" }}>
               <label style={{ fontSize: ".75rem", display: "flex", flexDirection: "column", gap: ".25rem", flex: "1 1 220px" }}>
@@ -315,10 +376,20 @@ export default function WbsPage() {
         )}
 
         <div className="card">
-          {nodes.length === 0 ? (
+          {nodesLoading ? (
+            <p className="page-desc" style={{ padding: "1rem 1.1rem" }}>
+              Loading…
+            </p>
+          ) : nodes.length === 0 ? (
             <p className="empty-state">
-              No WBS imported yet. Upload a P6 <span className="mono">.xer</span> schedule from Planning &rsaquo;
-              Program Library — its PROJWBS structure loads here automatically, or add nodes manually above.
+              {isViewingCurrent ? (
+                <>
+                  No WBS imported yet. Upload a P6 <span className="mono">.xer</span> schedule from Planning &rsaquo;
+                  Program Library — its PROJWBS structure loads here automatically, or add nodes manually above.
+                </>
+              ) : (
+                "This program was imported before WBS history was tracked, so its structure wasn't saved."
+              )}
             </p>
           ) : (
             <div className="table-wrap">
@@ -379,15 +450,17 @@ export default function WbsPage() {
                           )}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          <div className="actions" style={{ justifyContent: "flex-end" }}>
-                            <button
-                              className="act-btn act-reject"
-                              title="Delete WBS node"
-                              onClick={() => deleteNode(node)}
-                            >
-                              <XIcon className="icon" />
-                            </button>
-                          </div>
+                          {isViewingCurrent && (
+                            <div className="actions" style={{ justifyContent: "flex-end" }}>
+                              <button
+                                className="act-btn act-reject"
+                                title="Delete WBS node"
+                                onClick={() => deleteNode(node)}
+                              >
+                                <XIcon className="icon" />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
