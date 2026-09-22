@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { ScheduleImport, WbsNode } from "@/lib/types";
-import { ChevronDownIcon, XIcon } from "@/components/icons";
+import { ChevronDownIcon, EyeIcon, EyeOffIcon, XIcon } from "@/components/icons";
 
 interface TreeNode extends WbsNode {
   children: TreeNode[];
@@ -93,6 +93,9 @@ export default function WbsPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
+  const [hiddenRoots, setHiddenRoots] = useState<WbsNode[]>([]);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const [hidingId, setHidingId] = useState<string | null>(null);
 
   const loadImports = useCallback(async () => {
     if (!project) {
@@ -148,12 +151,32 @@ export default function WbsPage() {
     }
   }, [project, selectedImportId, currentImportId, showToast]);
 
+  // Roots hidden from the live tree (see hideRoot below) — only meaningful
+  // while viewing the current update, since a historical program's tree never
+  // has anything hidden from it.
+  const loadHiddenRoots = useCallback(async () => {
+    if (!project || !isViewingCurrent) {
+      setHiddenRoots([]);
+      return;
+    }
+    try {
+      setHiddenRoots(await api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes/hidden`));
+    } catch {
+      setHiddenRoots([]);
+    }
+  }, [project, isViewingCurrent]);
+
   useEffect(() => {
     loadNodes();
     setCollapsed(new Set());
     setNewOpen(false);
     setDraft(EMPTY_DRAFT);
   }, [loadNodes]);
+
+  useEffect(() => {
+    loadHiddenRoots();
+    setHiddenOpen(false);
+  }, [loadHiddenRoots]);
 
   const roots = useMemo(() => buildTree(nodes), [nodes]);
   const allNodes = useMemo(() => flattenAll(roots), [roots]);
@@ -210,6 +233,43 @@ export default function WbsPage() {
       await loadNodes();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not delete the WBS node.");
+    }
+  }
+
+  // Hides a whole root program from this view without touching its data — for
+  // a project that already had two unrelated programs' WBS mixed together
+  // before imports started replacing this table wholesale, this is how you
+  // tell Poko which one to stop showing. Reversible any time from "Hidden".
+  async function hideRoot(node: TreeNode) {
+    if (!project) return;
+    if (
+      !window.confirm(
+        `Hide "${node.wbs_name}" from this page? Its activities aren't affected anywhere else — you can unhide it any time from "Hidden" above.`,
+      )
+    ) {
+      return;
+    }
+    setHidingId(node.id);
+    try {
+      await api.post(`/projects/${project.id}/wbs-nodes/${node.id}/hide`);
+      await Promise.all([loadNodes(), loadHiddenRoots()]);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not hide this WBS node.");
+    } finally {
+      setHidingId(null);
+    }
+  }
+
+  async function unhideRoot(node: WbsNode) {
+    if (!project) return;
+    setHidingId(node.id);
+    try {
+      await api.post(`/projects/${project.id}/wbs-nodes/${node.id}/unhide`);
+      await Promise.all([loadNodes(), loadHiddenRoots()]);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not unhide this WBS node.");
+    } finally {
+      setHidingId(null);
     }
   }
 
@@ -302,6 +362,11 @@ export default function WbsPage() {
                 </button>
               </>
             )}
+            {isViewingCurrent && hiddenRoots.length > 0 && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setHiddenOpen((v) => !v)}>
+                <EyeOffIcon className="icon" /> Hidden ({hiddenRoots.length})
+              </button>
+            )}
             {isViewingCurrent && (
               <button className="btn btn-primary btn-sm" disabled={!project} onClick={() => setNewOpen((v) => !v)}>
                 + Add WBS node
@@ -309,6 +374,37 @@ export default function WbsPage() {
             )}
           </div>
         </div>
+
+        {hiddenOpen && hiddenRoots.length > 0 && (
+          <div className="card" style={{ padding: ".75rem 1.1rem", display: "flex", flexDirection: "column", gap: ".5rem" }}>
+            <div style={{ fontSize: ".75rem", fontWeight: 700, color: "var(--text-secondary)" }}>
+              Hidden from this view — activities aren&apos;t affected anywhere else
+            </div>
+            {hiddenRoots.map((root) => (
+              <div
+                key={root.id}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: ".75rem", fontSize: ".8125rem" }}
+              >
+                <span>
+                  <span className="mono" style={{ color: "var(--text-muted)", marginRight: ".4rem" }}>
+                    {root.wbs_short_name}
+                  </span>
+                  {root.wbs_name}
+                  <span className="wbs-band-roll" style={{ marginLeft: ".5rem" }}>
+                    Σ {root.total_activity_count.toLocaleString()}
+                  </span>
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={hidingId === root.id}
+                  onClick={() => unhideRoot(root)}
+                >
+                  <EyeIcon className="icon" /> Unhide
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!isViewingCurrent && selectedImport && (
           <div className="banner">
@@ -452,6 +548,16 @@ export default function WbsPage() {
                         <td style={{ textAlign: "right" }}>
                           {isViewingCurrent && (
                             <div className="actions" style={{ justifyContent: "flex-end" }}>
+                              {node.depth === 0 && (
+                                <button
+                                  className="act-btn act-edit"
+                                  title="Hide this program from this view (reversible, nothing is deleted)"
+                                  disabled={hidingId === node.id}
+                                  onClick={() => hideRoot(node)}
+                                >
+                                  <EyeOffIcon className="icon" />
+                                </button>
+                              )}
                               <button
                                 className="act-btn act-reject"
                                 title="Delete WBS node"

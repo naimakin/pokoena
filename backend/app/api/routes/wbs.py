@@ -15,6 +15,27 @@ from app.services.wbs_tree import WbsNodeLite, build_wbs_tree
 router = APIRouter(prefix="/projects/{project_id}/wbs-nodes", tags=["wbs"])
 
 
+def _drop_hidden_subtrees(nodes: list[WbsNode]) -> list[WbsNode]:
+    """Removes any node whose root ancestor (or the node itself) is
+    `is_hidden` — a root can only be hidden while it has no parent, but a
+    later import could in principle re-parent it, so this walks the full
+    chain rather than assuming hidden ⇒ root."""
+    hidden_ids = {n.wbs_id for n in nodes if n.is_hidden}
+    if not hidden_ids:
+        return nodes
+    parent_of = {n.wbs_id: n.parent_wbs_id for n in nodes}
+
+    def under_hidden(wbs_id: str | None, seen: set[str]) -> bool:
+        while wbs_id and wbs_id not in seen:
+            if wbs_id in hidden_ids:
+                return True
+            seen.add(wbs_id)
+            wbs_id = parent_of.get(wbs_id)
+        return False
+
+    return [n for n in nodes if not under_hidden(n.wbs_id, set())]
+
+
 @router.get("", response_model=list[WbsNodeOut])
 def list_wbs_nodes(
     project_id: uuid.UUID,
@@ -28,11 +49,13 @@ def list_wbs_nodes(
     reassembles the hierarchy from parent_wbs_id. Each node also carries a
     direct and a rolled-up activity count (activities join the tree via
     Activity.wbs_path, which xer_import sets to the activity's TASK.wbs_id).
-    To view an earlier program's WBS, see GET .../schedule-imports/{id}/wbs-nodes."""
+    Any root hidden via POST .../wbs-nodes/{id}/hide (and its whole subtree)
+    is left out — see GET .../wbs-nodes/hidden. To view an earlier program's
+    WBS, see GET .../schedule-imports/{id}/wbs-nodes."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx)
 
-    nodes = (
+    nodes = _drop_hidden_subtrees(
         db.query(WbsNode)
         .filter(WbsNode.tenant_id == ctx.tenant_id, WbsNode.project_id == project_id)
         .order_by(WbsNode.seq_num)
@@ -63,6 +86,100 @@ def list_wbs_nodes(
         for n in nodes
     ]
     return build_wbs_tree(lite, direct)
+
+
+@router.get("/hidden", response_model=list[WbsNodeOut])
+def list_hidden_wbs_roots(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[WbsNodeOut]:
+    """The roots currently hidden from the live tree, with their real current
+    counts, so a "N hidden — Manage" control can list what's tucked away and
+    offer to unhide it."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+
+    all_nodes = (
+        db.query(WbsNode)
+        .filter(WbsNode.tenant_id == ctx.tenant_id, WbsNode.project_id == project_id)
+        .order_by(WbsNode.seq_num)
+        .all()
+    )
+    hidden_ids = {n.wbs_id for n in all_nodes if n.is_hidden}
+    if not hidden_ids:
+        return []
+
+    direct: dict[str, int] = {
+        wbs_id: count
+        for wbs_id, count in (
+            db.query(Activity.wbs_path, func.count(Activity.id))
+            .filter(
+                Activity.tenant_id == ctx.tenant_id,
+                Activity.project_id == project_id,
+                Activity.wbs_path.isnot(None),
+            )
+            .group_by(Activity.wbs_path)
+            .all()
+        )
+    }
+    lite = [
+        WbsNodeLite(
+            id=n.id, wbs_id=n.wbs_id, parent_wbs_id=n.parent_wbs_id,
+            wbs_short_name=n.wbs_short_name, wbs_name=n.wbs_name, seq_num=n.seq_num,
+        )
+        for n in all_nodes
+    ]
+    return [n for n in build_wbs_tree(lite, direct) if n.wbs_id in hidden_ids and n.depth == 0]
+
+
+@router.post("/{node_id}/hide", response_model=WbsNodeOut)
+def hide_wbs_root(
+    project_id: uuid.UUID,
+    node_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> WbsNodeOut:
+    """Hides a root WBS node (and its whole subtree) from Planning > WBS
+    without deleting anything — see WbsNode.is_hidden. For a project that
+    already had two unrelated programs' WBS mixed together before imports
+    started wholesale-replacing this table, this is how a human tells Poko
+    which one to stop showing."""
+    node = get_tenant_scoped_or_404(db, WbsNode, node_id, ctx)
+    if node.project_id != project_id:
+        raise HTTPException(status_code=404, detail="WbsNode not found")
+    require_project_permission(db, project_id, ctx, need_edit=True)
+    if node.parent_wbs_id is not None:
+        raise HTTPException(status_code=400, detail="Only a top-level WBS node can be hidden")
+
+    node.is_hidden = True
+    db.commit()
+    db.refresh(node)
+    return WbsNodeOut(
+        id=node.id, wbs_id=node.wbs_id, parent_wbs_id=node.parent_wbs_id,
+        wbs_short_name=node.wbs_short_name, wbs_name=node.wbs_name, seq_num=node.seq_num,
+    )
+
+
+@router.post("/{node_id}/unhide", response_model=WbsNodeOut)
+def unhide_wbs_root(
+    project_id: uuid.UUID,
+    node_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> WbsNodeOut:
+    node = get_tenant_scoped_or_404(db, WbsNode, node_id, ctx)
+    if node.project_id != project_id:
+        raise HTTPException(status_code=404, detail="WbsNode not found")
+    require_project_permission(db, project_id, ctx, need_edit=True)
+
+    node.is_hidden = False
+    db.commit()
+    db.refresh(node)
+    return WbsNodeOut(
+        id=node.id, wbs_id=node.wbs_id, parent_wbs_id=node.parent_wbs_id,
+        wbs_short_name=node.wbs_short_name, wbs_name=node.wbs_name, seq_num=node.seq_num,
+    )
 
 
 @router.post("", response_model=WbsNodeOut, status_code=201)

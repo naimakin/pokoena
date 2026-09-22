@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+import sqlalchemy as sa
+from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -23,3 +24,11 @@ class WbsNode(Base):
     wbs_short_name: Mapped[str] = mapped_column(String(255), nullable=False)
     wbs_name: Mapped[str] = mapped_column(String(255), nullable=False)
     seq_num: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Only ever set on a ROOT node (no parent). Hides that whole subtree from
+    # Planning > WBS without deleting anything — the escape hatch for a project
+    # that already had two unrelated programs' WBS trees accumulate live before
+    # the per-import wholesale-replace existed (see services/xer_import.py):
+    # re-importing the CURRENT program alone doesn't retroactively know which
+    # already-live root was the stale one, so the human picks. Survives being
+    # upserted again by a later import of the same wbs_id (never reset there).
+    is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.false())
