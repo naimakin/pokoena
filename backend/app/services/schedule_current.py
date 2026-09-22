@@ -12,11 +12,24 @@ tests)."""
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.schedule_import import ScheduleImport
+
+
+def to_naive(dt: datetime | None) -> datetime | None:
+    """`schedule_imports.data_date` is a Postgres `timestamptz` column, so psycopg
+    hands back a timezone-aware value on read — even though every other date in the
+    schedule domain (parsed straight from the .xer, no tz info) is naive. Comparing
+    the two raises `TypeError: can't compare offset-naive and offset-aware
+    datetimes`. Every reader of a ScheduleImport's `data_date` normalizes it through
+    this first. SQLite (tests) already returns naive values, so it's a no-op there."""
+    if dt is not None and dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def get_current_import(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> ScheduleImport | None:

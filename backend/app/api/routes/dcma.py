@@ -12,7 +12,7 @@ from app.models.calendar import Calendar
 from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.schemas.dcma import DcmaReportOut
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/dcma", tags=["dcma"])
 
@@ -42,7 +42,7 @@ def get_dcma_report(
     hours_per_day = calendar.hours_per_day if calendar else 8.0
 
     last_import = get_current_import(db, ctx.tenant_id, project_id)
-    data_date = last_import.data_date if last_import else None
+    data_date = to_naive(last_import.data_date) if last_import else None
 
     assigned_activity_ids = {
         row.activity_id

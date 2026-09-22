@@ -16,6 +16,7 @@ from app.models.activity_code import TaskActivityCode
 from app.models.project import Project
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.models.wbs_node import WbsNode
+from app.services.schedule_current import to_naive
 from app.schemas.project_status import (
     PrioritiesOut,
     PriorityActivityOut,
@@ -78,7 +79,7 @@ def get_project_status(
 
     last_import = inputs["last_import"]
     hours_per_day = inputs["hours_per_day"] or _HOURS_PER_DAY_FALLBACK
-    dd = (last_import.data_date if last_import else None) or datetime.utcnow()
+    dd = (to_naive(last_import.data_date) if last_import else None) or datetime.utcnow()
 
     # --- trend series: stored snapshots + a live "current" point ---
     snapshots = (
@@ -209,7 +210,7 @@ def get_project_status(
 
     return ProjectStatusOut(
         project_id=project_id,
-        data_date=last_import.data_date if last_import else None,
+        data_date=to_naive(last_import.data_date) if last_import else None,
         latest_revision_label=last_import.revision_label if last_import else None,
         latest_filename=last_import.filename if last_import else None,
         imported_at=last_import.imported_at if last_import else None,

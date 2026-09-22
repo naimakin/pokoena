@@ -54,7 +54,7 @@ from app.parser.xer_models import ParsedSchedule
 from app.parser.xer_parser import parse_xer
 from app.services.baseline import BaselineLockError, lock_baseline_for_project
 from app.services.project_status import compute_status_rollup
-from app.services.schedule_current import get_current_import, mark_current
+from app.services.schedule_current import get_current_import, mark_current, to_naive
 
 _TOL = 0.01
 
@@ -142,8 +142,9 @@ def import_xer(
 
     if not force and reuse_import is None and parsed.meta.data_date is not None:
         current = get_current_import(db, ctx.tenant_id, project_id)
-        if current is not None and current.data_date is not None and parsed.meta.data_date < current.data_date:
-            raise DataDateRegressionError(parsed.meta.data_date, current.data_date)
+        current_data_date = to_naive(current.data_date) if current is not None else None
+        if current_data_date is not None and parsed.meta.data_date < current_data_date:
+            raise DataDateRegressionError(parsed.meta.data_date, current_data_date)
 
     import_id = reuse_import.id if reuse_import is not None else uuid.uuid4()
 

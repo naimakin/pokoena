@@ -11,7 +11,7 @@ from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
 from app.schemas.risk import MonteCarloRequest, MonteCarloResultOut
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/risk", tags=["risk"])
 
@@ -41,7 +41,7 @@ def run_monte_carlo_simulation(
     default_hpd = calendars[0].hours_per_day if calendars else 8.0
 
     last_import = get_current_import(db, ctx.tenant_id, project_id)
-    data_date = last_import.data_date if last_import else None
+    data_date = to_naive(last_import.data_date) if last_import else None
 
     overrides = [
         ActivityRiskOverride(

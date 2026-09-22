@@ -16,7 +16,7 @@ from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_export import ScheduleExport
 from app.models.wbs_node import WbsNode
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/export", tags=["export"])
 
@@ -61,7 +61,7 @@ def export_xer(
     )
 
     last_import = get_current_import(db, ctx.tenant_id, project_id)
-    data_date = last_import.data_date if last_import else None
+    data_date = to_naive(last_import.data_date) if last_import else None
 
     xer_bytes = build_xer(
         project, activities, relationships, calendars, wbs_nodes, resources, assignments,

@@ -61,7 +61,7 @@ from app.schemas.evm import (
     ProgressSubmitResultOut,
     QuickEvmOut,
 )
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/evm", tags=["evm"])
 
@@ -86,7 +86,7 @@ def get_quick_evm(
     calendars = db.query(Calendar).filter(Calendar.tenant_id == ctx.tenant_id, Calendar.project_id == project_id).all()
 
     last_import = get_current_import(db, ctx.tenant_id, project_id)
-    data_date = last_import.data_date if last_import else None
+    data_date = to_naive(last_import.data_date) if last_import else None
 
     result = calculate_evm(activities, assignments, calendars, data_date)
     return QuickEvmOut.model_validate(result)

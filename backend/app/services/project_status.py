@@ -27,7 +27,7 @@ from app.models.calendar import Calendar
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 
 # An activity is "Important" if it's on/near the critical path.
 _IMPORTANT_FLOAT_DAYS = 5
@@ -279,7 +279,7 @@ def rollup_from_inputs(inputs: dict) -> StatusRollup:
     latest_snapshot: EvmSnapshot | None = inputs["latest_snapshot"]
     active_baseline: Baseline | None = inputs["active_baseline"]
 
-    data_date = last_import.data_date if last_import else None
+    data_date = to_naive(last_import.data_date) if last_import else None
     dd = data_date or datetime.utcnow()
 
     spi = latest_snapshot.spi if latest_snapshot and latest_snapshot.spi is not None else None

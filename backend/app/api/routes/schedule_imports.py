@@ -1,7 +1,7 @@
 import gzip
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, time, timezone
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session, defer
@@ -19,7 +19,7 @@ from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ScheduleImportOut, ScheduleImportUpdate
-from app.services.schedule_current import get_current_import
+from app.services.schedule_current import get_current_import, to_naive
 from app.services.xer_import import DataDateRegressionError, import_xer
 
 router = APIRouter(prefix="/projects/{project_id}/schedule-imports", tags=["schedule-imports"])
@@ -133,11 +133,12 @@ def update_schedule_import(
         row.revision_label = label
         snapshot_changes[ScheduleStatusSnapshot.revision_label] = label
     if payload.data_date is not None:
-        # Keep the time-of-day (and zone) P6 stamped on the original data date.
-        old = row.data_date
-        row.data_date = datetime.combine(
-            payload.data_date, old.timetz() if old is not None else time(0, tzinfo=timezone.utc)
-        )
+        # Keep the time-of-day P6 stamped on the original data date. Every other
+        # date in the schedule domain is a naive datetime (parsed straight from the
+        # .xer) — normalize the old value the same way before reusing its time, so
+        # this never writes back a timezone-aware one (see schedule_current.to_naive).
+        old = to_naive(row.data_date)
+        row.data_date = datetime.combine(payload.data_date, old.time() if old is not None else time(0))
         snapshot_changes[ScheduleStatusSnapshot.data_date] = row.data_date
 
     # The status-trend snapshot keeps its own copy of both (Project Status chart).
