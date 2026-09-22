@@ -12,14 +12,22 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
 from app.models.activity import Activity
-from app.models.baseline import Baseline
+from app.models.baseline import (
+    Baseline,
+    BaselineActivity,
+    BaselinePvCurve,
+    BaselineResource,
+    BaselineResourceAssignment,
+    BaselineStatus,
+)
+from app.models.evm_snapshot import EvmSnapshot
 from app.models.project import Project
 from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.parser.xer_parser import XerParseError
-from app.schemas.activity import ScheduleImportOut, ScheduleImportUpdate
+from app.schemas.activity import ActivityOut, ScheduleImportOut, ScheduleImportUpdate
 from app.schemas.wbs import WbsNodeOut
 from app.services.schedule_current import get_current_import, to_naive
 from app.services.wbs_tree import WbsNodeLite, build_wbs_tree
@@ -104,6 +112,61 @@ def get_import_wbs_nodes(
         for n in row.wbs_snapshot
     ]
     return build_wbs_tree(lite, direct)
+
+
+@router.get("/{import_id}/activities", response_model=list[ActivityOut])
+def get_import_activities(
+    project_id: uuid.UUID,
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[ActivityOut]:
+    """Activities as they were AT this import, from its frozen
+    activities_snapshot — Planning > Activities' "view an earlier program"
+    selector, same idea as GET .../wbs-nodes. Rows are read-only (ids are
+    deterministic — uuid5 of this import + the P6 external_id — not real
+    Activity rows), and carry no late dates/free float/discipline (not part of
+    the snapshot); everything CPM/EVM/DCMA cares about (dates, float,
+    criticality, status, % complete) is there."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
+    if row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleImport not found")
+    require_project_permission(db, project_id, ctx)
+
+    out = []
+    for a in row.activities_snapshot:
+        hours = a.get("remaining_duration_hours")
+        out.append(
+            ActivityOut(
+                id=uuid.uuid5(import_id, a["external_id"]),
+                tenant_id=ctx.tenant_id,
+                project_id=project_id,
+                project_scope_id=None,
+                external_id=a["external_id"],
+                name=a.get("name") or a["external_id"],
+                discipline="General",
+                planned_start=a.get("planned_start"),
+                planned_finish=a.get("planned_finish"),
+                actual_start=a.get("actual_start"),
+                actual_finish=a.get("actual_finish"),
+                percent_complete=a.get("percent_complete") or 0,
+                remaining_duration_days=round(hours / 8) if hours is not None else 0,
+                status=a.get("status") or "not_started",
+                wbs_path=a.get("wbs_path"),
+                task_type=a.get("task_type"),
+                target_duration_hours=a.get("target_duration_hours"),
+                remaining_duration_hours=hours,
+                early_start=a.get("early_start"),
+                early_finish=a.get("early_finish"),
+                total_float_hours=a.get("total_float_hours"),
+                is_critical=bool(a.get("is_critical")),
+                is_longest_path=bool(a.get("is_longest_path")),
+                constraint_type=a.get("constraint_type"),
+                constraint_date=a.get("constraint_date"),
+            )
+        )
+    return out
 
 
 @router.post("", response_model=ScheduleImportOut, status_code=status.HTTP_201_CREATED)
@@ -234,10 +297,17 @@ def delete_schedule_import(
     """Removes a mis-uploaded or no-longer-wanted import from history. Two
     imports can never be deleted: the most recent one (it *is* the live
     schedule — activities/relationships were overwritten wholesale from it,
-    see services/xer_import.py) and one a baseline is locked from (baselines
-    are a permanent commitment, never silently discarded). Deleting any other
-    import also drops its ScheduleStatusSnapshot trend point and clears the
-    now-dangling references on activities/recovery plans."""
+    see services/xer_import.py) and one the ACTIVE baseline is locked from
+    (a permanent commitment, never silently discarded). Deleting any other
+    import also drops its ScheduleStatusSnapshot trend point, clears the
+    now-dangling references on activities/recovery plans, and — since the
+    baseline can now be moved elsewhere (see evm.py's from-import route,
+    which keeps the old one around as `superseded` for exact restoration) —
+    cascades away any superseded baseline still pointing at it. Baseline.
+    schedule_import_id is NOT NULL, so a superseded one left behind would
+    otherwise block the delete or violate the FK; deleting the import it came
+    from means giving up restoring that particular baseline, same as deleting
+    any other history."""
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
@@ -247,13 +317,43 @@ def delete_schedule_import(
     if current is not None and current.id == import_id:
         raise HTTPException(status_code=409, detail="Can't delete the current schedule — upload a corrected file to replace it")
 
-    baseline_ref = (
+    active_baseline_ref = (
         db.query(Baseline.id)
-        .filter(Baseline.tenant_id == ctx.tenant_id, Baseline.schedule_import_id == import_id)
+        .filter(
+            Baseline.tenant_id == ctx.tenant_id,
+            Baseline.schedule_import_id == import_id,
+            Baseline.status == BaselineStatus.active,
+        )
         .first()
     )
-    if baseline_ref is not None:
-        raise HTTPException(status_code=409, detail="This import is locked as a baseline and can't be deleted")
+    if active_baseline_ref is not None:
+        raise HTTPException(
+            status_code=409, detail="This import is locked as the active baseline — move the baseline elsewhere first"
+        )
+
+    superseded_ids = [
+        b.id
+        for b in db.query(Baseline.id).filter(
+            Baseline.tenant_id == ctx.tenant_id,
+            Baseline.schedule_import_id == import_id,
+            Baseline.status == BaselineStatus.superseded,
+        )
+    ]
+    if superseded_ids:
+        db.query(EvmSnapshot).filter(EvmSnapshot.baseline_id.in_(superseded_ids)).delete(synchronize_session=False)
+        db.query(BaselineResourceAssignment).filter(
+            BaselineResourceAssignment.baseline_id.in_(superseded_ids)
+        ).delete(synchronize_session=False)
+        db.query(BaselineResource).filter(BaselineResource.baseline_id.in_(superseded_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(BaselinePvCurve).filter(BaselinePvCurve.baseline_id.in_(superseded_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(BaselineActivity).filter(BaselineActivity.baseline_id.in_(superseded_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Baseline).filter(Baseline.id.in_(superseded_ids)).delete(synchronize_session=False)
 
     db.query(ScheduleStatusSnapshot).filter(ScheduleStatusSnapshot.schedule_import_id == import_id).delete()
     db.query(Activity).filter(Activity.last_import_id == import_id).update({Activity.last_import_id: None})

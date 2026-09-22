@@ -1,6 +1,7 @@
 """Program Library: which import is the Baseline / the Current update, editable
 data date, and reversible unlock."""
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.models.activity import Activity
@@ -226,3 +227,41 @@ def test_activities_table_untouched_by_metadata_edit(client, db_session):
     client.patch(f"/projects/{project.id}/schedule-imports/{a['id']}", json={"data_date": "2026-02-01"})
 
     assert db_session.query(Activity).filter(Activity.project_id == project.id).count() == before
+
+
+def test_deleting_an_import_whose_baseline_was_moved_elsewhere_succeeds(client, db_session):
+    """Regression: moving the baseline away from an import (from-import/{other})
+    keeps its old baseline row around as `superseded` so it can be restored
+    exactly. The delete guard used to check for ANY baseline reference, active
+    or superseded — so once an import had ever held the baseline, it became
+    permanently undeletable even after the baseline moved on, contradicting
+    the whole point of being able to move it. The frontend's delete button
+    was never disabled for this case either (it only checks the ACTIVE
+    baseline), so this surfaced as a clean-looking delete that silently 409'd."""
+    from app.models.baseline import Baseline
+
+    tenant, project = _setup(db_session)
+    _login(client)
+    a, b = _two_imports(client, db_session, project.id)
+    assert client.post(f"/projects/{project.id}/evm/baseline/from-import/{b['id']}").status_code == 201
+    assert _baseline_status(client, project.id)["active_baseline"]["schedule_import_id"] == b["id"]
+
+    response = client.delete(f"/projects/{project.id}/schedule-imports/{a['id']}")
+
+    assert response.status_code == 204
+    remaining = {i["id"] for i in client.get(f"/projects/{project.id}/schedule-imports").json()}
+    assert a["id"] not in remaining
+    assert db_session.query(Baseline).filter(Baseline.schedule_import_id == uuid.UUID(a["id"])).count() == 0
+    # The still-active baseline (on B) is untouched.
+    assert _baseline_status(client, project.id)["has_active"] is True
+
+
+def test_deleting_an_import_with_the_active_baseline_is_still_blocked(client, db_session):
+    tenant, project = _setup(db_session)
+    _login(client)
+    a, b = _two_imports(client, db_session, project.id)  # A auto-locked as the (still active) baseline
+
+    response = client.delete(f"/projects/{project.id}/schedule-imports/{a['id']}")
+
+    assert response.status_code == 409
+    assert "active baseline" in response.json()["detail"]

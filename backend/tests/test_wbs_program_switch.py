@@ -95,3 +95,20 @@ def test_wbs_nodes_by_import_404s_for_a_foreign_or_unknown_import(client, db_ses
     response = client.get(f"/projects/{project.id}/schedule-imports/{uuid.uuid4()}/wbs-nodes")
 
     assert response.status_code == 404
+
+
+def test_activities_by_import_reconstructs_from_the_snapshot(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "wbs-switch-admin@example.com", "password": "secret123"})
+    a = _upload(client, project.id, PROGRAM_A).json()
+    _upload(client, project.id, PROGRAM_B)
+
+    response = client.get(f"/projects/{project.id}/schedule-imports/{a['id']}/activities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert {row["external_id"] for row in body} == {"A100"}
+    row = body[0]
+    assert row["wbs_path"] == "PROGA.1"
+    assert row["status"] == "not_started"
+    assert "id" in row and row["id"]
