@@ -247,7 +247,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
             </div>
             <div>
               <div className="brand-name">POKO</div>
-              <div className="brand-sub">on Primavera P6</div>
             </div>
           </div>
 
