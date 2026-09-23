@@ -75,6 +75,7 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
       { href: "/portfolio/programs", label: "Programs", icon: LayersIcon, visible: always },
       { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always },
+      { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
     ],
   },
   {
@@ -86,7 +87,6 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
-      { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
       { href: "/schedule", label: "Activities", icon: GridIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
       { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
