@@ -122,7 +122,7 @@ export default function RiskPage() {
                     { label: "P90 Finish", value: result.project_finish_p90, sub: "Conservative" },
                   ].map((kpi) => (
                     <div className="card" key={kpi.label} style={{ padding: "1rem 1.1rem" }}>
-                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", letterSpacing: ".05em" }}>
                         {kpi.label}
                       </div>
                       <div className="num" style={{ fontSize: "1.125rem", fontWeight: 700, marginTop: ".3rem" }}>

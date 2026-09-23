@@ -8,8 +8,8 @@ a{color:inherit}
 /* ---------- tokens : light (default) ----------
    Palette/type — v2 color redesign (DESIGN.md): warm paper canvas + neutral
    graphite ink + a single "blueprint blue" as the only chromatic accent.
-   Aptos isn't an open/Google font, so Outfit (their own documented
-   fallback) is loaded as the primary body face instead.
+   Type v2 pairs one humanist family (Figtree) with a neutral mono (IBM Plex
+   Mono) — see the --font-* block below and DESIGN.md "Type System v2".
 
    Reasoning: the v1 palette spent seven distinct hues (teal accent, indigo
    WBS family, azure "in progress", green/amber/red/cerulean status) which
@@ -129,9 +129,16 @@ a{color:inherit}
 
   --focus:#2e5aac;
 
-  --font-display:var(--font-barlow),"Barlow Condensed",-apple-system,sans-serif;
-  --font-ui:var(--font-outfit),Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --font-mono:var(--font-space-mono),"Space Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  /* Type v2 — one humanist family (Figtree) across display and interface, a
+     neutral mono (IBM Plex Mono) for data. Display and UI deliberately share a
+     family: it's what makes the interface read as one calm surface instead of
+     a headline face bolted onto a body face. Weight and tracking, not a second
+     typeface, separate the two roles — see --display-* below. */
+  --font-display:var(--font-figtree),Figtree,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-ui:var(--font-figtree),Figtree,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:var(--font-plex-mono),"IBM Plex Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --display-weight:800;
+  --display-tracking:-.022em;
 }
 /* Dark variant: not defined by the (light-only) reference DESIGN.md — derived
    to keep the same paper/ink/accent identity as light mode. Neutral graphite
@@ -228,9 +235,9 @@ body{
   }
 }
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-h1,h2,h3{text-wrap:balance;font-weight:600;letter-spacing:-.015em}
+h1,h2,h3{text-wrap:balance;font-weight:700;letter-spacing:var(--display-tracking)}
 .page-title,.card-title,.brand-name,.kpi-value,.login-title{
-  font-family:var(--font-display);font-weight:700;letter-spacing:-.015em;
+  font-family:var(--font-display);font-weight:var(--display-weight);letter-spacing:var(--display-tracking);
 }
 .nav-group-label{font-family:var(--font-display);font-weight:700}
 button{cursor:pointer;background:none;border:none}
@@ -292,14 +299,14 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .brand .mark{width:26px;height:26px;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-contrast);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:var(--shadow-xs)}
 .brand .mark .icon{width:15px;height:15px}
 .brand-name{font-weight:700;font-size:.95rem;letter-spacing:-.01em}
-.brand-sub{font-size:.625rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.09em}
+.brand-sub{font-size:.6875rem;color:var(--text-muted);letter-spacing:0}
 
 .a-sidebar{
   width:208px;flex:none;background:var(--surface);border-right:1px solid var(--border);
   display:flex;flex-direction:column;padding:1rem .75rem;gap:1.25rem;overflow-y:auto;
 }
 
-.nav-group-label{font-size:.625rem;text-transform:uppercase;letter-spacing:.11em;color:var(--text-muted);padding:0 .5rem;margin-bottom:.35rem}
+.nav-group-label{font-size:.6875rem;letter-spacing:0;color:var(--text-muted);padding:0 .5rem;margin-bottom:.35rem}
 .navlist{display:flex;flex-direction:column;gap:2px}
 
 .project-switcher{position:relative}
@@ -410,14 +417,14 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .card.accent-top{box-shadow:inset 0 2px 0 var(--accent),var(--shadow-xs)}
 .kpi{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.6rem}
 .kpi-top{display:flex;align-items:center;justify-content:space-between}
-.kpi-label{font-size:.6875rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);font-weight:600}
+.kpi-label{font-size:.75rem;letter-spacing:0;color:var(--text-muted);font-weight:600}
 .kpi-icon{width:26px;height:26px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex:none}
 .kpi-value{font-size:1.9rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .kpi-sub{font-size:.75rem;color:var(--text-secondary);display:flex;align-items:center;gap:.35rem}
 .progress{height:6px;border-radius:var(--radius-pill);background:var(--surface-3);overflow:hidden}
 .progress > span{display:block;height:100%;border-radius:var(--radius-pill)}
 
-.chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.6875rem;font-weight:700;padding:.2rem .55rem;border-radius:var(--radius-pill);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.6875rem;font-weight:700;padding:.2rem .55rem;border-radius:var(--radius-pill);letter-spacing:0;white-space:nowrap}
 .chip .icon{width:11px;height:11px;stroke-width:2.4}
 .chip-good{background:var(--good-soft);color:var(--good)}
 .chip-warn{background:var(--warn-soft);color:var(--warn)}
@@ -434,7 +441,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 /* ---------- table ---------- */
 table{width:100%;border-collapse:collapse}
 thead th{
-  text-align:left;font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  text-align:left;font-size:.75rem;letter-spacing:0;color:var(--text-muted);
   font-weight:600;padding:.6rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface-2);
 }
 tbody td{padding:.7rem 1.1rem;border-bottom:1px solid var(--border);font-size:.8125rem;vertical-align:middle}
@@ -513,7 +520,7 @@ tr.resolved{opacity:.45}
 .actcard-meta{font-size:.6875rem;color:var(--text-muted)}
 
 .field-group{padding:.75rem .9rem;display:flex;flex-direction:column;gap:.6rem}
-.field-group-label{display:flex;align-items:center;gap:.4rem;font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.field-group-label{display:flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:700;letter-spacing:0}
 .field-group-label.editable{color:var(--good)}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .field{display:flex;flex-direction:column;gap:.3rem}
@@ -553,7 +560,7 @@ tr.resolved{opacity:.45}
 .modal-desc{font-size:.75rem;color:var(--text-secondary);margin-top:.2rem}
 .modal-body{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.85rem}
 .modal-diff{background:var(--surface-2);border-radius:var(--radius-md);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.35rem}
-.modal-diff .lbl{font-size:.625rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
+.modal-diff .lbl{font-size:.6875rem;letter-spacing:0;color:var(--text-muted);font-weight:700}
 .modal-foot{padding:.85rem 1.1rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.55rem}
 
 /* larger modal variant for expanded chart/detail views — same overlay, wider panel */
@@ -695,7 +702,7 @@ tr.resolved{opacity:.45}
 .risk-sev.low{background:var(--info)}
 .risk-title{font-size:.8125rem;font-weight:600}
 .risk-detail{font-size:.75rem;color:var(--text-muted);margin-top:.1rem}
-.risk-source{font-size:.625rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-tertiary);margin-top:.25rem}
+.risk-source{font-size:.6875rem;letter-spacing:0;color:var(--text-tertiary);margin-top:.25rem}
 
 /* config modal — widget reorder list */
 .dash-config{max-width:520px}
@@ -725,8 +732,8 @@ tr.resolved{opacity:.45}
 .progress-grid{width:100%;border-collapse:collapse;font-size:.8125rem}
 .progress-grid thead th{
   position:sticky;top:0;z-index:3;background:var(--surface-2);
-  font-size:.625rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
-  font-weight:700;text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--border-strong);
+  font-size:.6875rem;letter-spacing:0;color:var(--text-muted);
+  font-weight:600;text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--border-strong);
 }
 .progress-grid td{padding:.3rem .6rem;border-bottom:1px solid var(--border)}
 .progress-grid tbody tr:hover:not(.wbs-band){background:var(--surface-2)}
@@ -757,13 +764,13 @@ tr.resolved{opacity:.45}
    paints over an ambient tr one). */
 .wbs-band.d0 td{
   background:var(--wbs-ink-deep);border-top:2px solid var(--wbs-ink);border-bottom-color:var(--wbs-ink);
-  font-size:.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--wbs-ink-contrast);
+  font-size:.8125rem;font-weight:700;letter-spacing:-.005em;color:var(--wbs-ink-contrast);
 }
 .wbs-band.d0 .wbs-band-toggle,.wbs-band.d0 .wbs-band-code,.wbs-band.d0 .wbs-band-roll{color:var(--wbs-ink-contrast-soft)}
 .wbs-band.d1{box-shadow:inset 3px 0 0 var(--wbs-line-1)}
 .wbs-band.d1 td{
   background:var(--wbs-soft-1);border-top-color:var(--border-strong);
-  font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--wbs-ink);
+  font-size:.8125rem;font-weight:700;letter-spacing:-.005em;color:var(--wbs-ink);
 }
 .wbs-band.d1 .wbs-band-code,.wbs-band.d1 .wbs-band-roll{color:var(--wbs-ink)}
 .wbs-band.d2{box-shadow:inset 3px 0 0 var(--wbs-line-2)}
@@ -804,15 +811,15 @@ tr.resolved{opacity:.45}
   .table-wrap{overflow:visible}
   body{background:#fff}
   .recovery-print::before{
-    content:"RECOVERY PLAN";display:block;font-family:var(--font-display);font-weight:700;
+    content:"Recovery Plan";display:block;font-family:var(--font-display);font-weight:700;
     font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
   }
   .mitigation-print::before{
-    content:"MITIGATION PLAN";display:block;font-family:var(--font-display);font-weight:700;
+    content:"Mitigation Plan";display:block;font-family:var(--font-display);font-weight:700;
     font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
   }
   .changes-print::before{
-    content:"SCHEDULE CHANGES";display:block;font-family:var(--font-display);font-weight:700;
+    content:"Schedule Changes";display:block;font-family:var(--font-display);font-weight:700;
     font-size:1.25rem;letter-spacing:-.01em;border-bottom:2px solid var(--text-primary);padding-bottom:.3rem;
   }
 }
@@ -846,7 +853,7 @@ tr.resolved{opacity:.45}
    reads the same here as in the table-based WBS grids. */
 .gantt-filterbar{display:flex;align-items:flex-end;gap:.9rem;flex-wrap:wrap;padding:.8rem 1.1rem}
 .gantt-filter{position:relative;display:flex;flex-direction:column;gap:.25rem}
-.gantt-filter-label{font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+.gantt-filter-label{font-size:.6875rem;font-weight:600;letter-spacing:0;color:var(--text-muted)}
 .gantt-filter-input,.gantt-filter-trigger{
   height:30px;min-width:230px;padding:0 .55rem;font-size:.75rem;font-family:var(--font-ui);
   background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text-primary);
@@ -921,7 +928,7 @@ tr.resolved{opacity:.45}
 }
 .gantt-head-cell{
   position:relative;display:flex;align-items:flex-end;padding:0 .5rem .35rem;flex-shrink:0;
-  font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  font-size:.6875rem;font-weight:600;letter-spacing:0;color:var(--text-muted);
   border-right:1px solid var(--border);overflow:hidden;white-space:nowrap;
 }
 .gantt-head-cell.is-num{justify-content:flex-end}

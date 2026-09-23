@@ -1,7 +1,7 @@
 ---
-version: "2.0"
+version: "2.1"
 name: Poko
-description: "A warm-paper project management dashboard built around #f7f6f1 (paper canvas), #1d2024 (neutral graphite ink), and #2e5aac (blueprint blue) as the single chromatic accent. Warm paper, cool graphite ink: the neutral ramp (surfaces, hairlines) is warm paper/taupe while the ink ramp is true neutral graphite — the way a set of architectural drawings reads, without tinting the ink toward any one status hue. The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, trustworthy, and quietly refined — restrained the way a well-made instrument panel is, not decorated. Display type is Barlow Condensed (weight 600–700) for headers and column labels — compressed, industrial, authoritative. Body copy uses Outfit (Aptos is not an open/Google font, so Outfit — the documented fallback — is the primary body face here). Monospace data cells use Space Mono with tabular-nums. Tables and nav rows carry a 3px accent left-border marker on selection. Critical path rows glow with #c21f13 at 6% opacity behind a red left-border. The accent appears on primary CTAs, selected rows, focus rings, data date markers, and — its one sanctioned non-interactive use — the WBS hierarchy rail; never decoratively beyond that. v2 narrowed the palette from seven chromatic hues down to five deliberate ones: blueprint blue (accent), green/amber/red (good/warn/crit), and the original brand teal demoted from 'the accent' to a quieter informational/in-progress role. The WBS depth ramp, previously its own bespoke 'blueprint indigo' hue family, is now a neutral graphite tone/weight/size ramp instead — hierarchy communicated by shade and typography, the way the rest of the system already does it, not by adding a sixth hue. Elevation is a four-step soft, low-spread, faintly-warm shadow scale (xs resting / sm raised / md overlay / lg modal). Border radius is a consistent 2px-step scale (4/6/8/10/12 + pill)."
+description: "A warm-paper project management dashboard built around #f7f6f1 (paper canvas), #1d2024 (neutral graphite ink), and #2e5aac (blueprint blue) as the single chromatic accent. Warm paper, cool graphite ink: the neutral ramp (surfaces, hairlines) is warm paper/taupe while the ink ramp is true neutral graphite — the way a set of architectural drawings reads, without tinting the ink toward any one status hue. The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, trustworthy, and quietly refined — restrained the way a well-made instrument panel is, not decorated. Type v2 runs one humanist family, Figtree, across both display and interface — weight (800 for display, 400–600 for interface) and tracking separate the roles, so the screen reads as one calm surface rather than a headline face bolted onto a body face. Monospace data cells use IBM Plex Mono with tabular-nums. Uppercase is not a label device anywhere in the product: sentence case with real weight carries hierarchy instead. Tables and nav rows carry a 3px accent left-border marker on selection. Critical path rows glow with #c21f13 at 6% opacity behind a red left-border. The accent appears on primary CTAs, selected rows, focus rings, data date markers, and — its one sanctioned non-interactive use — the WBS hierarchy rail; never decoratively beyond that. v2 narrowed the palette from seven chromatic hues down to five deliberate ones: blueprint blue (accent), green/amber/red (good/warn/crit), and the original brand teal demoted from 'the accent' to a quieter informational/in-progress role. The WBS depth ramp, previously its own bespoke 'blueprint indigo' hue family, is now a neutral graphite tone/weight/size ramp instead — hierarchy communicated by shade and typography, the way the rest of the system already does it, not by adding a sixth hue. Elevation is a four-step soft, low-spread, faintly-warm shadow scale (xs resting / sm raised / md overlay / lg modal). Border radius is a consistent 2px-step scale (4/6/8/10/12 + pill)."
 
 colors:
   # CSS var name in globals.css is given in parentheses.
@@ -60,60 +60,61 @@ colors:
   crit-row-line: "#c21f13"          # --crit-row-line — tr.critical's left rail, full-strength (not the 30%-opacity --crit-line used elsewhere) (#f17b6e in dark)
 
 typography:
+  # Type v2: one humanist family (Figtree, variable 300-900) across display and
+  # interface, a neutral mono (IBM Plex Mono) for data cells. Weight and tracking
+  # separate display from body, not a second typeface. Uppercase is no longer a
+  # label device anywhere in the product — see design_principles.
   display-xl:
-    fontFamily: Barlow Condensed
+    fontFamily: Figtree
     fontSize: 32px
-    fontWeight: 700
+    fontWeight: 800
     lineHeight: 1.1
-    letterSpacing: -0.5px
-    textTransform: uppercase
+    letterSpacing: -0.022em
   display-lg:
-    fontFamily: Barlow Condensed
+    fontFamily: Figtree
     fontSize: 24px
-    fontWeight: 700
+    fontWeight: 800
     lineHeight: 1.15
-    letterSpacing: -0.3px
-    textTransform: uppercase
+    letterSpacing: -0.022em
   display-md:
-    fontFamily: Barlow Condensed
+    fontFamily: Figtree
     fontSize: 18px
-    fontWeight: 600
+    fontWeight: 700
     lineHeight: 1.2
-    letterSpacing: -0.2px
+    letterSpacing: -0.018em
   headline:
-    fontFamily: Outfit, system-ui
+    fontFamily: Figtree, system-ui
     fontSize: 16px
     fontWeight: 600
     lineHeight: 1.4
-    letterSpacing: -0.1px
+    letterSpacing: -0.01em
   body:
-    fontFamily: Outfit, system-ui
+    fontFamily: Figtree, system-ui
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.5
   body-sm:
-    fontFamily: Outfit, system-ui
+    fontFamily: Figtree, system-ui
     fontSize: 12px
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: Outfit, system-ui
-    fontSize: 11px
-    fontWeight: 500
+    fontFamily: Figtree, system-ui
+    fontSize: 12px
+    fontWeight: 600
     lineHeight: 1.4
-    letterSpacing: 0.03em
-    textTransform: uppercase
+    letterSpacing: 0
   mono:
-    fontFamily: Space Mono, Courier New, monospace
+    fontFamily: IBM Plex Mono, Consolas, monospace
     fontSize: 12px
     fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: 0.02em
+    letterSpacing: 0
   mono-sm:
-    fontFamily: Space Mono, Courier New, monospace
-    fontSize: 10px
+    fontFamily: IBM Plex Mono, Consolas, monospace
+    fontSize: 11px
     fontWeight: 400
-    letterSpacing: 0.02em
+    letterSpacing: 0
 
 spacing:
   base: 4px
@@ -162,8 +163,8 @@ animations:
   btn-press: "translateY(0.5px) on :active"
 
 patterns:
-  activity-table: "virtualized rows, 32px height, warm surface-2 header, row hover → surface-2, selected row → inset 3px accent left-border + accent-soft tint (tr.selected / .row-selected), critical rows → inset 3px red left-border + crit-soft tint (tr.critical), Space Mono tabular-nums for date/float/duration cells"
-  kpi-card: "white surface-1 card, shadow-xs at rest, Barlow Condensed stat values with tabular-nums; optional accent top-edge marker via .card.accent-top (inset 0 2px 0 accent) on a headline metric"
+  activity-table: "virtualized rows, 32px height, warm surface-2 header, row hover → surface-2, selected row → inset 3px accent left-border + accent-soft tint (tr.selected / .row-selected), critical rows → inset 3px red left-border + crit-soft tint (tr.critical), IBM Plex Mono tabular-nums for date/float/duration cells"
+  kpi-card: "white surface-1 card, shadow-xs at rest, Figtree 800 stat values with tabular-nums; optional accent top-edge marker via .card.accent-top (inset 0 2px 0 accent) on a headline metric"
   sidebar: "surface background, active nav item → accent-soft fill + accent text + 3px accent ::before marker, ink-subtle for inactive, 120ms color/background transition"
   input: "surface-1 background, hairline-strong border, hover → border ink-subtle, focus → 2px accent outline + 4px accent-soft halo"
   badge-float: "pill shape, float-* color ramp based on TF value, mono font"
@@ -174,7 +175,8 @@ design_principles:
   - "Data density over decoration — tables are the primary canvas"
   - "The accent is earned — spent on interactive state, CTA, focus, and critical data markers, plus one sanctioned non-interactive exception: the WBS hierarchy rail (see below)"
   - "Warm paper, cool ink — parchment/taupe neutral ramp against a true neutral graphite ink ramp (the ink is no longer tinted toward any status hue, so it never competes with the accent or the info/status-active teal)"
-  - "Barlow Condensed for headings creates professional authority without heaviness"
+  - "One family (Figtree) for display and interface — weight and tracking separate the roles, so the UI reads as a single calm surface"
+  - "Uppercase is not a label device — sentence case with weight 600 carries hierarchy without the industrial/machined register all-caps tracking gives"
   - "Warm paper canvas (#f7f6f1) distinguishes from cold-gray SaaS tools"
   - "Elevation is layered, not outlined — a coherent xs/sm/md/lg soft warm shadow scale"
   - "Float health color ramp is semantic, never decorative — always tied to TF values, and stays visually distinct from the accent"
@@ -224,6 +226,31 @@ graphite band; d1–d4 taper through decreasing neutral-gray washes down to near
 the same taper shape as v1, just desaturated. The only color left in the ramp is the accent-blue
 rail (`--wbs-line-*`), a deliberate, restrained "blueprint" wayfinding touch, not a fill.
 
+## Type System v2 — rationale
+
+The original trio — Barlow Condensed for display, Outfit for body, Space Mono for data — read as
+machinery rather than as an instrument. Barlow Condensed is a compressed industrial grotesque built
+for signage; Space Mono puts a typewriter quirk on every date and float value. On top of that,
+all-caps with wide tracking was doing label duty in roughly thirty places (CSS rules plus inline
+styles), and uppercase tracking is the single strongest "technical readout" signal in a UI. For a
+tool people sit in front of all day, that added up to cold, not precise.
+
+v2 replaces all three with **Figtree** (variable, 300–900) for display *and* interface, plus
+**IBM Plex Mono** for data cells:
+
+- **One family across both roles.** Weight (`--display-weight`, 800) and tracking
+  (`--display-tracking`, -0.022em) separate a heading from body text, rather than a second typeface.
+  A single family is what makes a dense screen read as one calm surface; two families make it read
+  as assembled parts.
+- **Figtree over a neutral grotesque.** Rounder bowls and softer terminals take the hardness out
+  without tipping into decorative, and it holds up at the 11–12px sizes this product's tables live at.
+- **IBM Plex Mono over Space Mono.** Plex is drawn for numeric legibility in tables; Space Mono's
+  character is charming in isolation and noisy across 2,000 rows of dates.
+- **Uppercase retired as a label device.** Every label, table header, chip and WBS band name is now
+  sentence case at weight 600 with zero tracking, typically one step larger, since sentence case at
+  the same pixel size reads smaller than caps did. The only survivors are the two tiny "Soon" status
+  badges, where caps is conventional and the string is three letters long.
+
 ## Where this lives in the codebase
 
 Unlike the original reference implementation (a Vite/Tailwind desktop app), this project has no
@@ -237,8 +264,8 @@ via `next/font/google` in `frontend/app/layout.tsx`.
 - Data rows: `tr.selected` / `.row-selected` → inset 3px accent left-border + accent-soft tint;
   `tr.critical` → inset 3px red left-border + crit-soft tint (the signature selection pattern)
 - Active nav item: accent-soft fill + accent text + a 3px accent `::before` bar
-- All numeric/date cells: `.num` or `.mono` (Space Mono, `font-variant-numeric: tabular-nums`)
-- Section headers / display type: Barlow Condensed, weight 700, `letter-spacing: -0.015em`
+- All numeric/date cells: `.num` or `.mono` (IBM Plex Mono, `font-variant-numeric: tabular-nums`)
+- Section headers / display type: Figtree, `var(--display-weight)` (800), `var(--display-tracking)` (-0.022em)
 - Uppercase micro-labels: 0.06–0.11em tracking, weight 500–600, `--text-muted`
 - Primary action buttons: `--accent` background, white text, `--radius-sm`, `--shadow-xs` at rest →
   `--shadow-sm` on hover, `--accent-focus` on `:active`

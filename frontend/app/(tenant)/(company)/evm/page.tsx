@@ -227,7 +227,7 @@ export default function EvmPage() {
                   { label: "CV (MH)", value: summary.cv, colored: false },
                 ].map((kpi) => (
                   <div className="card" key={kpi.label} style={{ padding: ".9rem 1rem" }}>
-                    <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", letterSpacing: ".05em" }}>
                       {kpi.label}
                     </div>
                     <div

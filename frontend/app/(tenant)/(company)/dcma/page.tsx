@@ -127,7 +127,7 @@ export default function DcmaPage() {
                 <span className="num" style={{ fontSize: "1.375rem", fontWeight: 700, color: scoreColor(report.overall_status) }}>
                   {report.overall_score.toFixed(0)}
                 </span>
-                <span style={{ fontSize: ".5625rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                <span style={{ fontSize: ".5625rem", color: "var(--text-muted)", letterSpacing: ".05em" }}>
                   Score
                 </span>
               </div>

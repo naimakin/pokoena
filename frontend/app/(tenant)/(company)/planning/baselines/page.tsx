@@ -325,8 +325,6 @@ export default function BaselinesPage() {
                             style={{
                               fontSize: ".6875rem",
                               color: "var(--text-muted)",
-                              textTransform: "uppercase",
-                              letterSpacing: ".05em",
                             }}
                           >
                             {kpi.label}
@@ -406,7 +404,7 @@ export default function BaselinesPage() {
                       <>
                         <div className="kpi-row" style={{ padding: "1rem 1.1rem 0" }}>
                           <div className="card" style={{ padding: ".9rem 1rem" }}>
-                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)" }}>
                               Budgeted labor
                             </div>
                             <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
@@ -414,7 +412,7 @@ export default function BaselinesPage() {
                             </div>
                           </div>
                           <div className="card" style={{ padding: ".9rem 1rem" }}>
-                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                            <div style={{ fontSize: ".6875rem", color: "var(--text-muted)" }}>
                               Budgeted cost
                             </div>
                             <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
@@ -484,7 +482,7 @@ export default function BaselinesPage() {
                     { label: "Critical slipping", value: String(variance.summary.critical_slip_count), chip: null as string | null },
                   ].map((kpi) => (
                     <div className="card" key={kpi.label} style={{ padding: ".9rem 1rem" }}>
-                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)" }}>
                         {kpi.label}
                       </div>
                       <div style={{ marginTop: ".35rem" }}>

@@ -213,7 +213,7 @@ export default function ProjectStatusPage() {
         {/* --- Filter bar --- */}
         <div className="card" style={{ padding: "0.9rem 1.1rem" }}>
           <div className="filter-bar">
-            <label style={{ fontSize: ".6875rem", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-muted)", fontWeight: 600 }}>
+            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
               Activity
               <input
                 value={q}
@@ -251,7 +251,7 @@ export default function ProjectStatusPage() {
                 >
                   {codes.code_types.map((t) => (
                     <div key={t.id} style={{ marginBottom: ".5rem" }}>
-                      <div style={{ fontSize: ".6875rem", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-muted)", fontWeight: 600, marginBottom: ".25rem" }}>
+                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: ".25rem" }}>
                         {t.name}
                       </div>
                       {codes.code_values
@@ -316,7 +316,7 @@ export default function ProjectStatusPage() {
             return (
               <div key={meta.key} className="card" style={{ padding: "1.1rem 1.15rem" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: ".75rem", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-muted)", fontWeight: 600 }}>
+                  <span style={{ fontSize: ".75rem", color: "var(--text-muted)", fontWeight: 600 }}>
                     {meta.title}
                   </span>
                   <span
