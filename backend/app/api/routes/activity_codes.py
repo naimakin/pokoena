@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
-from app.models.activity_code import ActivityCodeType, ActivityCodeValue
+from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.project import Project
 from app.schemas.activity_code import ActivityCodesOut
 
@@ -33,4 +33,13 @@ def get_activity_codes(
         .all()
     )
 
-    return ActivityCodesOut(code_types=code_types, code_values=code_values)
+    assignments: dict[str, list[str]] = {}
+    rows = (
+        db.query(TaskActivityCode.code_value_id, TaskActivityCode.activity_id)
+        .filter(TaskActivityCode.tenant_id == ctx.tenant_id, TaskActivityCode.project_id == project_id)
+        .all()
+    )
+    for code_value_id, activity_id in rows:
+        assignments.setdefault(str(code_value_id), []).append(str(activity_id))
+
+    return ActivityCodesOut(code_types=code_types, code_values=code_values, assignments=assignments)

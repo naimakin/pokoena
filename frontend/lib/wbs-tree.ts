@@ -21,6 +21,11 @@ export interface BandRow {
   inProgress: number;
   completed: number;
   avgPercent: number;
+  // Earliest start / latest finish across that same subtree (ISO day strings,
+  // so plain string compare is a date compare). Used by Planning > Schedule to
+  // draw a summary bar on the band row; other consumers ignore them.
+  spanStart: string | null;
+  spanFinish: string | null;
 }
 
 export interface ActivityRow {
@@ -51,16 +56,24 @@ function rollup(activities: Activity[]) {
   let inProgress = 0;
   let completed = 0;
   let pctSum = 0;
+  let spanStart: string | null = null;
+  let spanFinish: string | null = null;
   for (const a of activities) {
     if (a.status === "in_progress") inProgress += 1;
     else if (a.status === "complete") completed += 1;
     pctSum += a.percent_complete ?? 0;
+    const s = a.early_start ?? a.actual_start ?? a.planned_start ?? null;
+    const f = a.early_finish ?? a.actual_finish ?? a.planned_finish ?? null;
+    if (s && (spanStart === null || s < spanStart)) spanStart = s;
+    if (f && (spanFinish === null || f > spanFinish)) spanFinish = f;
   }
   return {
     total: activities.length,
     inProgress,
     completed,
     avgPercent: activities.length ? Math.round(pctSum / activities.length) : 0,
+    spanStart,
+    spanFinish,
   };
 }
 

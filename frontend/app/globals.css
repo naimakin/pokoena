@@ -837,6 +837,159 @@ tr.resolved{opacity:.45}
 .rm-warn{background:var(--warn-soft)}
 .rm-crit{background:var(--crit-soft)}
 
+/* ---------- Planning > Schedule (split-pane Gantt) ----------
+   Two independently-scrolling panes with a draggable divider: a resizable data
+   grid on the left, the time-scaled chart on the right. Vertical scroll is
+   mirrored in JS (see gantt/page.tsx::syncScroll), so both panes MUST keep the
+   same row height (--gantt-row) and header height or the two sides drift apart
+   as you scroll. Band tints reuse the opaque --wbs-tint-* tokens so WBS depth
+   reads the same here as in the table-based WBS grids. */
+.gantt-filterbar{display:flex;align-items:flex-end;gap:.9rem;flex-wrap:wrap;padding:.8rem 1.1rem}
+.gantt-filter{position:relative;display:flex;flex-direction:column;gap:.25rem}
+.gantt-filter-label{font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+.gantt-filter-input,.gantt-filter-trigger{
+  height:30px;min-width:230px;padding:0 .55rem;font-size:.75rem;font-family:var(--font-ui);
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text-primary);
+}
+.gantt-filter-trigger{display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer;text-align:left}
+.gantt-filter-trigger:hover{border-color:var(--text-muted)}
+.gantt-filter-trigger.is-active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.gantt-filter-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gantt-pop{
+  position:absolute;top:calc(100% + 4px);left:0;z-index:40;
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  box-shadow:var(--shadow-md);padding:.5rem;
+}
+.gantt-pop-empty{padding:.6rem;font-size:.75rem;color:var(--text-muted)}
+.gantt-pop-search{
+  width:100%;height:28px;padding:0 .5rem;margin-bottom:.4rem;font-size:.75rem;font-family:var(--font-ui);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);
+}
+.gantt-pop-list{max-height:280px;overflow:auto}
+.gantt-opt{
+  display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-radius:var(--radius-sm);
+  font-size:.75rem;cursor:default;
+}
+.gantt-opt:hover{background:var(--surface-2)}
+.gantt-opt.is-included{background:var(--accent-soft)}
+.gantt-opt.is-excluded{background:var(--crit-soft)}
+.gantt-opt-check{cursor:pointer}
+.gantt-opt-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gantt-opt-count{font-size:.6875rem;color:var(--text-muted)}
+.gantt-opt-actions{display:none;gap:.25rem;flex-shrink:0}
+.gantt-opt:hover .gantt-opt-actions,.gantt-opt.is-included .gantt-opt-actions,.gantt-opt.is-excluded .gantt-opt-actions{display:flex}
+.gantt-opt-actions button{
+  font-size:.625rem;padding:.12rem .4rem;border-radius:var(--radius-pill);
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text-secondary);cursor:pointer;
+}
+.gantt-opt-actions button:hover{border-color:var(--text-muted)}
+.gantt-opt-actions button.is-on{background:var(--accent);border-color:var(--accent);color:var(--accent-contrast)}
+.gantt-clear{
+  display:flex;align-items:center;gap:.3rem;height:30px;padding:0 .6rem;font-size:.6875rem;cursor:pointer;
+  border:1px solid var(--crit);border-radius:var(--radius-sm);background:var(--crit-soft);color:var(--crit);
+}
+
+.gantt-toolbar{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.6rem 1.1rem;border-bottom:1px solid var(--border)}
+.gantt-radios{display:flex;align-items:center;gap:.8rem}
+.gantt-radio{display:flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--text-secondary);cursor:pointer}
+.gantt-toggle{display:flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--text-secondary);cursor:pointer;background:none;border:none;padding:0}
+.gantt-toggle-track{
+  width:30px;height:16px;border-radius:var(--radius-pill);background:var(--surface-3);
+  position:relative;flex-shrink:0;transition:background var(--dur-1) var(--ease);
+}
+.gantt-toggle-knob{
+  position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--surface);
+  box-shadow:var(--shadow-xs);transition:transform var(--dur-1) var(--ease);
+}
+.gantt-toggle.is-on .gantt-toggle-track{background:var(--accent)}
+.gantt-toggle.is-on .gantt-toggle-knob{transform:translateX(14px)}
+.gantt-legend{display:flex;align-items:center;gap:.65rem;font-size:.6875rem;color:var(--text-muted)}
+.gantt-legend span{display:flex;align-items:center;gap:.3rem}
+.gantt-legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.gantt-zoom{display:flex;border:1px solid var(--border-strong);border-radius:var(--radius-pill);overflow:hidden}
+.gantt-zoom button{font-size:.6875rem;padding:.22rem .55rem;border:none;background:transparent;color:var(--text-muted);cursor:pointer}
+.gantt-zoom button.is-on{background:var(--accent);color:var(--accent-contrast);font-weight:700}
+.gantt-maxlevel{display:flex;align-items:center;gap:.4rem;font-size:.6875rem;color:var(--text-muted)}
+.gantt-maxlevel input{width:110px;accent-color:var(--accent)}
+
+.gantt-panes{display:flex;height:68vh;min-height:360px;--gantt-row:28px}
+.gantt-pane{overflow:auto;flex-shrink:0;background:var(--surface)}
+.gantt-pane-chart{flex:1;flex-shrink:1;min-width:0}
+.gantt-head{
+  position:sticky;top:0;z-index:5;display:flex;background:var(--surface);
+  border-bottom:2px solid var(--border-strong);
+}
+.gantt-head-cell{
+  position:relative;display:flex;align-items:flex-end;padding:0 .5rem .35rem;flex-shrink:0;
+  font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  border-right:1px solid var(--border);overflow:hidden;white-space:nowrap;
+}
+.gantt-head-cell.is-num{justify-content:flex-end}
+.gantt-col-resizer{position:absolute;top:0;right:0;bottom:0;width:5px;cursor:col-resize;z-index:2}
+.gantt-col-resizer:hover{background:var(--accent-soft)}
+
+.gantt-row{position:relative;display:flex;background:var(--surface);border-bottom:1px solid var(--border)}
+.gantt-row.is-odd{background:var(--surface-2)}
+.gantt-row.is-band{border-bottom:1px solid var(--border-strong);font-weight:700}
+.gantt-row.is-band.d0{background:var(--wbs-ink-deep);color:var(--wbs-ink-contrast)}
+.gantt-row.is-band.d1{background:var(--wbs-tint-1)}
+.gantt-row.is-band.d2{background:var(--wbs-tint-2)}
+.gantt-row.is-band.d3,.gantt-row.is-band.d4{background:var(--surface-2)}
+.gantt-cell{
+  display:flex;align-items:center;padding:0 .5rem;flex-shrink:0;overflow:hidden;
+  font-size:.75rem;border-right:1px solid var(--border);white-space:nowrap;
+}
+.gantt-cell.is-num{justify-content:flex-end;font-size:.6875rem;color:var(--text-secondary)}
+.gantt-row.is-band.d0 .gantt-cell.is-num{color:var(--wbs-ink-contrast-soft)}
+.gantt-cell-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gantt-cell-id{font-size:.625rem;color:var(--text-muted);flex-shrink:0}
+.gantt-caret{display:flex;flex-shrink:0;color:inherit;opacity:.7;transition:transform var(--dur-1) var(--ease)}
+
+.gantt-split{
+  width:7px;flex-shrink:0;cursor:col-resize;background:var(--surface-2);
+  border-left:1px solid var(--border);border-right:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+}
+.gantt-split:hover{background:var(--accent-soft)}
+.gantt-split-grip{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);pointer-events:none}
+
+.gantt-scale{flex-direction:column;cursor:ew-resize;user-select:none}
+.gantt-scale-tier{position:relative;height:50%;flex:1}
+.gantt-scale-tier span{
+  position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;
+  font-size:.625rem;color:var(--text-secondary);border-left:1px solid var(--border);overflow:hidden;
+}
+.gantt-scale-tier.is-lower span{font-size:.5625rem;color:var(--text-muted);border-top:1px solid var(--border)}
+
+.gantt-overlay{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
+.gantt-overlay.is-grid{z-index:1}
+.gantt-overlay.is-markers{z-index:4}
+.gantt-gridline{position:absolute;top:0;bottom:0;width:1px;background:var(--border);opacity:.55}
+.gantt-marker{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--warn);opacity:.75}
+.gantt-marker.is-data{border-left:2px solid var(--accent);opacity:1}
+.gantt-marker-labels{position:absolute;left:0;right:0;bottom:1px;height:0;pointer-events:none;z-index:7}
+.gantt-marker-pill{
+  position:absolute;transform:translateX(-50%);bottom:0;white-space:nowrap;
+  font-size:.5625rem;font-weight:700;padding:.08rem .3rem;border-radius:var(--radius-sm);
+  background:var(--warn);color:var(--accent-contrast);
+}
+.gantt-marker-pill.is-data{background:var(--accent)}
+
+.gantt-bar{position:absolute;top:50%;height:14px;transform:translateY(-50%);border-radius:3px;overflow:hidden;z-index:2}
+.gantt-bar-fill{position:absolute;left:0;top:0;height:100%;background:rgba(255,255,255,.3)}
+.gantt-bar-label{
+  position:absolute;inset:0;display:flex;align-items:center;padding-left:5px;
+  font-size:.5625rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--accent-contrast);
+}
+/* Sits just under the current bar (which is centred, 14px tall in a 28px row),
+   so the two read as a pair without overlapping — P6's baseline-bar convention. */
+.gantt-bar-baseline{position:absolute;top:22px;height:3px;border-radius:2px;background:var(--text-tertiary);z-index:1}
+.gantt-bar-summary{position:absolute;top:9px;height:7px;background:var(--text-secondary);border-radius:1px;z-index:2}
+.gantt-row.is-band.d0 .gantt-bar-summary{background:var(--wbs-ink-contrast)}
+.gantt-bar-summary i{position:absolute;top:0;width:0;height:0;border-top:7px solid var(--text-secondary);border-left:4px solid transparent;border-right:4px solid transparent}
+.gantt-row.is-band.d0 .gantt-bar-summary i{border-top-color:var(--wbs-ink-contrast)}
+.gantt-milestone{position:absolute;top:50%;width:11px;height:11px;transform:translateY(-50%) rotate(45deg);z-index:2}
+
 /* ---------- responsive ---------- */
 @media (max-width:900px){
   .kpi-row{grid-template-columns:repeat(2,1fr)}

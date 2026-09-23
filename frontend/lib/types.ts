@@ -800,6 +800,8 @@ export interface ActivityCodeValue {
 export interface ActivityCodes {
   code_types: ActivityCodeType[];
   code_values: ActivityCodeValue[];
+  // code_value_id -> activity ids carrying that code.
+  assignments: Record<string, string[]>;
 }
 
 // --- Execution → Project / Program Status ---

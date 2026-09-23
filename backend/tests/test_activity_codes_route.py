@@ -68,6 +68,26 @@ def test_activity_codes_persisted_after_import(client, db_session):
     assert value["short_name"] == "P1"
     assert value["code_type_id"] == body["code_types"][0]["id"]
 
+    # TASKACTV assignments ship with the catalogue so Planning > Schedule can
+    # show "<code> (~N activities)" and filter by code without a second call.
+    activities = client.get(f"/activities?project_id={project.id}").json()
+    a100 = next(a["id"] for a in activities if a["external_id"] == "A100")
+    assert body["assignments"] == {value["id"]: [a100]}
+
+
+def test_activity_codes_assignments_empty_without_taskactv(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "actvcode-admin@example.com", "password": "secret123"})
+
+    upload = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("synthetic_project.xer", FIXTURE.read_bytes(), "application/octet-stream")},
+    )
+    assert upload.status_code == 201
+
+    body = client.get(f"/projects/{project.id}/activity-codes").json()
+    assert body["assignments"] == {}
+
 
 def test_activity_codes_round_trip_through_export(client, db_session):
     tenant, project = _setup(db_session)
