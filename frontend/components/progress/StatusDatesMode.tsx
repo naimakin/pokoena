@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const STATUS_CHIP: Record<string, string> = {
   not_started: "chip-neutral",
-  in_progress: "chip-info",
+  in_progress: "chip-active",
   complete: "chip-good",
 };
 

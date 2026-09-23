@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -9,6 +9,7 @@ import { applyFilter, EMPTY_CRITERIA, normalizeCriteria, type FilterCriteria } f
 import { FilterPanel } from "@/components/progress/FilterPanel";
 import { StatusDatesMode } from "@/components/progress/StatusDatesMode";
 import { ManhoursMode } from "@/components/progress/ManhoursMode";
+import { UNGROUPED_KEY } from "@/lib/wbs-tree";
 
 type Mode = "status" | "manhours";
 const MODE_KEY = "poko:progress:mode";
@@ -24,6 +25,24 @@ function fmtDate(iso: string | null | undefined): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
 }
 
+// Same short form as Program Library / Planning > WBS, for the Program picker.
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
+}
+
+const selectStyle: CSSProperties = {
+  fontSize: ".75rem",
+  height: 30,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};
+
 export default function ProgressPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
@@ -32,9 +51,12 @@ export default function ProgressPage() {
   const [wbsNodes, setWbsNodes] = useState<WbsNode[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedActivityFilter[]>([]);
   const [hasActiveBaseline, setHasActiveBaseline] = useState(false);
-  const [dataDate, setDataDate] = useState<string | null>(null);
-  const [currentImport, setCurrentImport] = useState<ScheduleImport | null>(null);
+  const [imports, setImports] = useState<ScheduleImport[]>([]);
+  // Which uploaded program to show. Defaults to the current update once the
+  // import list loads; null only while nothing has loaded yet.
+  const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [mode, setMode] = useState<Mode>("status");
@@ -78,39 +100,90 @@ export default function ProgressPage() {
     }
   }, [project]);
 
-  useEffect(() => {
-    async function load() {
-      if (!project) {
-        setActivities([]);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      setCriteriaState(EMPTY_CRITERIA);
-      setActiveSavedId(null);
-      setFilterDirty(false);
-      try {
-        const [acts, nodes, baseline, imports] = await Promise.all([
-          api.get<Activity[]>(`/activities?project_id=${project.id}`),
-          api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
-          api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
-          api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
-        ]);
-        setActivities(acts);
-        setWbsNodes(nodes);
-        setHasActiveBaseline(baseline.has_active);
-        setCurrentImport(imports[0] ?? null);
-        setDataDate(imports[0]?.data_date ?? null);
-        loadFilters();
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Failed to load activities.");
-      } finally {
-        setLoading(false);
-      }
+  const loadImports = useCallback(async () => {
+    if (!project) {
+      setImports([]);
+      setSelectedImportId(null);
+      setLoading(false);
+      return;
     }
-    load();
+    setLoading(true);
+    setError(null);
+    setCriteriaState(EMPTY_CRITERIA);
+    setActiveSavedId(null);
+    setFilterDirty(false);
+    try {
+      const [list, baseline] = await Promise.all([
+        api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
+        api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`),
+      ]);
+      setImports(list);
+      setHasActiveBaseline(baseline.has_active);
+      setSelectedImportId((prev) => {
+        if (prev && list.some((i) => i.id === prev)) return prev;
+        return (list.find((i) => i.is_current) ?? list[0])?.id ?? null;
+      });
+      loadFilters();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load activities.");
+    } finally {
+      setLoading(false);
+    }
   }, [project, loadFilters]);
+
+  useEffect(() => {
+    loadImports();
+  }, [loadImports]);
+
+  const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
+  const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
+  const isViewingCurrent = selectedImportId !== null && selectedImportId === currentImportId;
+  const dataDate = selectedImport?.data_date ?? null;
+
+  const loadData = useCallback(async () => {
+    if (!project || !selectedImportId) {
+      setActivities([]);
+      setWbsNodes([]);
+      return;
+    }
+    setDataLoading(true);
+    try {
+      const [acts, nodes] = await Promise.all([
+        isViewingCurrent
+          ? api.get<Activity[]>(`/activities?project_id=${project.id}`)
+          : api.get<Activity[]>(`/projects/${project.id}/schedule-imports/${selectedImportId}/activities`),
+        isViewingCurrent
+          ? api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`)
+          : api.get<WbsNode[]>(`/projects/${project.id}/schedule-imports/${selectedImportId}/wbs-nodes`),
+      ]);
+      setActivities(acts);
+      setWbsNodes(nodes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load activities.");
+      setActivities([]);
+      setWbsNodes([]);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [project, selectedImportId, isViewingCurrent]);
+
+  useEffect(() => {
+    loadData();
+    setCollapsed(new Set());
+  }, [loadData]);
+
+  function switchProgram(id: string) {
+    if (totalDirty > 0 && !window.confirm(`Discard ${totalDirty} unsaved change${totalDirty === 1 ? "" : "s"} and switch programs?`)) {
+      return;
+    }
+    setSelectedImportId(id);
+  }
+
+  const maxLevel = useMemo(() => (wbsNodes.length ? Math.max(...wbsNodes.map((n) => n.depth)) + 1 : 1), [wbsNodes]);
+
+  function collapseToLevel(level: number) {
+    setCollapsed(new Set(wbsNodes.filter((n) => n.depth + 1 >= level).map((n) => n.wbs_id)));
+  }
 
   const nodeByWbsId = useMemo(() => new Map(wbsNodes.map((n) => [n.wbs_id, n])), [wbsNodes]);
   const filtered = useMemo(
@@ -118,6 +191,17 @@ export default function ProgressPage() {
     [activities, nodeByWbsId, criteria],
   );
   const completedCount = useMemo(() => activities.filter((a) => a.status === "complete").length, [activities]);
+  const hasUngrouped = useMemo(
+    () => filtered.some((a) => !a.wbs_path || !nodeByWbsId.has(a.wbs_path)),
+    [filtered, nodeByWbsId],
+  );
+
+  function collapseAll() {
+    setCollapsed(new Set([...wbsNodes.map((n) => n.wbs_id), ...(hasUngrouped ? [UNGROUPED_KEY] : [])]));
+  }
+  function expandAll() {
+    setCollapsed(new Set());
+  }
 
   const setCriteria = useCallback(
     (next: FilterCriteria) => {
@@ -224,7 +308,10 @@ export default function ProgressPage() {
     );
   }
 
-  const canEdit = true; // route enforces per-role; company_employee without edit gets 403 on save
+  // Editing (status/dates/manhours) only ever applies to the live schedule —
+  // a historical program is viewed read-only via its frozen snapshot, same as
+  // Planning > Activities/WBS/Gantt. Route-level role checks still apply on top.
+  const canEdit = isViewingCurrent;
 
   return (
     <>
@@ -240,13 +327,66 @@ export default function ProgressPage() {
           <div>
             <div className="page-title">Progress</div>
             <div className="page-desc">
-              {filtered.length !== activities.length
-                ? `${filtered.length} of ${activities.length} activities shown`
-                : `${activities.length} activities`}
-              {` · ${completedCount} completed`}
-              {dataDate ? ` · data date ${fmtDate(dataDate)}` : ""}
-              {currentImport?.revision_label ? ` · current: ${currentImport.revision_label}` : ""}
+              {dataLoading
+                ? "Loading…"
+                : (filtered.length !== activities.length
+                    ? `${filtered.length} of ${activities.length} activities shown`
+                    : `${activities.length} activities`) +
+                  ` · ${completedCount} completed` +
+                  (dataDate ? ` · data date ${fmtDate(dataDate)}` : "") +
+                  (!isViewingCurrent ? " · read-only — showing an earlier program" : "")}
             </div>
+          </div>
+          <div style={{ display: "flex", gap: ".85rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: ".55rem", alignItems: "center", flexWrap: "wrap" }}>
+            {imports.length > 0 && (
+              <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                Program
+                <select
+                  style={{ ...selectStyle, minWidth: 220 }}
+                  value={selectedImportId ?? ""}
+                  onChange={(e) => switchProgram(e.target.value)}
+                >
+                  {imports.map((imp) => (
+                    <option key={imp.id} value={imp.id}>
+                      {imp.revision_label ?? imp.filename}
+                      {imp.data_date ? ` (${fmtDateShort(imp.data_date)})` : ""}
+                      {imp.id === currentImportId ? " — Current update" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {wbsNodes.length > 0 && (
+              <>
+                <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                  Collapse to
+                  <select
+                    style={selectStyle}
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) collapseToLevel(Number(e.target.value));
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="" disabled>
+                      Level…
+                    </option>
+                    {Array.from({ length: maxLevel }, (_, i) => i + 1).map((level) => (
+                      <option key={level} value={level}>
+                        Level {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="btn btn-secondary btn-sm" onClick={expandAll}>
+                  Expand all
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={collapseAll}>
+                  Collapse all
+                </button>
+              </>
+            )}
           </div>
           <div className="segmented">
             <button className={mode === "status" ? "active" : ""} onClick={() => switchMode("status")}>
@@ -256,11 +396,25 @@ export default function ProgressPage() {
               Burned MH Loading
             </button>
           </div>
+          </div>
         </div>
+
+        {!isViewingCurrent && selectedImport && (
+          <div className="banner">
+            <div className="banner-text">
+              Showing <b>{selectedImport.revision_label ?? selectedImport.filename}</b>, an earlier program — read-only.
+              Switch <b>Program</b> back to the current update to record progress.
+            </div>
+          </div>
+        )}
 
         {activities.length === 0 ? (
           <div className="card">
-            <p className="empty-state">No activities yet — import a schedule from Program Library.</p>
+            <p className="empty-state">
+              {isViewingCurrent
+                ? "No activities yet — import a schedule from Program Library."
+                : "No activities recorded for this program."}
+            </p>
           </div>
         ) : (
           <>
@@ -297,7 +451,7 @@ export default function ProgressPage() {
                 nodes={wbsNodes}
                 activities={filtered}
                 projectId={project.id}
-                hasActiveBaseline={hasActiveBaseline}
+                hasActiveBaseline={hasActiveBaseline && isViewingCurrent}
                 collapsed={collapsed}
                 onToggle={toggleCollapse}
                 onDirtyChange={setManhoursDirty}

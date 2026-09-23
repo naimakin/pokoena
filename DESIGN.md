@@ -34,6 +34,28 @@ colors:
   selection-bg: "rgba(14,124,116,0.10)"    # selected data-row tint (--accent-soft)
   selection-ink: "#0a4a45"
 
+  # --- WBS band / status-coloring pass (Execution > Progress, Planning > WBS/Activities/Gantt) ---
+  # Two purpose-specific hue families added on top of the palette above, scoped
+  # to hierarchy depth and to activity status — kept deliberately distinct from
+  # --accent (teal) and from each other so neither is ever mistaken for a status.
+  status-active: "#2F6FED"          # --status-active — "In Progress" chip/bar; vivid azure, not --warn (real warnings) or --info (general badges)
+  status-active-soft: "rgba(47,111,237,0.12)"  # --status-active-soft (0.18 in dark)
+  wbs-ink: "#3D42A6"                # --wbs-ink — "blueprint indigo": base hue for the WBS depth/hierarchy ramp (d1 text/rail); #9BA3F5 in dark
+  wbs-ink-deep: "#23276E"           # --wbs-ink-deep — solid fill for the d0 (root) band; #454BC4 in dark
+  wbs-ink-contrast: "#F3F3FF"       # --wbs-ink-contrast — text on the solid d0 fill; #F5F5FF in dark
+  wbs-soft-1: "rgba(61,66,166,0.15)"   # --wbs-soft-1 — d1 band tint (0.22 in dark)
+  wbs-soft-2: "rgba(61,66,166,0.085)"  # --wbs-soft-2 — d2 band tint, also the WBS level chip fill (0.14 in dark)
+  wbs-soft-3: "rgba(61,66,166,0.045)"  # --wbs-soft-3 — d3 band tint (0.08 in dark)
+  wbs-soft-4: "rgba(61,66,166,0.02)"   # --wbs-soft-4 — d4 (leaf) band tint, nearly paper again (0.035 in dark)
+  wbs-line-1: "rgba(61,66,166,0.6)"   # --wbs-line-1 — d1 left-rail marker, put on tr (not td) so multi-cell band rows get one rail, not one per column
+  wbs-line-2: "rgba(61,66,166,0.38)"  # --wbs-line-2 — d2 rail
+  wbs-line-3: "rgba(61,66,166,0.22)"  # --wbs-line-3 — d3 rail
+  wbs-line-4: "rgba(61,66,166,0.12)"  # --wbs-line-4 — d4 rail (faintest tier: same dark-mode multiplier pattern as wbs-soft-1..4)
+  wbs-tint-1: "#E4E5F5"             # --wbs-tint-1 — fully OPAQUE equivalent of --wbs-soft-1, for Gantt's sticky/frozen left column (#334E58 in dark)
+  wbs-tint-2: "#EFEFF8"             # --wbs-tint-2 — fully OPAQUE equivalent of --wbs-soft-2, same reason (#233C40 in dark)
+  crit-row-bg: "rgba(192,19,10,0.14)"  # --crit-row-bg — the tr.critical row wash, deliberately bolder than the 6%-opacity --crit-soft used for chips/buttons elsewhere (0.22 in dark)
+  crit-row-line: "#C0130A"          # --crit-row-line — tr.critical's left rail, full-strength (not the 30%-opacity --crit-line used elsewhere) (#F87171 in dark)
+
 typography:
   display-xl:
     fontFamily: Barlow Condensed

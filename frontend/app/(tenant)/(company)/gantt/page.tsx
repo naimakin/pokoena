@@ -59,7 +59,10 @@ function fmtDate(iso: string | null | undefined): string {
 function barColor(a: Activity): string {
   if (a.status === "complete") return "var(--good)";
   if (a.is_critical) return "var(--crit)";
-  if (a.status === "in_progress") return "var(--warn)";
+  // Same vivid azure as the Status & Dates / Schedule "In Progress" chip —
+  // previously this used --warn here while other pages used --info, so the
+  // same activity state read as two different colors depending on the page.
+  if (a.status === "in_progress") return "var(--status-active)";
   return "var(--info)";
 }
 
@@ -458,7 +461,7 @@ export default function GanttPage() {
               <div style={{ display: "flex", alignItems: "center", gap: ".7rem", fontSize: ".6875rem", color: "var(--text-muted)" }}>
                 {[
                   { color: "var(--crit)", label: "Critical" },
-                  { color: "var(--warn)", label: "In Progress" },
+                  { color: "var(--status-active)", label: "In Progress" },
                   { color: "var(--info)", label: "Normal" },
                   { color: "var(--good)", label: "Complete" },
                 ].map(({ color, label }) => (
@@ -600,8 +603,19 @@ export default function GanttPage() {
                     // Opaque tiers only — this cell (and its timeline-row twin below)
                     // sit under a `position: sticky` left column, so anything less
                     // than fully opaque would let horizontally-scrolled bars show
-                    // through the "frozen" Activity column.
-                    const bandBg = ["var(--surface-3)", "var(--surface-2)", "var(--surface)"][Math.min(row.depth, 2)];
+                    // through the "frozen" Activity column. --wbs-ink-deep and the
+                    // --wbs-tint-* tokens are pre-blended (fully opaque) equivalents
+                    // of the same "blueprint indigo" hierarchy ramp used by the
+                    // table-based WBS grids (.wbs-band.d0–d4 in globals.css), so
+                    // depth reads the same way here as on Progress/Schedule/WBS.
+                    const bandBg = [
+                      "var(--wbs-ink-deep)",
+                      "var(--wbs-tint-1)",
+                      "var(--wbs-tint-2)",
+                    ][Math.min(row.depth, 2)];
+                    const root = row.depth === 0;
+                    const bandFg = root ? "var(--wbs-ink-contrast)" : "var(--text-primary)";
+                    const bandFgMuted = root ? "var(--wbs-ink-contrast-soft)" : "var(--text-muted)";
                     return (
                       <div key={row.key} style={{ display: "flex", height: ROW_H, borderBottom: "1px solid var(--border-strong)" }}>
                         <div
@@ -621,6 +635,7 @@ export default function GanttPage() {
                             background: bandBg,
                             fontWeight: 700,
                             fontSize: ".75rem",
+                            color: bandFg,
                             overflow: "hidden",
                           }}
                         >
@@ -631,7 +646,7 @@ export default function GanttPage() {
                             style={{
                               display: "flex",
                               flexShrink: 0,
-                              color: "var(--text-muted)",
+                              color: bandFgMuted,
                               transform: row.collapsed ? "rotate(-90deg)" : "none",
                               transition: "transform var(--dur-1, 120ms) var(--ease, ease)",
                             }}
@@ -639,7 +654,11 @@ export default function GanttPage() {
                             <ChevronDownIcon className="icon" style={{ width: 14, height: 14 }} />
                           </button>
                           {row.node && (
-                            <span className="wbs-level-chip" title={`WBS level ${row.depth + 1}`}>
+                            <span
+                              className="wbs-level-chip"
+                              title={`WBS level ${row.depth + 1}`}
+                              style={root ? { color: "var(--wbs-ink-contrast)", background: "rgba(255,255,255,.14)", borderColor: "rgba(255,255,255,.3)" } : undefined}
+                            >
                               L{row.depth + 1}
                             </span>
                           )}
@@ -651,7 +670,7 @@ export default function GanttPage() {
                           )}
                           <span
                             className="mono"
-                            style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: ".625rem", color: "var(--text-muted)" }}
+                            style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: ".625rem", color: bandFgMuted }}
                           >
                             Σ {row.total}
                             {row.completed > 0 ? ` · ${row.completed} done` : ""} · {row.avgPercent}%

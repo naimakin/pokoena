@@ -85,8 +85,11 @@ export function WbsGrid({
               );
             }
             const a = row.activity;
+            // Finished work is never "critical" regardless of its stored float —
+            // matches P6's own convention (see services/xer_import.py::_is_critical).
+            const isFinished = a.status === "complete" || Boolean(a.actual_finish);
             return (
-              <tr key={row.key} className={a.is_critical ? "critical" : undefined}>
+              <tr key={row.key} className={!isFinished && a.is_critical ? "critical" : undefined}>
                 <td>
                   <div className="pg-id" style={{ paddingLeft: indent(row.depth) }}>
                     <div className="pg-name">{a.name}</div>

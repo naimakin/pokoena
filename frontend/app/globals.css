@@ -51,6 +51,46 @@ a{color:inherit}
   --info:#3B7EA1;
   --info-soft:rgba(59,126,161,.10);
 
+  /* status ramp addition — "In Progress" gets its own vivid azure instead of
+     borrowing --warn (used elsewhere for actual warnings) or --info (used
+     elsewhere for general/informational badges), so the same activity state
+     reads the same color everywhere (WBS grid chip, Gantt bar, legend). */
+  --status-active:#2F6FED;
+  --status-active-soft:rgba(47,111,237,.12);
+
+  /* WBS hierarchy ramp — "blueprint indigo": a real hue (not just tone/size)
+     dedicated to depth/hierarchy, picked to sit far from all four status hues
+     (teal accent, green good, amber warn, red crit, cerulean info) so it can
+     never be mistaken for a status color. Ties to the brand voice's own
+     "architectural drawings" reference. d0 (root) is a solid ink band; d1–d4
+     fade through tinted washes + a left rail down to near-paper at the leaf. */
+  --wbs-ink:#3D42A6;
+  --wbs-ink-deep:#23276E;
+  --wbs-ink-contrast:#F3F3FF;
+  --wbs-ink-contrast-soft:rgba(243,243,255,.72);
+  --wbs-soft-1:rgba(61,66,166,.15);
+  --wbs-soft-2:rgba(61,66,166,.085);
+  --wbs-soft-3:rgba(61,66,166,.045);
+  --wbs-soft-4:rgba(61,66,166,.02);
+  --wbs-line-1:rgba(61,66,166,.6);
+  --wbs-line-2:rgba(61,66,166,.38);
+  --wbs-line-3:rgba(61,66,166,.22);
+  --wbs-line-4:rgba(61,66,166,.12);
+  /* Fully opaque equivalents of --wbs-soft-1/-2 (indigo pre-blended over white),
+     for Gantt's sticky/frozen left column — see the comment on `bandBg` in
+     gantt/page.tsx: anything less than 100% opaque there would let
+     horizontally-scrolled bars bleed through the frozen Activity column. */
+  --wbs-tint-1:#E4E5F5;
+  --wbs-tint-2:#EFEFF8;
+
+  /* Bolder critical-path ROW highlight only — purpose-specific tokens so the
+     existing --crit/--crit-soft/--crit-line keep their exact prior meaning
+     everywhere else (chips, DCMA checks, risk severity, buttons). The old
+     6%-opacity tr.critical tint read as too timid; this is a deliberately
+     more assertive wash + a full-strength (not 30%-opacity) left rail. */
+  --crit-row-bg:rgba(192,19,10,.14);
+  --crit-row-line:#C0130A;
+
   /* elevation — soft, low-spread, faintly warm */
   --shadow-xs:0 1px 2px rgba(31,25,16,.06);
   --shadow-sm:0 1px 2px rgba(31,25,16,.05),0 2px 5px rgba(31,25,16,.06);
@@ -110,6 +150,27 @@ a{color:inherit}
     --crit-line:rgba(248,113,113,.35);
     --info:#5B9BD5;
     --info-soft:rgba(91,155,213,.15);
+
+    --status-active:#6C9BFF;
+    --status-active-soft:rgba(108,155,255,.18);
+
+    --wbs-ink:#9BA3F5;
+    --wbs-ink-deep:#454BC4;
+    --wbs-ink-contrast:#F5F5FF;
+    --wbs-ink-contrast-soft:rgba(245,245,255,.78);
+    --wbs-soft-1:rgba(155,163,245,.22);
+    --wbs-soft-2:rgba(155,163,245,.14);
+    --wbs-soft-3:rgba(155,163,245,.08);
+    --wbs-soft-4:rgba(155,163,245,.035);
+    --wbs-line-1:rgba(155,163,245,.65);
+    --wbs-line-2:rgba(155,163,245,.42);
+    --wbs-line-3:rgba(155,163,245,.25);
+    --wbs-line-4:rgba(155,163,245,.14);
+    --wbs-tint-1:#334E58;
+    --wbs-tint-2:#233C40;
+
+    --crit-row-bg:rgba(248,113,113,.22);
+    --crit-row-line:#F87171;
 
     --shadow-xs:0 1px 2px rgba(0,0,0,.4);
     --shadow-sm:0 1px 2px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
@@ -341,6 +402,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .chip-warn{background:var(--warn-soft);color:var(--warn)}
 .chip-crit{background:var(--crit-soft);color:var(--crit)}
 .chip-info{background:var(--info-soft);color:var(--info)}
+.chip-active{background:var(--status-active-soft);color:var(--status-active)}
 .chip-neutral{background:var(--surface-3);color:var(--text-secondary)}
 
 .section-row{display:grid;grid-template-columns:1.7fr 1fr;gap:1rem;align-items:start}
@@ -360,8 +422,10 @@ tbody tr{transition:background var(--dur-1) var(--ease)}
 tbody tr:hover{background:var(--surface-2)}
 /* signature accent left-border on a selected data row */
 tbody tr.selected,.row-selected{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent-line)}
-/* critical-path data row — red tint + red left-border, per DESIGN.md */
-tbody tr.critical{background:var(--crit-soft);box-shadow:inset 3px 0 0 var(--crit-line)}
+/* critical-path data row — deliberately assertive red tint + a solid (not
+   translucent) red left-border: this is the one state in the grid that
+   should read as genuinely urgent at a glance across thousands of rows. */
+tbody tr.critical{background:var(--crit-row-bg);box-shadow:inset 3px 0 0 var(--crit-row-line)}
 .subname{font-weight:600}
 .subrow-avatar{width:24px;height:24px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--accent-strong);font-size:.625rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
 .cell-flex{display:flex;align-items:center;gap:.55rem}
@@ -649,20 +713,41 @@ tr.resolved{opacity:.45}
 .wbs-band td{
   padding:.4rem .6rem;font-family:var(--font-display);letter-spacing:-.005em;
   border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  transition:background var(--dur-1) var(--ease);
 }
 .wbs-band .wbs-band-label{display:flex;align-items:center;gap:.4rem;font-weight:700}
 .wbs-band .wbs-band-toggle{background:none;border:none;padding:0;display:flex;color:var(--text-muted);cursor:pointer}
 .wbs-band .wbs-band-code{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0}
 .wbs-band .wbs-band-roll{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0;font-weight:400}
-.wbs-band.d0 td{background:var(--surface-3);border-top:2px solid var(--border-strong);border-bottom-color:var(--border-strong);font-size:.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.wbs-band.d1 td{background:var(--surface-2);border-top-color:var(--border-strong);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
-.wbs-band.d2 td{background:var(--surface);font-size:.78rem;font-weight:600}
-/* d3/d4 use the ink token itself at very low opacity for one more graduated
-   step below the surface ramp — not a new color, the same rgb() as --text-primary. */
-.wbs-band.d3 td{background:rgba(14,31,29,.035);font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-secondary)}
-.wbs-band.d4 td{background:transparent;font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-muted)}
-.wbs-level-chip{font-family:var(--font-mono);font-size:.625rem;font-weight:700;letter-spacing:.02em;color:var(--text-muted);background:var(--surface-3);border:1px solid var(--border);border-radius:var(--radius-xs);padding:.05rem .3rem;flex:none}
-.wbs-band.d0 .wbs-level-chip{color:var(--text-secondary);border-color:var(--border-strong)}
+
+/* Depth ramp — real hue (the --wbs-* "blueprint indigo" tokens), not just
+   tone/size, so hierarchy reads at a glance across thousands of rows: d0
+   (root) is a solid indigo section band; d1–d4 fade through tinted washes
+   + a left rail marker (put on the <tr> itself, per the existing
+   tr.selected/tr.critical pattern, so multi-<td> band rows — Planning > WBS —
+   get one rail per row, not one per cell) down to d4, which is almost paper
+   again. Backgrounds still live on the td (see tr.critical precedent above
+   for why: td background paints over an ambient tr one). */
+.wbs-band.d0 td{
+  background:var(--wbs-ink-deep);border-top:2px solid var(--wbs-ink);border-bottom-color:var(--wbs-ink);
+  font-size:.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--wbs-ink-contrast);
+}
+.wbs-band.d0 .wbs-band-toggle,.wbs-band.d0 .wbs-band-code,.wbs-band.d0 .wbs-band-roll{color:var(--wbs-ink-contrast-soft)}
+.wbs-band.d1{box-shadow:inset 3px 0 0 var(--wbs-line-1)}
+.wbs-band.d1 td{
+  background:var(--wbs-soft-1);border-top-color:var(--border-strong);
+  font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--wbs-ink);
+}
+.wbs-band.d1 .wbs-band-code,.wbs-band.d1 .wbs-band-roll{color:var(--wbs-ink)}
+.wbs-band.d2{box-shadow:inset 3px 0 0 var(--wbs-line-2)}
+.wbs-band.d2 td{background:var(--wbs-soft-2);font-size:.78rem;font-weight:600}
+.wbs-band.d3{box-shadow:inset 2px 0 0 var(--wbs-line-3)}
+.wbs-band.d3 td{background:var(--wbs-soft-3);font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-secondary)}
+.wbs-band.d4{box-shadow:inset 2px 0 0 var(--wbs-line-4)}
+.wbs-band.d4 td{background:var(--wbs-soft-4);font-family:var(--font-ui);font-weight:600;font-size:.75rem;color:var(--text-muted)}
+
+.wbs-level-chip{font-family:var(--font-mono);font-size:.625rem;font-weight:700;letter-spacing:.02em;color:var(--wbs-ink);background:var(--wbs-soft-2);border:1px solid var(--wbs-line-2);border-radius:var(--radius-xs);padding:.05rem .3rem;flex:none}
+.wbs-band.d0 .wbs-level-chip{color:var(--wbs-ink-contrast);background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3)}
 
 .pg-id{font-family:var(--font-mono);font-size:.75rem}
 .pg-id .pg-name{font-family:var(--font-ui);font-size:.8125rem;color:var(--text-primary);font-weight:500}
