@@ -15,7 +15,9 @@ from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.user_tenant_role import TenantRole
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectScopeCreate, ProjectScopeOut
+from app.schemas.project import ProjectCreate, ProjectOut, ProjectScopeCreate, ProjectScopeOut, ProjectUpdate
+from app.services import audit
+from app.services.project_deletion import delete_project
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -74,6 +76,74 @@ def get_project(
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx)
     return project
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: uuid.UUID,
+    payload: ProjectUpdate,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> Project:
+    project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
+
+    if payload.name is None and payload.code is None:
+        raise HTTPException(status_code=422, detail="Nothing to update — send a name and/or a code")
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Project name can't be blank")
+        project.name = name
+    if payload.code is not None:
+        code = payload.code.strip()
+        if not code:
+            raise HTTPException(status_code=400, detail="Project code can't be blank")
+        dup = (
+            db.query(Project)
+            .filter(Project.tenant_id == ctx.tenant_id, Project.code == code, Project.id != project_id)
+            .first()
+        )
+        if dup:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Project code already in use")
+        project.code = code
+
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_project(
+    project_id: uuid.UUID,
+    confirm_code: str,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+) -> None:
+    """Permanently deletes the project and every row anywhere in the schema
+    that belongs to it — schedule, baselines, progress, risk register,
+    recovery plans, saved filters, everything (see services/project_deletion.py
+    for the full, deliberately explicit list). There is no undo and no
+    export-first step; the frontend's confirmation dialog is expected to make
+    that unmistakable. `confirm_code` must match the project's own code
+    exactly (like typing a repo name to delete it) — a second, server-side
+    guard against deleting the wrong project from a stray or scripted call,
+    independent of whatever the UI already confirmed."""
+    project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    if confirm_code != project.code:
+        raise HTTPException(status_code=400, detail="Confirmation code doesn't match this project's code")
+
+    name, code = project.name, project.code
+    delete_project(db, ctx.tenant_id, project_id)
+    db.commit()
+    audit.log(
+        "project.deleted",
+        tenant_id=ctx.tenant_id,
+        actor_user_id=ctx.user.id,
+        target_type="project",
+        target_id=project_id,
+        event_metadata={"name": name, "code": code},
+    )
 
 
 @router.get("/{project_id}/scopes", response_model=list[ProjectScopeOut])

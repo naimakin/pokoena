@@ -17,6 +17,11 @@ class ProjectCreate(BaseModel):
     code: str
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+
+
 class ProjectScopeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
