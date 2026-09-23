@@ -6,90 +6,107 @@ ul{list-style:none}
 a{color:inherit}
 
 /* ---------- tokens : light (default) ----------
-   Palette/type from the reference Poko design system (DESIGN.md): warm
-   parchment canvas + deep teal-ink + slate teal as the single chromatic
-   accent. Aptos isn't an open/Google font, so Outfit (their own
-   documented fallback) is loaded as the primary body face instead.
+   Palette/type — v2 color redesign (DESIGN.md): warm paper canvas + neutral
+   graphite ink + a single "blueprint blue" as the only chromatic accent.
+   Aptos isn't an open/Google font, so Outfit (their own documented
+   fallback) is loaded as the primary body face instead.
 
-   The neutral ramp is deliberately warm (parchment/taupe) while the ink
-   ramp is cool (teal-slate) — warm paper, cool ink, the way a set of
-   architectural drawings reads. Slate teal (#0e7c74) is the only
-   chromatic accent and is spent only on interactive state, CTAs and
-   data markers. */
+   Reasoning: the v1 palette spent seven distinct hues (teal accent, indigo
+   WBS family, azure "in progress", green/amber/red/cerulean status) which
+   fights the "small number of purposeful accents" goal. v2 keeps the warm
+   parchment/graphite "paper + ink" material pairing (still the thing that
+   keeps this from reading like a cold-gray SaaS dashboard) but narrows the
+   chromatic set to five deliberate hues — blueprint blue (accent, spent
+   only on interactive state/CTA/focus/critical markers, plus one sanctioned
+   non-interactive exception: the WBS rail, see below), green/amber/red
+   (good/warn/crit), and the original brand teal demoted from "the accent"
+   to a quieter "informational / in-progress" role. Hierarchy/tone now do
+   more of the work that hue used to do — see the WBS ramp below. */
 :root{
-  /* neutral ramp — warm parchment surfaces */
-  --bg:#f4f3ee;
+  /* neutral ramp — warm paper surfaces */
+  --bg:#f7f6f1;
   --surface:#ffffff;
-  --surface-2:#ebeae3;
-  --surface-3:#dedcd2;
-  --border:#d4d2c6;
-  --border-strong:#b8b6a8;
+  --surface-2:#f0efe8;
+  --surface-3:#e4e2d8;
+  --border:#d8d6ca;
+  --border-strong:#c2bfae;
 
-  /* ink ramp — cool teal-slate, tiered */
-  --text-primary:#0E1F1D;
-  --text-secondary:#3f5350;
-  --text-muted:#748580;
-  --text-tertiary:#96a099;
+  /* ink ramp — neutral graphite, tiered (no longer teal-tinted, so it never
+     competes with the accent or the info/status-active hue) */
+  --text-primary:#1d2024;
+  --text-secondary:#54585f;
+  --text-muted:#787c84;
+  --text-tertiary:#a7aab0;
 
-  /* slate teal — the single chromatic accent */
-  --accent:#0e7c74;
-  --accent-strong:#0a625c;
-  --accent-focus:#084d49;
-  --accent-soft:rgba(14,124,116,.10);
-  --accent-subtle:rgba(14,124,116,.05);
-  --accent-line:#0e7c74;
+  /* blueprint blue — the single chromatic accent */
+  --accent:#2e5aac;
+  --accent-strong:#24488a;
+  --accent-focus:#1b3568;
+  --accent-soft:rgba(46,90,172,.10);
+  --accent-subtle:rgba(46,90,172,.05);
+  --accent-line:#2e5aac;
   --accent-contrast:#ffffff;
 
   /* semantic — hues fixed, used only for status/risk */
-  --good:#2E9E5B;
-  --good-soft:rgba(46,158,91,.10);
-  --warn:#D97706;
-  --warn-soft:rgba(217,119,6,.10);
-  --crit:#C0130A;
-  --crit-soft:rgba(192,19,10,.06);
-  --crit-line:rgba(192,19,10,.30);
-  --info:#3B7EA1;
-  --info-soft:rgba(59,126,161,.10);
+  --good:#1f8f5f;
+  --good-soft:rgba(31,143,95,.10);
+  --warn:#b5720e;
+  --warn-soft:rgba(181,114,14,.10);
+  --crit:#c21f13;
+  --crit-soft:rgba(194,31,19,.06);
+  --crit-line:rgba(194,31,19,.30);
+  --info:#3f6f69;
+  --info-soft:rgba(63,111,105,.10);
 
-  /* status ramp addition — "In Progress" gets its own vivid azure instead of
-     borrowing --warn (used elsewhere for actual warnings) or --info (used
-     elsewhere for general/informational badges), so the same activity state
-     reads the same color everywhere (WBS grid chip, Gantt bar, legend). */
-  --status-active:#2F6FED;
-  --status-active-soft:rgba(47,111,237,.12);
+  /* status ramp — "In Progress" and general info badges now share ONE hue
+     (the demoted brand teal) at two depths instead of two unrelated hues:
+     --status-active is the saturated/solid "doing work now" reading,
+     --info is the same family pulled quieter/grayer for general/neutral
+     badges (WBS grid chip, Gantt "Normal" bar, low-severity risk dot). */
+  --status-active:#0e7c74;
+  --status-active-soft:rgba(14,124,116,.12);
 
-  /* WBS hierarchy ramp — "blueprint indigo": a real hue (not just tone/size)
-     dedicated to depth/hierarchy, picked to sit far from all four status hues
-     (teal accent, green good, amber warn, red crit, cerulean info) so it can
-     never be mistaken for a status color. Ties to the brand voice's own
-     "architectural drawings" reference. d0 (root) is a solid ink band; d1–d4
-     fade through tinted washes + a left rail down to near-paper at the leaf. */
-  --wbs-ink:#3D42A6;
-  --wbs-ink-deep:#23276E;
-  --wbs-ink-contrast:#F3F3FF;
-  --wbs-ink-contrast-soft:rgba(243,243,255,.72);
-  --wbs-soft-1:rgba(61,66,166,.15);
-  --wbs-soft-2:rgba(61,66,166,.085);
-  --wbs-soft-3:rgba(61,66,166,.045);
-  --wbs-soft-4:rgba(61,66,166,.02);
-  --wbs-line-1:rgba(61,66,166,.6);
-  --wbs-line-2:rgba(61,66,166,.38);
-  --wbs-line-3:rgba(61,66,166,.22);
-  --wbs-line-4:rgba(61,66,166,.12);
-  /* Fully opaque equivalents of --wbs-soft-1/-2 (indigo pre-blended over white),
-     for Gantt's sticky/frozen left column — see the comment on `bandBg` in
-     gantt/page.tsx: anything less than 100% opaque there would let
-     horizontally-scrolled bars bleed through the frozen Activity column. */
-  --wbs-tint-1:#E4E5F5;
-  --wbs-tint-2:#EFEFF8;
+  /* WBS hierarchy ramp — v2: neutral graphite tone-steps instead of a
+     bespoke "blueprint indigo" hue family. Rationale (this was the focus of
+     the redesign): a whole extra saturated hue that exists ONLY to mark
+     tree depth fights the "accent is earned" principle — it's a second,
+     uninvited accent competing with the real one. Depth now reads the way
+     an actual architectural drawing's title block does: a solid dark
+     graphite band at the root, then decreasing neutral-gray tone + weight +
+     size down the levels (d0 solid → d4 almost paper again, same taper as
+     before, just desaturated). The ONE deliberate exception: --wbs-line-*,
+     the thin left rail on d1–d4, is drawn in the accent blue at low/
+     decreasing opacity — a quiet "blueprint" wayfinding cue tying the tree
+     back to the app's single accent color, without ever using it as a fill.
+     This is the one sanctioned non-interactive use of --accent (documented
+     in design_principles below), and it reads as far more restrained than
+     a whole separate indigo hue would. */
+  --wbs-ink:#4b5160;
+  --wbs-ink-deep:#1e2230;
+  --wbs-ink-contrast:#f5f6f8;
+  --wbs-ink-contrast-soft:rgba(245,246,248,.72);
+  --wbs-soft-1:rgba(75,81,96,.10);
+  --wbs-soft-2:rgba(75,81,96,.06);
+  --wbs-soft-3:rgba(75,81,96,.035);
+  --wbs-soft-4:rgba(75,81,96,.018);
+  --wbs-line-1:rgba(46,90,172,.55);
+  --wbs-line-2:rgba(46,90,172,.34);
+  --wbs-line-3:rgba(46,90,172,.20);
+  --wbs-line-4:rgba(46,90,172,.11);
+  /* Fully opaque equivalents of --wbs-soft-1/-2 (graphite pre-blended over
+     white), for Gantt's sticky/frozen left column — see the comment on
+     `bandBg` in gantt/page.tsx: anything less than 100% opaque there would
+     let horizontally-scrolled bars bleed through the frozen Activity column. */
+  --wbs-tint-1:#edeeef;
+  --wbs-tint-2:#f4f5f5;
 
   /* Bolder critical-path ROW highlight only — purpose-specific tokens so the
      existing --crit/--crit-soft/--crit-line keep their exact prior meaning
      everywhere else (chips, DCMA checks, risk severity, buttons). The old
      6%-opacity tr.critical tint read as too timid; this is a deliberately
      more assertive wash + a full-strength (not 30%-opacity) left rail. */
-  --crit-row-bg:rgba(192,19,10,.14);
-  --crit-row-line:#C0130A;
+  --crit-row-bg:rgba(194,31,19,.14);
+  --crit-row-line:#c21f13;
 
   /* elevation — soft, low-spread, faintly warm */
   --shadow-xs:0 1px 2px rgba(31,25,16,.06);
@@ -110,86 +127,90 @@ a{color:inherit}
   --dur-1:120ms;
   --dur-2:170ms;
 
-  --focus:#0e7c74;
+  --focus:#2e5aac;
 
   --font-display:var(--font-barlow),"Barlow Condensed",-apple-system,sans-serif;
   --font-ui:var(--font-outfit),Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-mono:var(--font-space-mono),"Space Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
 /* Dark variant: not defined by the (light-only) reference DESIGN.md — derived
-   to keep the same ink/accent identity. Warm-teal elevated surfaces (less
-   blue than a plain navy), warm off-white ink, not a flat inversion. */
+   to keep the same paper/ink/accent identity as light mode. Neutral graphite
+   elevated surfaces (no longer teal-tinted, for the same reason the light
+   ink ramp moved off teal — the accent is blue now, and teal is a quieter
+   semantic color, so the neutral ramp needs to be genuinely neutral), warm
+   off-white ink, not a flat inversion. */
 @media (prefers-color-scheme:dark){
   :root{
-    --bg:#0E1F1D;
-    --surface:#16302c;
-    --surface-2:#1c3b36;
-    --surface-3:#244a43;
-    --border:#2c5750;
-    --border-strong:#3d6b62;
+    --bg:#14161b;
+    --surface:#1c1f26;
+    --surface-2:#242832;
+    --surface-3:#2d323e;
+    --border:#3a3f4b;
+    --border-strong:#4c5361;
 
-    --text-primary:#F0F3F1;
-    --text-secondary:#c2ccc7;
-    --text-muted:#8ca39b;
-    --text-tertiary:#708983;
+    --text-primary:#f2f3f5;
+    --text-secondary:#b9bdc6;
+    --text-muted:#8c9099;
+    --text-tertiary:#5e626b;
 
-    --accent:#16a398;
-    --accent-strong:#3fc2b5;
-    --accent-focus:#6ed9ce;
-    --accent-soft:rgba(22,163,152,.16);
-    --accent-subtle:rgba(22,163,152,.08);
-    --accent-line:#16a398;
-    --accent-contrast:#06211d;
+    --accent:#6e9bff;
+    --accent-strong:#8fb3ff;
+    --accent-focus:#b7ccff;
+    --accent-soft:rgba(110,155,255,.18);
+    --accent-subtle:rgba(110,155,255,.09);
+    --accent-line:#6e9bff;
+    --accent-contrast:#0b1b3b;
 
-    --good:#4ADE80;
-    --good-soft:rgba(74,222,128,.15);
-    --warn:#FB923C;
-    --warn-soft:rgba(251,146,60,.15);
-    --crit:#F87171;
-    --crit-soft:rgba(248,113,113,.15);
-    --crit-line:rgba(248,113,113,.35);
-    --info:#5B9BD5;
-    --info-soft:rgba(91,155,213,.15);
+    --good:#43d094;
+    --good-soft:rgba(67,208,148,.15);
+    --warn:#f0a93e;
+    --warn-soft:rgba(240,169,62,.15);
+    --crit:#f17b6e;
+    --crit-soft:rgba(241,123,110,.15);
+    --crit-line:rgba(241,123,110,.35);
+    --info:#8fb5ae;
+    --info-soft:rgba(143,181,174,.15);
 
-    --status-active:#6C9BFF;
-    --status-active-soft:rgba(108,155,255,.18);
+    --status-active:#3fd0c0;
+    --status-active-soft:rgba(63,208,192,.18);
 
-    --wbs-ink:#9BA3F5;
-    --wbs-ink-deep:#454BC4;
-    --wbs-ink-contrast:#F5F5FF;
-    --wbs-ink-contrast-soft:rgba(245,245,255,.78);
-    --wbs-soft-1:rgba(155,163,245,.22);
-    --wbs-soft-2:rgba(155,163,245,.14);
-    --wbs-soft-3:rgba(155,163,245,.08);
-    --wbs-soft-4:rgba(155,163,245,.035);
-    --wbs-line-1:rgba(155,163,245,.65);
-    --wbs-line-2:rgba(155,163,245,.42);
-    --wbs-line-3:rgba(155,163,245,.25);
-    --wbs-line-4:rgba(155,163,245,.14);
-    --wbs-tint-1:#334E58;
-    --wbs-tint-2:#233C40;
+    --wbs-ink:#b9bec9;
+    --wbs-ink-deep:#3a4050;
+    --wbs-ink-contrast:#f5f6f8;
+    --wbs-ink-contrast-soft:rgba(245,246,248,.75);
+    --wbs-soft-1:rgba(185,190,201,.14);
+    --wbs-soft-2:rgba(185,190,201,.09);
+    --wbs-soft-3:rgba(185,190,201,.05);
+    --wbs-soft-4:rgba(185,190,201,.025);
+    --wbs-line-1:rgba(110,155,255,.6);
+    --wbs-line-2:rgba(110,155,255,.38);
+    --wbs-line-3:rgba(110,155,255,.22);
+    --wbs-line-4:rgba(110,155,255,.12);
+    --wbs-tint-1:#32353d;
+    --wbs-tint-2:#2a2d35;
 
-    --crit-row-bg:rgba(248,113,113,.22);
-    --crit-row-line:#F87171;
+    --crit-row-bg:rgba(241,123,110,.22);
+    --crit-row-line:#f17b6e;
 
     --shadow-xs:0 1px 2px rgba(0,0,0,.4);
     --shadow-sm:0 1px 2px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
     --shadow-md:0 3px 10px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.45);
     --shadow-lg:0 8px 20px rgba(0,0,0,.5),0 24px 52px rgba(0,0,0,.55);
 
-    --focus:#16a398;
+    --focus:#6e9bff;
   }
 }
 
 html{background:var(--bg)}
 html,body{color:var(--text-primary)}
 body{
-  /* two faint corner washes over the solid canvas — warm at top-left, cool
-     at top-right — for a touch of depth. Subtle enough not to touch legibility;
-     opaque full-bleed pages (login, subcontractor) simply sit on top. */
+  /* two faint corner washes over the solid canvas — the accent blue at
+     top-left, the quieter info teal at top-right — for a touch of depth.
+     Subtle enough not to touch legibility; opaque full-bleed pages (login,
+     subcontractor) simply sit on top. */
   background:
     radial-gradient(1400px 900px at 12% -8%,var(--accent-subtle),transparent 55%),
-    radial-gradient(1200px 1000px at 100% -2%,rgba(14,31,29,.025),transparent 50%),
+    radial-gradient(1200px 1000px at 100% -2%,rgba(63,111,105,.035),transparent 50%),
     var(--bg);
   font-family:var(--font-ui);
   font-size:14px;
@@ -201,8 +222,8 @@ body{
 @media (prefers-color-scheme:dark){
   body{
     background:
-      radial-gradient(1400px 900px at 12% -8%,rgba(22,163,152,.06),transparent 55%),
-      radial-gradient(1200px 1000px at 100% -2%,rgba(91,155,213,.05),transparent 50%),
+      radial-gradient(1400px 900px at 12% -8%,rgba(110,155,255,.07),transparent 55%),
+      radial-gradient(1200px 1000px at 100% -2%,rgba(143,181,174,.05),transparent 50%),
       var(--bg);
   }
 }
@@ -720,14 +741,20 @@ tr.resolved{opacity:.45}
 .wbs-band .wbs-band-code{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0}
 .wbs-band .wbs-band-roll{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);letter-spacing:0;font-weight:400}
 
-/* Depth ramp — real hue (the --wbs-* "blueprint indigo" tokens), not just
-   tone/size, so hierarchy reads at a glance across thousands of rows: d0
-   (root) is a solid indigo section band; d1–d4 fade through tinted washes
-   + a left rail marker (put on the <tr> itself, per the existing
-   tr.selected/tr.critical pattern, so multi-<td> band rows — Planning > WBS —
-   get one rail per row, not one per cell) down to d4, which is almost paper
-   again. Backgrounds still live on the td (see tr.critical precedent above
-   for why: td background paints over an ambient tr one). */
+/* Depth ramp — v2: neutral graphite tone/weight/size steps (the --wbs-*
+   tokens are a desaturated graphite ramp now, not a bespoke hue) do the
+   hierarchy work instead of a dedicated color family: d0 (root) is a solid
+   dark graphite section band; d1–d4 fade through neutral-gray tinted washes
+   down to d4, which is almost paper again — exactly the old taper, just
+   off a neutral rather than a "blueprint indigo" hue, so the tree doesn't
+   read as a second, competing accent. The left rail marker (put on the
+   <tr> itself, per the existing tr.selected/tr.critical pattern, so
+   multi-<td> band rows — Planning > WBS — get one rail per row, not one per
+   cell) is the one exception: --wbs-line-* is the real accent blue at low/
+   decreasing opacity, a quiet wayfinding cue tying depth back to the app's
+   single accent color without ever using it as a fill. Backgrounds still
+   live on the td (see tr.critical precedent above for why: td background
+   paints over an ambient tr one). */
 .wbs-band.d0 td{
   background:var(--wbs-ink-deep);border-top:2px solid var(--wbs-ink);border-bottom-color:var(--wbs-ink);
   font-size:.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--wbs-ink-contrast);
