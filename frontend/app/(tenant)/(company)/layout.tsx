@@ -73,7 +73,6 @@ const TOP_SECTIONS: NavSection[] = [
     visible: always,
     children: [
       { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
-      { href: "/portfolio/programs", label: "Programs", icon: LayersIcon, visible: always },
       { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always },
       { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
     ],
@@ -157,7 +156,6 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/ai/insights", label: "AI Insights", icon: SparkleIcon, visible: always },
     ],
   },
-  { key: "documents", label: "Documents", icon: FolderIcon, href: "/documents", visible: always, children: [] },
   {
     key: "administration",
     label: "Administration",
