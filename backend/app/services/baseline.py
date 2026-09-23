@@ -34,6 +34,7 @@ from app.models.evm_snapshot import EvmSnapshot
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
+from app.parser.xer_models import ParsedSchedule
 
 
 class BaselineLockError(ValueError):
@@ -130,6 +131,180 @@ def _snapshot_baseline_resources(
                 unit_id=a.unit_id,
             )
         )
+
+
+def unique_baseline_label(db: Session, project_id: uuid.UUID) -> str:
+    """"Baseline" for a project's first lock, "Baseline r2"/"r3"/... after
+    that — used whenever a new baseline is locked without the caller
+    supplying its own label (Planning -> Baselines upload)."""
+    existing = {
+        b.version_label
+        for b in db.query(Baseline.version_label).filter(Baseline.project_id == project_id).all()
+    }
+    if "Baseline" not in existing:
+        return "Baseline"
+    n = 2
+    while f"Baseline r{n}" in existing:
+        n += 1
+    return f"Baseline r{n}"
+
+
+def _eligible_from_parsed(
+    db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, parsed_activities: list
+) -> list:
+    """Match a freshly-uploaded baseline .xer's own activities to the
+    project's LIVE Activity rows by task_code (== external_id), so
+    BaselineActivity can point at a real row's id without ever writing the
+    baseline file's dates/durations into that live row. An activity in the
+    baseline file that doesn't exist live (scope differs from the current
+    update) is skipped, same policy as lock_baseline_from_snapshot below."""
+    live = {
+        a.external_id: a
+        for a in db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id)
+    }
+    items = []
+    for act in parsed_activities:
+        row = live.get(act.task_code)
+        if row is None:
+            continue
+        items.append(
+            SimpleNamespace(
+                id=row.id,
+                target_duration_hours=act.target_drtn_hr_cnt,
+                planned_start=act.target_start_date.date() if act.target_start_date else None,
+                early_start=act.early_start_date.date() if act.early_start_date else None,
+                planned_finish=act.target_end_date.date() if act.target_end_date else None,
+                early_finish=act.early_end_date.date() if act.early_end_date else None,
+                wbs_path=act.wbs_id,
+            )
+        )
+    return items
+
+
+def _snapshot_baseline_resources_from_parsed(
+    db: Session, tenant_id: uuid.UUID, baseline_id: uuid.UUID, project_id: uuid.UUID, parsed: ParsedSchedule
+) -> None:
+    """Same as _snapshot_baseline_resources but sourced from the baseline
+    .xer's OWN parsed resources/assignments instead of the live tables — used
+    when a baseline is (re-)locked without overwriting the project's live
+    schedule (see lock_baseline_from_parsed/overwrite_active_baseline_from_parsed)."""
+    live_by_task_code = {
+        a.external_id: a
+        for a in db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id)
+    }
+    rsrc_id_to_baseline_rsrc_id: dict[str, uuid.UUID] = {}
+    for res in parsed.resources:
+        br_id = uuid.uuid4()
+        rsrc_id_to_baseline_rsrc_id[res.rsrc_id] = br_id
+        db.add(
+            BaselineResource(
+                id=br_id, tenant_id=tenant_id, baseline_id=baseline_id, rsrc_id=res.rsrc_id,
+                name=res.rsrc_name, short_name=res.rsrc_short_name, rsrc_type=res.rsrc_type, unit_id=res.unit_id,
+            )
+        )
+
+    acts_by_task_id = {a.task_id: a for a in parsed.activities}
+    for assign in parsed.assignments:
+        baseline_rsrc_id = rsrc_id_to_baseline_rsrc_id.get(assign.rsrc_id)
+        act = acts_by_task_id.get(assign.task_id)
+        live_row = live_by_task_code.get(act.task_code) if act else None
+        if baseline_rsrc_id is None or live_row is None:
+            continue
+        db.add(
+            BaselineResourceAssignment(
+                id=uuid.uuid4(), tenant_id=tenant_id, baseline_id=baseline_id, activity_id=live_row.id,
+                baseline_resource_id=baseline_rsrc_id, target_qty=assign.target_qty, target_cost=assign.target_cost,
+                unit_id=assign.unit_id,
+            )
+        )
+
+
+def lock_baseline_from_parsed(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    parsed: ParsedSchedule,
+    schedule_import_id: uuid.UUID,
+    locked_by_user_id: uuid.UUID,
+    version_label: str,
+) -> Baseline:
+    """Lock a freshly-uploaded baseline .xer as the project's Performance
+    Measurement Baseline WITHOUT touching the live schedule tables — used for
+    every Planning -> Baselines upload except a project's very first import
+    (which has no separate "current" yet, so it locks from the live tables
+    via lock_baseline_for_project instead; see services/xer_import.py). The
+    frozen dates/durations/BAC come from THIS file, never from whatever the
+    live schedule currently says, so re-uploading/replacing the baseline can
+    no longer clobber "Current update"."""
+    eligible = _eligible_from_parsed(db, tenant_id, project_id, parsed.activities)
+    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(eligible)
+
+    existing_active = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
+        .first()
+    )
+    if existing_active:
+        raise BaselineConflictError(
+            f"Active baseline '{existing_active.version_label}' already exists. Supersede it first."
+        )
+    dup = db.query(Baseline).filter(Baseline.project_id == project_id, Baseline.version_label == version_label).first()
+    if dup:
+        raise BaselineConflictError(f"Version label '{version_label}' already used.")
+
+    baseline_id = _insert_baseline_row(
+        db, tenant_id, project_id, schedule_import_id, locked_by_user_id, version_label, None,
+        eligible, bac, target_start_date, target_end_date,
+    )
+    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _snapshot_baseline_resources_from_parsed(db, tenant_id, baseline_id, project_id, parsed)
+
+    db.flush()
+    return db.get(Baseline, baseline_id)
+
+
+def overwrite_active_baseline_from_parsed(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    parsed: ParsedSchedule,
+    schedule_import_id: uuid.UUID,
+    locked_by_user_id: uuid.UUID,
+) -> Baseline:
+    """Same as overwrite_active_baseline but sourced from a freshly-uploaded
+    baseline .xer's own parsed data instead of the live schedule tables — see
+    lock_baseline_from_parsed."""
+    baseline = (
+        db.query(Baseline)
+        .filter(Baseline.tenant_id == tenant_id, Baseline.project_id == project_id, Baseline.status == BaselineStatus.active)
+        .first()
+    )
+    if baseline is None:
+        raise BaselineConflictError("No active baseline to overwrite.")
+
+    eligible = _eligible_from_parsed(db, tenant_id, project_id, parsed.activities)
+    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(eligible)
+
+    db.query(BaselineResourceAssignment).filter(BaselineResourceAssignment.baseline_id == baseline.id).delete()
+    db.query(BaselineResource).filter(BaselineResource.baseline_id == baseline.id).delete()
+    db.query(BaselinePvCurve).filter(BaselinePvCurve.baseline_id == baseline.id).delete()
+    db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).delete()
+    db.query(EvmSnapshot).filter(EvmSnapshot.baseline_id == baseline.id).delete()
+
+    baseline.schedule_import_id = schedule_import_id
+    baseline.locked_at = datetime.utcnow()
+    baseline.locked_by_user_id = locked_by_user_id
+    baseline.total_budget_manhours = bac
+    baseline.target_start_date = target_start_date
+    baseline.target_end_date = target_end_date
+    baseline.activity_count = len(eligible)
+    db.flush()
+
+    _populate_baseline_children(db, tenant_id, baseline.id, eligible, bac)
+    _snapshot_baseline_resources_from_parsed(db, tenant_id, baseline.id, project_id, parsed)
+
+    db.flush()
+    return baseline
 
 
 def lock_baseline_for_project(

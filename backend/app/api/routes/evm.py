@@ -41,7 +41,6 @@ from app.services.baseline import (
     BaselineValidationError,
     lock_baseline_for_project,
     lock_baseline_from_snapshot,
-    overwrite_active_baseline,
 )
 from app.services.xer_import import DataDateRegressionError, import_xer
 from app.schemas.evm import (
@@ -246,15 +245,28 @@ def upload_baseline_program(
     versioning). Also refreshes EVM snapshots when progress already exists so
     a replace doesn't leave stale metrics.
 
-    This ALSO overwrites the project's live activities/relationships (there's
-    no separate storage for "the baseline's own data" — see services/
-    baseline.py), so uploading a file older than what's already live would
-    silently regress Execution/Progress; force=False (the default) blocks
-    that instead — see DataDateRegressionError."""
+    Unless this is the project's very first import ever (nothing else to be
+    "current" yet), the baseline is locked/overwritten from THIS file's own
+    parsed data and the project's live activities/relationships/"Current
+    update" are left completely untouched — see the `baseline_non_destructive`
+    path in services/xer_import.py. Re-uploading an (usually older) baseline
+    file can therefore no longer silently regress or reclassify the live
+    schedule, so `force` only matters for that first-import case now."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
     if not file.filename or not file.filename.lower().endswith(".xer"):
         raise HTTPException(status_code=400, detail="Only .xer files are supported")
+
+    had_active_baseline = (
+        db.query(Baseline)
+        .filter(
+            Baseline.tenant_id == ctx.tenant_id,
+            Baseline.project_id == project_id,
+            Baseline.status == BaselineStatus.active,
+        )
+        .first()
+        is not None
+    )
 
     file_bytes = file.file.read()
     try:
@@ -272,8 +284,17 @@ def upload_baseline_program(
         raise HTTPException(status_code=400, detail=f"This schedule can't be recomputed: {e}")
     except DataDateRegressionError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except BaselineValidationError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except BaselineConflictError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
 
-    active = (
+    # import_xer already locked or overwrote the active baseline internally
+    # (from the live tables on a project's first-ever import, otherwise from
+    # this file's own parsed data — never both, see baseline_non_destructive).
+    baseline = (
         db.query(Baseline)
         .filter(
             Baseline.tenant_id == ctx.tenant_id,
@@ -282,32 +303,12 @@ def upload_baseline_program(
         )
         .first()
     )
-
-    if active is not None and active.schedule_import_id == schedule_import.id:
-        # import_xer auto-locked this as the project's first baseline.
-        mode = "created"
-        baseline = active
-    elif active is not None:
-        try:
-            baseline = overwrite_active_baseline(db, ctx.tenant_id, project_id, schedule_import.id, ctx.user.id)
-        except BaselineValidationError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-        if db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).first() is not None:
-            _recalculate_evm_snapshots(db, ctx, project_id, baseline)
+    if baseline is None:
+        raise HTTPException(status_code=422, detail="This schedule can't be locked as a baseline yet.")
+    mode = "overwritten" if had_active_baseline else "created"
+    if mode == "overwritten" and db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).first() is not None:
+        _recalculate_evm_snapshots(db, ctx, project_id, baseline)
         db.commit()
-        mode = "overwritten"
-    else:
-        try:
-            baseline = lock_baseline_for_project(
-                db, ctx.tenant_id, project_id, schedule_import.id, ctx.user.id,
-                version_label=_unique_baseline_label(db, project_id),
-            )
-        except BaselineValidationError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-        except BaselineConflictError as e:
-            raise HTTPException(status_code=409, detail=str(e))
-        db.commit()
-        mode = "created"
 
     db.refresh(baseline)
     return BaselineProgramResultOut(

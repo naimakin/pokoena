@@ -113,26 +113,56 @@ def test_non_admin_cannot_upload_baseline_program(client, db_session):
     assert response.status_code == 403
 
 
-def test_upload_blocks_a_data_date_regression_unless_forced(client, db_session):
-    # Replacing the baseline also overwrites the live schedule (see
-    # services/xer_import.py) — uploading an older-dated file here would
-    # silently regress Execution/Progress just like it would through Program
-    # Library, so the same guard applies.
+def test_older_baseline_reupload_is_no_longer_blocked(client, db_session):
+    # A baseline re-upload no longer touches the live schedule at all (see
+    # baseline_non_destructive in services/xer_import.py), so an older data
+    # date on the baseline file — the normal case, a baseline is supposed to
+    # predate "now" — is expected and must not be blocked.
     _tenant, project = _setup(db_session)
     _login(client)
     _upload(client, project.id, FIXTURE.read_bytes(), name="bsl_v2.xer")  # data date 2026-01-05
 
     older = FIXTURE.read_bytes().replace(b"2026-01-05 08:00", b"2025-06-01 08:00")
-    blocked = _upload(client, project.id, older, name="bsl_v1_again.xer")
-    assert blocked.status_code == 409
-    assert "data date" in blocked.json()["detail"]
+    reuploaded = _upload(client, project.id, older, name="bsl_v1_again.xer")
+    assert reuploaded.status_code == 201
+    assert reuploaded.json()["mode"] == "overwritten"
 
-    forced = client.post(
-        f"/projects/{project.id}/evm/baseline/program",
-        files={"file": ("bsl_v1_again.xer", older, "application/octet-stream")},
-        data={"force": "true"},
+
+def test_baseline_reupload_never_touches_live_current_schedule(client, db_session):
+    # The bug this guards against: Planning -> Baselines uploads used to
+    # overwrite the project's live activities/relationships and silently
+    # re-point "Current update" at the baseline, even when a separate, newer
+    # current update already existed — the root cause behind Dashboard/WBS/
+    # Gantt/etc. showing baseline data instead of current data.
+    _tenant, project = _setup(db_session)
+    _login(client)
+    _upload(client, project.id, FIXTURE.read_bytes(), name="bsl_v1.xer")  # data date 2026-01-05, first import
+
+    # A real "current update" through Program Library, later than the baseline.
+    shifted = FIXTURE.read_bytes().replace(b"2026-01-05 08:00", b"2026-03-01 08:00")
+    resp = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("update_1.xer", shifted, "application/octet-stream")},
     )
-    assert forced.status_code == 201
+    assert resp.status_code == 201
+    current_import_id = resp.json()["id"]
+    assert resp.json()["is_current"] is True
+
+    activities_before = client.get(f"/activities?project_id={project.id}").json()
+    assert len(activities_before) > 0
+
+    # Re-uploading the (older) baseline file must not move "Current update"
+    # back onto itself, and must not overwrite the live activities.
+    reuploaded = _upload(client, project.id, FIXTURE.read_bytes(), name="bsl_v1_again.xer")
+    assert reuploaded.status_code == 201
+    assert reuploaded.json()["mode"] == "overwritten"
+
+    imports = client.get(f"/projects/{project.id}/schedule-imports").json()
+    current = next(i for i in imports if i["is_current"])
+    assert current["id"] == current_import_id
+
+    activities_after = client.get(f"/activities?project_id={project.id}").json()
+    assert activities_after == activities_before
 
 
 def test_rejects_non_xer(client, db_session):
