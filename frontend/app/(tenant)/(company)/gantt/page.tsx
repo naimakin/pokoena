@@ -36,7 +36,7 @@ const ZOOM_LEVELS = [
   { key: "year", pxPerDay: 0.6, label: "Year" },
 ] as const;
 
-type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"] | "fit";
+type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"] | "custom";
 type StatusFilter = "all" | Activity["status"];
 
 const selectStyle: CSSProperties = {
@@ -86,12 +86,20 @@ export default function GanttPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [zoomKey, setZoomKey] = useState<ZoomKey>("month");
-  const [fitPxPerDay, setFitPxPerDay] = useState<number | null>(null);
+  // pxPerDay for "custom" — set by Fit-to-screen or by dragging the timescale
+  // ruler (see startZoomDrag below).
+  const [customPxPerDay, setCustomPxPerDay] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Drag-to-zoom on the timescale ruler (P6's "grab the scale and pull"
+  // gesture) — refs, not state, so dragging doesn't fight React's render
+  // cycle; only the throttled rAF tick below actually calls setState.
+  const dragRef = useRef<{ startX: number; startPxPerDay: number } | null>(null);
+  const latestClientX = useRef(0);
+  const dragRaf = useRef<number | null>(null);
 
   const loadImports = useCallback(async () => {
     if (!project) {
@@ -221,12 +229,51 @@ export default function GanttPage() {
     const el = scrollRef.current;
     if (!el || !totalDays) return;
     const available = el.clientWidth - LEFT_W - 32;
-    setFitPxPerDay(Math.max(available / totalDays, 0.15));
-    setZoomKey("fit");
+    setCustomPxPerDay(Math.max(available / totalDays, 0.15));
+    setZoomKey("custom");
   }
 
-  const pxPerDay = zoomKey === "fit" ? (fitPxPerDay ?? 1) : ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
+  const pxPerDay = zoomKey === "custom" ? (customPxPerDay ?? 5) : ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
   const totalWidth = totalDays * pxPerDay;
+
+  // Drag the timescale ruler to zoom continuously — P6's "grab the scale and
+  // pull" gesture, instead of only jumping between fixed presets. Dragging
+  // right stretches the visible range (zooms out); dragging left compresses
+  // it (zooms in). rAF-throttled so it stays smooth at 5000+ activities.
+  const startZoomDrag = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      dragRef.current = { startX: e.clientX, startPxPerDay: pxPerDay };
+      latestClientX.current = e.clientX;
+
+      const onMove = (ev: MouseEvent) => {
+        latestClientX.current = ev.clientX;
+        if (dragRaf.current !== null) return;
+        dragRaf.current = requestAnimationFrame(() => {
+          dragRaf.current = null;
+          const drag = dragRef.current;
+          if (!drag) return;
+          const dx = latestClientX.current - drag.startX;
+          const factor = Math.pow(2, -dx / 150);
+          const next = Math.min(Math.max(drag.startPxPerDay * factor, 0.15), 60);
+          setCustomPxPerDay(next);
+          setZoomKey("custom");
+        });
+      };
+      const onUp = () => {
+        dragRef.current = null;
+        if (dragRaf.current !== null) {
+          cancelAnimationFrame(dragRaf.current);
+          dragRaf.current = null;
+        }
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [pxPerDay],
+  );
 
   const monthLabels = useMemo(() => {
     if (!projectStart || !totalDays) return [];
@@ -458,31 +505,59 @@ export default function GanttPage() {
 
             <div ref={scrollRef} style={{ overflow: "auto", maxHeight: "70vh" }}>
               <div style={{ minWidth: LEFT_W + totalWidth + 32 }}>
-                <div style={{ display: "flex", height: 32, position: "sticky", top: 0, zIndex: 6 }}>
-                  <div
-                    style={{
-                      position: "sticky",
-                      left: 0,
-                      zIndex: 2,
-                      width: LEFT_W,
-                      minWidth: LEFT_W,
-                      flexShrink: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      paddingLeft: "1rem",
-                      fontSize: ".625rem",
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: ".08em",
-                      color: "var(--text-muted)",
-                      background: "var(--surface)",
-                      borderRight: "1px solid var(--border)",
-                      borderBottom: "2px solid var(--border-strong)",
-                    }}
-                  >
-                    Activity
+                <div style={{ position: "sticky", top: 0, zIndex: 6 }}>
+                  {/* Timescale ruler — drag it to zoom continuously (P6's "grab the
+                      scale and pull" gesture), instead of only the preset buttons. */}
+                  <div style={{ display: "flex", height: 12 }}>
+                    <div style={{ position: "sticky", left: 0, zIndex: 2, width: LEFT_W, minWidth: LEFT_W, flexShrink: 0, background: "var(--surface)" }} />
+                    <div
+                      onMouseDown={startZoomDrag}
+                      title="Drag to zoom the timescale"
+                      style={{
+                        width: totalWidth,
+                        height: "100%",
+                        background: "var(--surface-2)",
+                        cursor: "ew-resize",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 3,
+                      }}
+                    >
+                      {[0, 1, 2].map((i) => (
+                        <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border-strong)" }} />
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ position: "relative", width: totalWidth, background: "var(--surface)", borderBottom: "2px solid var(--border-strong)" }}>
+                  <div style={{ display: "flex", height: 32 }}>
+                    <div
+                      style={{
+                        position: "sticky",
+                        left: 0,
+                        zIndex: 2,
+                        width: LEFT_W,
+                        minWidth: LEFT_W,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        paddingLeft: "1rem",
+                        fontSize: ".625rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: ".08em",
+                        color: "var(--text-muted)",
+                        background: "var(--surface)",
+                        borderRight: "1px solid var(--border)",
+                        borderBottom: "2px solid var(--border-strong)",
+                      }}
+                    >
+                      Activity
+                    </div>
+                    <div
+                      onMouseDown={startZoomDrag}
+                      title="Drag to zoom the timescale"
+                      style={{ position: "relative", width: totalWidth, background: "var(--surface)", borderBottom: "2px solid var(--border-strong)", cursor: "ew-resize" }}
+                    >
                     {monthLabels.map((ml, i) => (
                       <div
                         key={i}
@@ -516,6 +591,7 @@ export default function GanttPage() {
                         <span style={{ paddingLeft: 3, fontSize: ".5625rem", fontWeight: 700, color: "var(--accent)" }}>DD</span>
                       </div>
                     )}
+                    </div>
                   </div>
                 </div>
 
