@@ -1,33 +1,59 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
-import type { Activity, ScheduleImport } from "@/lib/types";
+import type { Activity, ScheduleImport, WbsNode } from "@/lib/types";
+import { ChevronDownIcon } from "@/components/icons";
+import { buildGridRows, groupByLeaf, UNGROUPED_KEY } from "@/lib/wbs-tree";
 
-// Ported from the reference app's GanttView.jsx: hand-rolled CSS-positioned
-// bars (no charting library), sticky month axis, 3 zoom levels, a data-date
-// line. Renders the full activity list directly — no virtualization yet
-// (the reference notes the same "up to ~2000 rows, add virtual scroll later
-// if needed" limitation).
+// Hand-rolled CSS-positioned bars (no charting library — see the research note
+// in the PR this shipped with for why: every open-source Gantt library that
+// actually virtualizes past a few thousand rows gates collapsible task/WBS
+// grouping behind a paid tier, which is the one thing this page most needs).
+// WBS grouping/collapse reuses the exact same lib/wbs-tree.ts logic as
+// Planning > Activities and Progress, so a band collapsing here hides its
+// whole subtree in one step, same as everywhere else in the app. True row
+// virtualization (for a project meaningfully past ~5-8k rows) is deferred —
+// collapsing bands already keeps the rendered row count far below the
+// project's real activity count for any reasonably-grouped WBS, and this
+// project's own 5000+-activity Gantt already renders today without it.
 
-const LEFT_W = 260;
+const LEFT_W = 280;
 const ROW_H = 28;
 const MS_DAY = 86_400_000;
 const MILESTONE_TYPES = new Set(["TT_Mile", "TT_FinMile", "TT_StartMile"]);
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// P6-style zoom presets (Day/Week/Month/Quarter/Year), plus "Fit" — computed
+// from the container width so the whole project date range shows with no
+// horizontal scroll at all, exactly what P6's "Zoom to Fit" does.
 const ZOOM_LEVELS = [
-  { key: "compact", pxPerDay: 2.5, label: "Compact" },
-  { key: "standard", pxPerDay: 7, label: "Standard" },
-  { key: "detailed", pxPerDay: 20, label: "Detailed" },
+  { key: "day", pxPerDay: 32, label: "Day" },
+  { key: "week", pxPerDay: 14, label: "Week" },
+  { key: "month", pxPerDay: 5, label: "Month" },
+  { key: "quarter", pxPerDay: 2, label: "Quarter" },
+  { key: "year", pxPerDay: 0.6, label: "Year" },
 ] as const;
 
-type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"];
+type ZoomKey = (typeof ZOOM_LEVELS)[number]["key"] | "fit";
 type StatusFilter = "all" | Activity["status"];
+
+const selectStyle: CSSProperties = {
+  fontSize: ".75rem",
+  height: 30,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
 }
 
 function barColor(a: Activity): string {
@@ -52,61 +78,124 @@ function latestDate(a: Activity): string | null {
 export default function GanttPage() {
   const { project } = useProjectContext();
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [dataDate, setDataDate] = useState<Date | null>(null);
+  const [nodes, setNodes] = useState<WbsNode[]>([]);
+  const [imports, setImports] = useState<ScheduleImport[]>([]);
+  const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [zoomKey, setZoomKey] = useState<ZoomKey>("standard");
+  const [zoomKey, setZoomKey] = useState<ZoomKey>("month");
+  const [fitPxPerDay, setFitPxPerDay] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  const pxPerDay = ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    async function load() {
-      if (!project) {
-        setActivities([]);
-        setDataDate(null);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const [rows, imports] = await Promise.all([
-          api.get<Activity[]>(`/activities?project_id=${project.id}`),
-          api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
-        ]);
-        setActivities(rows);
-        setDataDate(imports[0]?.data_date ? new Date(imports[0].data_date) : null);
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Failed to load the Gantt chart.");
-      } finally {
-        setLoading(false);
-      }
+  const loadImports = useCallback(async () => {
+    if (!project) {
+      setImports([]);
+      setSelectedImportId(null);
+      setLoading(false);
+      return;
     }
-    load();
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`);
+      setImports(list);
+      setSelectedImportId((prev) => {
+        if (prev && list.some((i) => i.id === prev)) return prev;
+        return (list.find((i) => i.is_current) ?? list[0])?.id ?? null;
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load the schedule imports.");
+    } finally {
+      setLoading(false);
+    }
   }, [project]);
 
-  const rows = useMemo(() => {
+  useEffect(() => {
+    loadImports();
+  }, [loadImports]);
+
+  const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
+  const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
+  const isViewingCurrent = selectedImportId !== null && selectedImportId === currentImportId;
+  const dataDate = selectedImport?.data_date ? new Date(selectedImport.data_date) : null;
+
+  const loadData = useCallback(async () => {
+    if (!project || !selectedImportId) {
+      setActivities([]);
+      setNodes([]);
+      return;
+    }
+    setDataLoading(true);
+    try {
+      const [acts, wbs] = await Promise.all([
+        isViewingCurrent
+          ? api.get<Activity[]>(`/activities?project_id=${project.id}`)
+          : api.get<Activity[]>(`/projects/${project.id}/schedule-imports/${selectedImportId}/activities`),
+        isViewingCurrent
+          ? api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`)
+          : api.get<WbsNode[]>(`/projects/${project.id}/schedule-imports/${selectedImportId}/wbs-nodes`),
+      ]);
+      setActivities(acts);
+      setNodes(wbs);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load the Gantt chart.");
+      setActivities([]);
+      setNodes([]);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [project, selectedImportId, isViewingCurrent]);
+
+  useEffect(() => {
+    loadData();
+    setCollapsed(new Set());
+  }, [loadData]);
+
+  const knownWbsIds = useMemo(() => new Set(nodes.map((n) => n.wbs_id)), [nodes]);
+  const maxLevel = useMemo(() => (nodes.length ? Math.max(...nodes.map((n) => n.depth)) + 1 : 1), [nodes]);
+
+  function collapseToLevel(level: number) {
+    setCollapsed(new Set(nodes.filter((n) => n.depth + 1 >= level).map((n) => n.wbs_id)));
+  }
+
+  const filteredActivities = useMemo(() => {
     let list = activities;
     if (statusFilter !== "all") list = list.filter((a) => a.status === statusFilter);
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter((a) => a.name.toLowerCase().includes(q) || a.external_id.toLowerCase().includes(q));
     }
-    return [...list].sort((a, b) => {
-      const as = earliestDate(a) ?? "";
-      const bs = earliestDate(b) ?? "";
-      if (as !== bs) return as < bs ? -1 : 1;
-      return a.external_id.localeCompare(b.external_id);
-    });
+    return list;
   }, [activities, statusFilter, query]);
+
+  const hasUngrouped = useMemo(
+    () => filteredActivities.some((a) => !a.wbs_path || !knownWbsIds.has(a.wbs_path)),
+    [filteredActivities, knownWbsIds],
+  );
+
+  const rows = useMemo(() => {
+    const byLeaf = groupByLeaf(filteredActivities, knownWbsIds);
+    for (const list of byLeaf.values()) {
+      list.sort((x, y) => {
+        const as = earliestDate(x) ?? "";
+        const bs = earliestDate(y) ?? "";
+        if (as !== bs) return as < bs ? -1 : 1;
+        return x.external_id.localeCompare(y.external_id, undefined, { numeric: true });
+      });
+    }
+    return buildGridRows(nodes, byLeaf, collapsed);
+  }, [nodes, filteredActivities, collapsed]);
 
   const { projectStart, totalDays } = useMemo(() => {
     let minD: Date | null = null;
     let maxD: Date | null = null;
-    for (const a of rows) {
+    for (const a of filteredActivities) {
       const s = earliestDate(a);
       const e = latestDate(a);
       if (s) {
@@ -124,8 +213,19 @@ export default function GanttPage() {
     const end = new Date(maxD);
     end.setMonth(end.getMonth() + 1, 1);
     return { projectStart: start, totalDays: Math.ceil((end.getTime() - start.getTime()) / MS_DAY) };
-  }, [rows]);
+  }, [filteredActivities]);
 
+  // "Fit to screen": pxPerDay so the whole date range fills the visible
+  // timeline width with no horizontal scroll — matches P6's Zoom-to-Fit.
+  function fitToScreen() {
+    const el = scrollRef.current;
+    if (!el || !totalDays) return;
+    const available = el.clientWidth - LEFT_W - 32;
+    setFitPxPerDay(Math.max(available / totalDays, 0.15));
+    setZoomKey("fit");
+  }
+
+  const pxPerDay = zoomKey === "fit" ? (fitPxPerDay ?? 1) : ZOOM_LEVELS.find((z) => z.key === zoomKey)!.pxPerDay;
   const totalWidth = totalDays * pxPerDay;
 
   const monthLabels = useMemo(() => {
@@ -133,12 +233,15 @@ export default function GanttPage() {
     const labels: { x: number; label: string }[] = [];
     const cur = new Date(projectStart);
     const end = new Date(projectStart.getTime() + totalDays * MS_DAY);
+    // At low zoom (Quarter/Year/Fit over a long range) a per-month label for
+    // every single month is unreadable clutter — step by quarter instead.
+    const stepMonths = pxPerDay < 1.5 ? 3 : 1;
     while (cur < end) {
       labels.push({
         x: ((cur.getTime() - projectStart.getTime()) / MS_DAY) * pxPerDay,
         label: cur.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
       });
-      cur.setMonth(cur.getMonth() + 1);
+      cur.setMonth(cur.getMonth() + stepMonths);
     }
     return labels;
   }, [projectStart, totalDays, pxPerDay]);
@@ -153,6 +256,15 @@ export default function GanttPage() {
     const x = ((new Date(s).getTime() - projectStart.getTime()) / MS_DAY) * pxPerDay;
     const w = Math.max(((new Date(e).getTime() - new Date(s).getTime()) / MS_DAY) * pxPerDay, 2);
     return { x: Math.max(x, 0), w };
+  }
+
+  function toggleBand(wbsId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(wbsId)) next.delete(wbsId);
+      else next.add(wbsId);
+      return next;
+    });
   }
 
   if (loading) {
@@ -183,15 +295,84 @@ export default function GanttPage() {
         <div className="page-head">
           <div>
             <div className="page-title">Gantt</div>
-            <div className="page-desc">{rows.length} activities</div>
+            <div className="page-desc">
+              {dataLoading
+                ? "Loading…"
+                : `${filteredActivities.length} activities` + (!isViewingCurrent ? " · read-only — showing an earlier program" : "")}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: ".55rem", alignItems: "center", flexWrap: "wrap" }}>
+            {imports.length > 0 && (
+              <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                Program
+                <select
+                  style={{ ...selectStyle, minWidth: 220 }}
+                  value={selectedImportId ?? ""}
+                  onChange={(e) => setSelectedImportId(e.target.value)}
+                >
+                  {imports.map((imp) => (
+                    <option key={imp.id} value={imp.id}>
+                      {imp.revision_label ?? imp.filename}
+                      {imp.data_date ? ` (${fmtDate(imp.data_date)})` : ""}
+                      {imp.id === currentImportId ? " — Current update" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {nodes.length > 0 && (
+              <>
+                <label style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                  Collapse to
+                  <select
+                    style={selectStyle}
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) collapseToLevel(Number(e.target.value));
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="" disabled>
+                      Level…
+                    </option>
+                    {Array.from({ length: maxLevel }, (_, i) => i + 1).map((level) => (
+                      <option key={level} value={level}>
+                        Level {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="btn btn-secondary btn-sm" onClick={() => setCollapsed(new Set())}>
+                  Expand all
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    setCollapsed(new Set([...nodes.map((n) => n.wbs_id), ...(hasUngrouped ? [UNGROUPED_KEY] : [])]))
+                  }
+                >
+                  Collapse all
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {!isViewingCurrent && selectedImport && (
+          <div className="banner">
+            <div className="banner-text">
+              Showing <b>{selectedImport.revision_label ?? selectedImport.filename}</b>, an earlier program — read-only.
+            </div>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <div className="card">
             <p className="empty-state">
               {activities.length === 0
-                ? "No schedule imported yet — upload a .xer file from Program Library."
+                ? isViewingCurrent
+                  ? "No schedule imported yet — upload a .xer file from Program Library."
+                  : "No activities recorded for this program."
                 : "No activities match your filters."}
             </p>
           </div>
@@ -255,7 +436,7 @@ export default function GanttPage() {
                     style={{
                       fontSize: ".6875rem",
                       fontWeight: zoomKey === z.key ? 700 : 400,
-                      padding: ".25rem .7rem",
+                      padding: ".25rem .6rem",
                       border: "none",
                       cursor: "pointer",
                       background: zoomKey === z.key ? "var(--accent)" : "transparent",
@@ -266,23 +447,23 @@ export default function GanttPage() {
                   </button>
                 ))}
               </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                title="Zoom so the whole date range fits with no horizontal scroll"
+                onClick={fitToScreen}
+              >
+                Fit to screen
+              </button>
             </div>
 
-            <div style={{ overflow: "auto", maxHeight: "70vh" }}>
+            <div ref={scrollRef} style={{ overflow: "auto", maxHeight: "70vh" }}>
               <div style={{ minWidth: LEFT_W + totalWidth + 32 }}>
-                <div
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 5,
-                    display: "flex",
-                    height: 32,
-                    background: "var(--surface)",
-                    borderBottom: "2px solid var(--border-strong)",
-                  }}
-                >
+                <div style={{ display: "flex", height: 32, position: "sticky", top: 0, zIndex: 6 }}>
                   <div
                     style={{
+                      position: "sticky",
+                      left: 0,
+                      zIndex: 2,
                       width: LEFT_W,
                       minWidth: LEFT_W,
                       flexShrink: 0,
@@ -294,12 +475,14 @@ export default function GanttPage() {
                       textTransform: "uppercase",
                       letterSpacing: ".08em",
                       color: "var(--text-muted)",
+                      background: "var(--surface)",
                       borderRight: "1px solid var(--border)",
+                      borderBottom: "2px solid var(--border-strong)",
                     }}
                   >
                     Activity
                   </div>
-                  <div style={{ position: "relative", width: totalWidth }}>
+                  <div style={{ position: "relative", width: totalWidth, background: "var(--surface)", borderBottom: "2px solid var(--border-strong)" }}>
                     {monthLabels.map((ml, i) => (
                       <div
                         key={i}
@@ -336,35 +519,98 @@ export default function GanttPage() {
                   </div>
                 </div>
 
-                {rows.map((a, idx) => {
+                {rows.map((row, idx) => {
+                  if (row.kind === "band") {
+                    // Opaque tiers only — this cell (and its timeline-row twin below)
+                    // sit under a `position: sticky` left column, so anything less
+                    // than fully opaque would let horizontally-scrolled bars show
+                    // through the "frozen" Activity column.
+                    const bandBg = ["var(--surface-3)", "var(--surface-2)", "var(--surface)"][Math.min(row.depth, 2)];
+                    return (
+                      <div key={row.key} style={{ display: "flex", height: ROW_H, borderBottom: "1px solid var(--border-strong)" }}>
+                        <div
+                          style={{
+                            position: "sticky",
+                            left: 0,
+                            zIndex: 2,
+                            width: LEFT_W,
+                            minWidth: LEFT_W,
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: ".4rem",
+                            paddingLeft: `${.5 + row.depth * 1}rem`,
+                            paddingRight: ".5rem",
+                            borderRight: "1px solid var(--border)",
+                            background: bandBg,
+                            fontWeight: 700,
+                            fontSize: ".75rem",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <button
+                            onClick={() => toggleBand(row.wbsId)}
+                            aria-label={row.collapsed ? "Expand" : "Collapse"}
+                            aria-expanded={!row.collapsed}
+                            style={{
+                              display: "flex",
+                              flexShrink: 0,
+                              color: "var(--text-muted)",
+                              transform: row.collapsed ? "rotate(-90deg)" : "none",
+                              transition: "transform var(--dur-1, 120ms) var(--ease, ease)",
+                            }}
+                          >
+                            <ChevronDownIcon className="icon" style={{ width: 14, height: 14 }} />
+                          </button>
+                          {row.node && (
+                            <span className="wbs-level-chip" title={`WBS level ${row.depth + 1}`}>
+                              L{row.depth + 1}
+                            </span>
+                          )}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.label}</span>
+                        </div>
+                        <div style={{ position: "relative", width: totalWidth, background: bandBg }}>
+                          {dataDateX !== null && (
+                            <div style={{ position: "absolute", top: 0, bottom: 0, left: dataDateX, borderLeft: "1px solid var(--accent)", opacity: 0.3 }} />
+                          )}
+                          <span
+                            className="mono"
+                            style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: ".625rem", color: "var(--text-muted)" }}
+                          >
+                            Σ {row.total}
+                            {row.completed > 0 ? ` · ${row.completed} done` : ""} · {row.avgPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const a = row.activity;
                   const geom = barGeom(a);
                   const milestone = isMilestone(a);
                   const color = barColor(a);
                   const even = idx % 2 === 0;
+                  const rowBg = even ? "var(--surface)" : "var(--surface-2)";
                   const floatDays = a.total_float_hours != null ? (a.total_float_hours / 8).toFixed(1) : "—";
                   const title = `${a.external_id}: ${a.name}\nES: ${fmtDate(a.early_start)}  EF: ${fmtDate(a.early_finish)}\nTF: ${floatDays}d  Progress: ${a.percent_complete}%`;
 
                   return (
-                    <div
-                      key={a.id}
-                      style={{
-                        display: "flex",
-                        height: ROW_H,
-                        borderBottom: "1px solid var(--border)",
-                        background: even ? "var(--surface)" : "var(--surface-2)",
-                      }}
-                    >
+                    <div key={row.key} style={{ display: "flex", height: ROW_H, borderBottom: "1px solid var(--border)" }}>
                       <div
                         style={{
+                          position: "sticky",
+                          left: 0,
+                          zIndex: 1,
                           width: LEFT_W,
                           minWidth: LEFT_W,
                           flexShrink: 0,
                           display: "flex",
                           alignItems: "center",
                           gap: ".5rem",
-                          paddingLeft: ".75rem",
+                          paddingLeft: `${0.75 + row.depth * 1}rem`,
                           paddingRight: ".6rem",
                           borderRight: "1px solid var(--border)",
+                          background: rowBg,
                           overflow: "hidden",
                         }}
                       >
@@ -379,7 +625,7 @@ export default function GanttPage() {
                         </span>
                       </div>
 
-                      <div style={{ position: "relative", overflow: "hidden", width: totalWidth }} title={title}>
+                      <div style={{ position: "relative", overflow: "hidden", width: totalWidth, background: rowBg }} title={title}>
                         {dataDateX !== null && (
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: dataDateX, borderLeft: "1px solid var(--accent)", opacity: 0.3 }} />
                         )}
@@ -423,7 +669,7 @@ export default function GanttPage() {
                                   }}
                                 />
                               )}
-                              {zoomKey === "detailed" && geom.w > 60 && (
+                              {(zoomKey === "day" || zoomKey === "week") && geom.w > 60 && (
                                 <span
                                   style={{
                                     position: "absolute",
@@ -455,13 +701,3 @@ export default function GanttPage() {
     </>
   );
 }
-
-const selectStyle: CSSProperties = {
-  fontSize: ".8125rem",
-  height: 30,
-  padding: "0 .5rem",
-  background: "var(--surface)",
-  border: "1px solid var(--border-strong)",
-  borderRadius: 6,
-  color: "var(--text-primary)",
-};
