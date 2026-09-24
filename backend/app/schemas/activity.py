@@ -45,14 +45,24 @@ class ActivityOut(BaseModel):
     constraint_date_2: date | None = None
     is_longest_path: bool = False
 
+    # --- Poko's own annotations (see models/activity.py) ---
+    is_important: bool = False
+    tags: list[str] = []
+    notes: str | None = None
+
 
 class ActivityUpdate(BaseModel):
-    """Only the fields a subcontractor may edit directly, without admin review."""
+    """What the Activity modal may write: the progress fields a subcontractor
+    owns, plus Poko's own annotations. Everything else on an activity comes from
+    the .xer and is read-only here."""
 
     percent_complete: int | None = Field(default=None, ge=0, le=100)
     actual_start: date | None = None
     actual_finish: date | None = None
     remaining_duration_days: int | None = Field(default=None, ge=0)
+    is_important: bool | None = None
+    tags: list[str] | None = Field(default=None, max_length=20)
+    notes: str | None = Field(default=None, max_length=4000)
 
 
 class ActivityBatchItemIn(ActivityUpdate):
@@ -89,6 +99,25 @@ class ActivityRelationshipOut(BaseModel):
     # "FS ← MEP-2140" instead of a bare UUID.
     predecessor_external_id: str | None = None
     successor_external_id: str | None = None
+
+
+class ActivityCommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class ActivityHistoryItemOut(BaseModel):
+    """One entry in the Activity modal's History tab. `kind` is "change" or
+    "comment" for stored activity_events rows, and "version" for a difference
+    derived from two consecutive schedule imports (see the route)."""
+
+    kind: str
+    created_at: datetime
+    actor_name: str | None = None
+    field: str | None = None
+    old_value: str | None = None
+    new_value: str | None = None
+    body: str | None = None
+    revision_label: str | None = None
 
 
 class ScheduleImportUpdate(BaseModel):

@@ -27,6 +27,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
+from app.models.activity_event import ActivityEvent
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship
 from app.models.baseline import (
@@ -96,6 +97,7 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
     gone(TaskActivityCode, project_id=project_id)
     gone(ResourceAssignment, project_id=project_id)
     gone(ActivityRelationship, project_id=project_id)
+    gone(ActivityEvent, project_id=project_id)
     gone(ProgressEntry, project_id=project_id)
     gone(RecoveryPlan, project_id=project_id)  # cascades to recovery_plan_items
 

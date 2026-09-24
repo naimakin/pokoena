@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "@/lib/api";
-import { useToast } from "@/components/Toast";
-import type { Activity, ActivityBatchResult, WbsNode } from "@/lib/types";
+import { useState } from "react";
+import { ActivityModal } from "@/components/ActivityModal";
+import { FlagIcon } from "@/components/icons";
+import type { Activity, WbsNode } from "@/lib/types";
 import { WbsGrid } from "./WbsGrid";
 
-type Draft = { actual_start?: string | null; actual_finish?: string | null; percent_complete?: number };
-type DraftMap = Record<string, Draft>;
+// Status & dates are edited in the Activity modal, not in the grid. The grid's
+// job is to be scannable across a few thousand rows; the moment it carries date
+// pickers and number inputs in every row it stops being readable, and a stray
+// click on the wrong row silently edits the wrong activity. Clicking a row
+// opens everything about that activity instead — see components/ActivityModal.
 
 const STATUS_LABEL: Record<string, string> = {
   not_started: "Not Started",
@@ -20,131 +23,41 @@ const STATUS_CHIP: Record<string, string> = {
   complete: "chip-good",
 };
 
-function resolved(a: Activity, d: Draft | undefined) {
-  return {
-    actual_start: d && "actual_start" in d ? d.actual_start || null : a.actual_start,
-    actual_finish: d && "actual_finish" in d ? d.actual_finish || null : a.actual_finish,
-    percent_complete: d && "percent_complete" in d ? d.percent_complete ?? 0 : a.percent_complete,
-  };
-}
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function fieldChanged(a: Activity, d: Draft | undefined, key: keyof Draft): boolean {
-  if (!d || !(key in d)) return false;
-  const r = resolved(a, d);
-  if (key === "percent_complete") return r.percent_complete !== a.percent_complete;
-  return (r[key] || null) !== (a[key] || null);
-}
-
-function rowDirty(a: Activity, d: Draft | undefined): boolean {
-  return fieldChanged(a, d, "actual_start") || fieldChanged(a, d, "actual_finish") || fieldChanged(a, d, "percent_complete");
-}
-
-function clientError(a: Activity, d: Draft): string | null {
-  const r = resolved(a, d);
-  if (r.actual_finish && !r.actual_start) return "Actual Finish needs an Actual Start";
-  if (r.actual_start && r.actual_finish && r.actual_start > r.actual_finish) return "Actual Finish is before Actual Start";
-  return null;
+// P6 convention (DD-MMM-YYYY) — see CLAUDE.md.
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
 }
 
 export function StatusDatesMode({
   hidden,
   nodes,
   activities,
-  allActivities,
   dataDate,
-  projectId,
   canEdit,
+  snapshotOnly,
   collapsed,
   onToggle,
   onActivitiesUpdated,
-  onDirtyChange,
 }: {
   hidden: boolean;
   nodes: WbsNode[];
   activities: Activity[];
-  allActivities: Activity[];
   dataDate: string | null;
-  projectId: string;
   canEdit: boolean;
+  snapshotOnly: boolean;
   collapsed: Set<string>;
   onToggle: (wbsId: string) => void;
   onActivitiesUpdated: (rows: Activity[]) => void;
-  onDirtyChange: (count: number) => void;
 }) {
-  const { showToast } = useToast();
-  const [drafts, setDrafts] = useState<DraftMap>({});
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
+  const [openActivity, setOpenActivity] = useState<Activity | null>(null);
 
-  const activityById = useMemo(() => new Map(allActivities.map((a) => [a.id, a])), [allActivities]);
-  const dirtyIds = useMemo(
-    () => Object.keys(drafts).filter((id) => activityById.get(id) && rowDirty(activityById.get(id)!, drafts[id])),
-    [drafts, activityById],
-  );
-
-  useEffect(() => onDirtyChange(dirtyIds.length), [dirtyIds.length, onDirtyChange]);
-
-  function setDraft(id: string, patch: Draft) {
-    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
-  }
-  function revertRow(id: string) {
-    setDrafts((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    setRowErrors((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }
-
-  async function save(ids: string[]) {
-    if (saving || ids.length === 0) return;
-    const errs: Record<string, string> = {};
-    const updates = ids.map((id) => {
-      const a = activityById.get(id)!;
-      const d = drafts[id];
-      const err = clientError(a, d);
-      if (err) errs[id] = err;
-      return { id, ...d };
-    });
-    if (Object.keys(errs).length > 0) {
-      setRowErrors((prev) => ({ ...prev, ...errs }));
-      showToast("Fix the highlighted rows first.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await api.patch<ActivityBatchResult>(`/activities?project_id=${projectId}`, { updates });
-      if (res.saved.length > 0) onActivitiesUpdated(res.saved);
-      const savedIds = new Set(res.saved.map((r) => r.id));
-      const failedById = new Map(res.failed.map((f) => [f.id, f.error]));
-      setDrafts((prev) => {
-        const next = { ...prev };
-        for (const id of ids) if (savedIds.has(id)) delete next[id];
-        return next;
-      });
-      setRowErrors((prev) => {
-        const next = { ...prev };
-        for (const id of ids) {
-          if (savedIds.has(id)) delete next[id];
-          else if (failedById.has(id)) next[id] = failedById.get(id)!;
-        }
-        return next;
-      });
-      if (res.failed.length > 0) showToast(`${res.saved.length} saved · ${res.failed.length} failed`);
-      else showToast(`${res.saved.length} activit${res.saved.length === 1 ? "y" : "ies"} saved`);
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Save failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const afterDataDate = (v: string | null | undefined) => Boolean(v && dataDate && v > dataDate.slice(0, 10));
+  const afterDataDate = (v: string | null | undefined) =>
+    Boolean(v && dataDate && v > dataDate.slice(0, 10));
 
   return (
     <div hidden={hidden}>
@@ -153,90 +66,68 @@ export function StatusDatesMode({
         activities={activities}
         collapsed={collapsed}
         onToggle={onToggle}
+        onActivityClick={setOpenActivity}
         colCount={5}
         header={
           <>
             <th>Activity</th>
             <th>Status</th>
-            <th style={{ width: 150 }}>Actual Start</th>
-            <th style={{ width: 150 }}>Actual Finish</th>
-            <th style={{ width: 90 }}>%</th>
-            <th style={{ width: 130 }} />
+            <th style={{ width: 130 }}>Actual Start</th>
+            <th style={{ width: 130 }}>Actual Finish</th>
+            <th style={{ width: 70 }}>%</th>
+            <th style={{ width: 120 }}>Flags</th>
           </>
         }
         renderActivityCells={(a) => {
-          const d = drafts[a.id];
-          const r = resolved(a, d);
-          const dirty = rowDirty(a, d);
-          const err = rowErrors[a.id];
+          const tagCount = a.tags?.length ?? 0;
           return (
             <>
               <td>
-                <span className={`chip ${STATUS_CHIP[r.actual_finish ? "complete" : r.actual_start ? "in_progress" : a.status]}`}>
-                  {STATUS_LABEL[r.actual_finish ? "complete" : r.actual_start ? "in_progress" : a.status]}
-                </span>
+                <span className={`chip ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
               </td>
-              <td className={fieldChanged(a, d, "actual_start") ? "field-editable" : undefined}>
-                <input
-                  type="date"
-                  disabled={!canEdit}
-                  value={r.actual_start ?? ""}
-                  onChange={(e) => setDraft(a.id, { actual_start: e.target.value || null })}
-                />
-                {afterDataDate(r.actual_start) && <div className="pg-warn">after data date</div>}
+              <td className="mono">
+                {fmtDate(a.actual_start)}
+                {afterDataDate(a.actual_start) && <div className="pg-warn">after data date</div>}
               </td>
-              <td className={fieldChanged(a, d, "actual_finish") ? "field-editable" : undefined}>
-                <input
-                  type="date"
-                  disabled={!canEdit}
-                  value={r.actual_finish ?? ""}
-                  onChange={(e) => setDraft(a.id, { actual_finish: e.target.value || null })}
-                />
-                {afterDataDate(r.actual_finish) && <div className="pg-warn">after data date</div>}
+              <td className="mono">
+                {fmtDate(a.actual_finish)}
+                {afterDataDate(a.actual_finish) && <div className="pg-warn">after data date</div>}
               </td>
-              <td className={fieldChanged(a, d, "percent_complete") ? "field-editable" : undefined}>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  disabled={!canEdit}
-                  value={r.percent_complete}
-                  onChange={(e) => setDraft(a.id, { percent_complete: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                />
-                {r.percent_complete === 100 && !r.actual_finish && <div className="pg-warn">100% · no finish</div>}
-              </td>
+              <td className="mono">{a.percent_complete}%</td>
               <td>
-                {err && <div className="pg-row-err">{err}</div>}
-                {(dirty || err) && canEdit && (
-                  <div className="pg-row-actions">
-                    <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => save([a.id])}>
-                      Save
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => revertRow(a.id)}>
-                      ↺
-                    </button>
-                  </div>
-                )}
+                <div className="pg-flags">
+                  {a.is_important && (
+                    <span className="chip chip-warn" title="Flagged as important">
+                      <FlagIcon className="icon" style={{ width: 10, height: 10 }} />
+                    </span>
+                  )}
+                  {tagCount > 0 && (
+                    <span className="chip chip-neutral" title={(a.tags ?? []).join(", ")}>
+                      {tagCount} tag{tagCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {a.percent_complete === 100 && !a.actual_finish && (
+                    <span className="pg-warn">100% · no finish</span>
+                  )}
+                </div>
               </td>
             </>
           );
         }}
       />
 
-      {dirtyIds.length > 0 && canEdit && (
-        <div className="pg-subfooter">
-          <span style={{ fontSize: ".8125rem", fontWeight: 600 }}>
-            {dirtyIds.length} unsaved activit{dirtyIds.length === 1 ? "y" : "ies"}
-          </span>
-          <span className="spacer" />
-          <button className="btn btn-ghost btn-sm" onClick={() => dirtyIds.forEach(revertRow)}>
-            Revert all
-          </button>
-          <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => save(dirtyIds)}>
-            {saving ? "Saving…" : "Save all"}
-          </button>
-        </div>
-      )}
+      <ActivityModal
+        key={openActivity?.id ?? "none"}
+        activity={openActivity}
+        canEdit={canEdit}
+        snapshotOnly={snapshotOnly}
+        wbsNodes={nodes}
+        onClose={() => setOpenActivity(null)}
+        onSaved={(updated) => {
+          onActivitiesUpdated([updated]);
+          setOpenActivity(updated);
+        }}
+      />
     </div>
   );
 }

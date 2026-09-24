@@ -65,9 +65,10 @@ export default function ProgressPage() {
   const [filterDirty, setFilterDirty] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  const [statusDirty, setStatusDirty] = useState(0);
+  // Only the manhours mode still holds unsaved page-level state: status/date
+  // edits moved into the Activity modal, which saves on its own.
   const [manhoursDirty, setManhoursDirty] = useState(0);
-  const totalDirty = statusDirty + manhoursDirty;
+  const totalDirty = manhoursDirty;
 
   useEffect(() => {
     try {
@@ -437,14 +438,12 @@ export default function ProgressPage() {
                 hidden={mode !== "status"}
                 nodes={wbsNodes}
                 activities={filtered}
-                allActivities={activities}
                 dataDate={dataDate}
-                projectId={project.id}
                 canEdit={canEdit}
+                snapshotOnly={!isViewingCurrent}
                 collapsed={collapsed}
                 onToggle={toggleCollapse}
                 onActivitiesUpdated={onActivitiesUpdated}
-                onDirtyChange={setStatusDirty}
               />
               <ManhoursMode
                 hidden={mode !== "manhours"}

@@ -20,6 +20,7 @@ export function WbsGrid({
   colCount,
   header,
   renderActivityCells,
+  onActivityClick,
   emptyLabel = "No activities match the current filter.",
 }: {
   nodes: WbsNode[];
@@ -29,6 +30,9 @@ export function WbsGrid({
   colCount: number; // number of <td> after the identity cell in an activity row
   header: ReactNode; // <th> cells (identity col + the rest)
   renderActivityCells: (activity: Activity) => ReactNode;
+  // Set by callers that open the Activity modal on row click (Progress). Left
+  // unset the row stays inert, for grids that are purely a readout.
+  onActivityClick?: (activity: Activity) => void;
   emptyLabel?: string;
 }) {
   const knownWbsIds = new Set(nodes.map((n) => n.wbs_id));
@@ -88,8 +92,30 @@ export function WbsGrid({
             // Finished work is never "critical" regardless of its stored float —
             // matches P6's own convention (see services/xer_import.py::_is_critical).
             const isFinished = a.status === "complete" || Boolean(a.actual_finish);
+            const classes = [
+              !isFinished && a.is_critical ? "critical" : "",
+              onActivityClick ? "pg-row-open" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             return (
-              <tr key={row.key} className={!isFinished && a.is_critical ? "critical" : undefined}>
+              <tr
+                key={row.key}
+                className={classes || undefined}
+                tabIndex={onActivityClick ? 0 : undefined}
+                role={onActivityClick ? "button" : undefined}
+                onClick={onActivityClick ? () => onActivityClick(a) : undefined}
+                onKeyDown={
+                  onActivityClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onActivityClick(a);
+                        }
+                      }
+                    : undefined
+                }
+              >
                 <td>
                   <div className="pg-id" style={{ paddingLeft: indent(row.depth) }}>
                     <div className="pg-name">{a.name}</div>

@@ -3,6 +3,7 @@ by Alembic autogenerate and by tests that call Base.metadata.create_all()."""
 
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
+from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.audit_log import AuditLog
 from app.models.baseline import (
@@ -65,6 +66,7 @@ __all__ = [
     "ActivityStatus",
     "ActivityCodeType",
     "ActivityCodeValue",
+    "ActivityEvent",
     "TaskActivityCode",
     "ActivityRelationship",
     "LinkType",

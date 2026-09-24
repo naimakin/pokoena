@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, ScheduleImport, WbsNode } from "@/lib/types";
 import { ChevronDownIcon } from "@/components/icons";
+import { ActivityModal } from "@/components/ActivityModal";
 import { buildGridRows, groupByLeaf, UNGROUPED_KEY } from "@/lib/wbs-tree";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -95,6 +96,9 @@ export default function SchedulePage() {
   const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
   const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
   const isViewingCurrent = selectedImportId !== null && selectedImportId === currentImportId;
+  // Same Activity modal as Execution > Progress. Read-only on an earlier
+  // program: those rows come from a frozen snapshot, not the live schedule.
+  const [openActivity, setOpenActivity] = useState<Activity | null>(null);
 
   const loadData = useCallback(async () => {
     if (!project || !selectedImportId) {
@@ -375,7 +379,19 @@ export default function SchedulePage() {
                   // matches P6's own convention (see services/xer_import.py::_is_critical).
                   const isFinished = a.status === "complete" || !!a.actual_finish;
                   return (
-                    <tr key={row.key} className={!isFinished && a.is_critical ? "critical" : undefined}>
+                    <tr
+                      key={row.key}
+                      className={`pg-row-open${!isFinished && a.is_critical ? " critical" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setOpenActivity(a)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenActivity(a);
+                        }
+                      }}
+                    >
                       <td className="actid" style={{ paddingLeft: `${row.depth * 1.25}rem` }}>
                         {a.external_id}
                       </td>
@@ -401,6 +417,19 @@ export default function SchedulePage() {
           </div>
         </div>
       </div>
+
+      <ActivityModal
+        key={openActivity?.id ?? "none"}
+        activity={openActivity}
+        canEdit={isViewingCurrent}
+        snapshotOnly={!isViewingCurrent}
+        wbsNodes={nodes}
+        onClose={() => setOpenActivity(null)}
+        onSaved={(updated) => {
+          setActivities((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+          setOpenActivity(updated);
+        }}
+      />
     </>
   );
 }

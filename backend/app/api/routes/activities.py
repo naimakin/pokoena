@@ -12,14 +12,19 @@ from app.deps import (
     require_scope_access,
 )
 from app.models.activity import Activity, ActivityStatus
+from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship
 from app.models.project import Project
+from app.models.schedule_import import ScheduleImport
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
+from app.models.user import User
 from app.models.user_tenant_role import TenantRole
 from app.schemas.activity import (
     ActivityBatchResultOut,
     ActivityBatchRowError,
     ActivityBatchUpdateIn,
+    ActivityCommentIn,
+    ActivityHistoryItemOut,
     ActivityOut,
     ActivityRelationshipOut,
     ActivityUpdate,
@@ -30,7 +35,81 @@ router = APIRouter(prefix="/activities", tags=["activities"])
 # actual_start / actual_finish are nullable (a null clears them); percent_complete
 # and remaining_duration_days are NOT NULL, so an explicit null there means
 # "field omitted" and must be skipped rather than written.
-_NULLABLE_EDIT_FIELDS = {"actual_start", "actual_finish"}
+_NULLABLE_EDIT_FIELDS = {"actual_start", "actual_finish", "notes"}
+
+# What the Activity modal's History tab reports on a user edit. `status` is in
+# here even though it isn't directly settable: it's derived from the actual
+# dates (see _apply_progress_derivation), and "To Do -> In Progress" is the
+# change a reader actually cares about.
+_TRACKED_EDIT_FIELDS = (
+    "status",
+    "percent_complete",
+    "actual_start",
+    "actual_finish",
+    "remaining_duration_days",
+    "is_important",
+    "tags",
+    "notes",
+)
+
+# Fields whose movement between two consecutive imports is worth showing in the
+# same timeline. Keys are as written into ScheduleImport.activities_snapshot.
+_TRACKED_VERSION_FIELDS = (
+    "planned_start",
+    "planned_finish",
+    "early_start",
+    "early_finish",
+    "total_float_hours",
+    "is_critical",
+)
+
+# How far back the version diff walks. A project accumulates an import per
+# update cycle, and the snapshots are full-programme JSON blobs, so reading all
+# of them to render one activity's timeline gets expensive on a long-running
+# project; the recent ones are what anyone actually reads.
+_VERSION_HISTORY_IMPORTS = 8
+
+
+def _event_value(value) -> str | None:
+    """Render a field value for the timeline. Strings, so old/new stay
+    comparable and printable whatever the column type was."""
+    if value is None:
+        return None
+    if isinstance(value, ActivityStatus):
+        return value.value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value) or None
+    return str(value)[:255]
+
+
+def _edit_snapshot(activity: Activity) -> dict[str, str | None]:
+    return {field: _event_value(getattr(activity, field)) for field in _TRACKED_EDIT_FIELDS}
+
+
+def _record_edit_events(
+    db: Session, ctx: AuthContext, activity: Activity, before: dict[str, str | None]
+) -> None:
+    """One activity_events row per changed field, added to the caller's session
+    so it commits atomically with the change itself."""
+    after = _edit_snapshot(activity)
+    for field in _TRACKED_EDIT_FIELDS:
+        if before[field] == after[field]:
+            continue
+        db.add(
+            ActivityEvent(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                project_id=activity.project_id,
+                activity_id=activity.id,
+                actor_user_id=ctx.user.id,
+                kind="change",
+                field=field,
+                old_value=before[field],
+                new_value=after[field],
+            )
+        )
 
 
 def _apply_changes(activity: Activity, changes: dict) -> None:
@@ -191,8 +270,10 @@ def batch_update_activities(
             if ctx.role == TenantRole.subcontractor:
                 require_scope_access(activity.project_scope_id, ctx)
             changes = item.model_dump(exclude_unset=True, exclude={"id"})
+            before = _edit_snapshot(activity)
             _apply_changes(activity, changes)
             _apply_progress_derivation(activity, changes)
+            _record_edit_events(db, ctx, activity, before)
             saved.append(activity)
         except HTTPException as exc:
             db.expire(activity)  # discard the in-memory mutation (nothing flushed yet)
@@ -218,9 +299,137 @@ def update_activity(
     _authorize_progress_edit(db, activity.project_id, ctx)
 
     changes = payload.model_dump(exclude_unset=True)
+    before = _edit_snapshot(activity)
     _apply_changes(activity, changes)
     _apply_progress_derivation(activity, changes)
+    _record_edit_events(db, ctx, activity, before)
 
     db.commit()
     db.refresh(activity)
     return activity
+
+
+@router.post("/{activity_id}/comments", response_model=ActivityHistoryItemOut, status_code=201)
+def add_activity_comment(
+    activity_id: uuid.UUID,
+    payload: ActivityCommentIn,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> ActivityHistoryItemOut:
+    """A comment on an activity, landing in the same timeline as field changes.
+    Unlike an edit this needs no open update period — being unable to say "this
+    is blocked on the permit" until a period opens would defeat the point."""
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx)
+    require_scope_access(activity.project_scope_id, ctx)
+
+    event = ActivityEvent(
+        id=uuid.uuid4(),
+        tenant_id=ctx.tenant_id,
+        project_id=activity.project_id,
+        activity_id=activity.id,
+        actor_user_id=ctx.user.id,
+        kind="comment",
+        body=payload.body.strip(),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return ActivityHistoryItemOut(
+        kind="comment",
+        created_at=event.created_at,
+        actor_name=ctx.user.full_name,
+        body=event.body,
+    )
+
+
+@router.get("/{activity_id}/history", response_model=list[ActivityHistoryItemOut])
+def activity_history(
+    activity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[ActivityHistoryItemOut]:
+    """The Activity modal's History tab: user edits and comments (stored in
+    activity_events) merged with programme-driven date/float movement, newest
+    first.
+
+    The programme side is derived on read by diffing this activity's entry in
+    consecutive `ScheduleImport.activities_snapshot` blobs rather than stored:
+    the import path stays untouched, and the history works retroactively for
+    programmes uploaded before any of this existed."""
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx)
+    require_scope_access(activity.project_scope_id, ctx)
+
+    items: list[ActivityHistoryItemOut] = []
+
+    events = (
+        db.query(ActivityEvent)
+        .filter(ActivityEvent.tenant_id == ctx.tenant_id, ActivityEvent.activity_id == activity_id)
+        .order_by(ActivityEvent.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    actor_ids = {e.actor_user_id for e in events if e.actor_user_id}
+    actors = (
+        {u.id: u.full_name for u in db.query(User).filter(User.id.in_(actor_ids)).all()}
+        if actor_ids
+        else {}
+    )
+    for event in events:
+        items.append(
+            ActivityHistoryItemOut(
+                kind=event.kind,
+                created_at=event.created_at,
+                actor_name=actors.get(event.actor_user_id) if event.actor_user_id else None,
+                field=event.field,
+                old_value=event.old_value,
+                new_value=event.new_value,
+                body=event.body,
+            )
+        )
+
+    imports = (
+        db.query(ScheduleImport)
+        .filter(
+            ScheduleImport.tenant_id == ctx.tenant_id,
+            ScheduleImport.project_id == activity.project_id,
+        )
+        .order_by(ScheduleImport.imported_at.desc())
+        .limit(_VERSION_HISTORY_IMPORTS)
+        .all()
+    )
+    # Back to chronological order so each import is compared with the one before it.
+    imports.reverse()
+    previous: dict | None = None
+    for schedule_import in imports:
+        entry = next(
+            (
+                row
+                for row in (schedule_import.activities_snapshot or [])
+                if row.get("external_id") == activity.external_id
+            ),
+            None,
+        )
+        if entry is None:
+            continue
+        if previous is not None:
+            for field in _TRACKED_VERSION_FIELDS:
+                old_value = _event_value(previous.get(field))
+                new_value = _event_value(entry.get(field))
+                if old_value == new_value:
+                    continue
+                items.append(
+                    ActivityHistoryItemOut(
+                        kind="version",
+                        created_at=schedule_import.imported_at,
+                        field=field,
+                        old_value=old_value,
+                        new_value=new_value,
+                        revision_label=schedule_import.revision_label or schedule_import.filename,
+                    )
+                )
+        previous = entry
+
+    items.sort(key=lambda i: i.created_at, reverse=True)
+    return items

@@ -158,6 +158,25 @@ export interface Activity {
   constraint_type_2?: string | null;
   constraint_date_2?: string | null;
   is_longest_path?: boolean;
+
+  // Poko's own annotations — set from the Activity modal, never touched by
+  // .xer import (see backend/app/models/activity.py).
+  is_important?: boolean;
+  tags?: string[];
+  notes?: string | null;
+}
+
+/** One entry in the Activity modal's History tab. "change"/"comment" come from
+ *  activity_events; "version" is derived from two consecutive import snapshots. */
+export interface ActivityHistoryItem {
+  kind: "change" | "comment" | "version";
+  created_at: string;
+  actor_name: string | null;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  body: string | null;
+  revision_label: string | null;
 }
 
 export interface DcmaCheckResult {

@@ -2,10 +2,14 @@ import enum
 import uuid
 from datetime import date
 
-from sqlalchemy import Boolean, Date, Enum as SAEnum, Float, ForeignKey, Integer, String
+import sqlalchemy as sa
+from sqlalchemy import Boolean, Date, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+_JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
 
 
 class ActivityStatus(str, enum.Enum):
@@ -37,6 +41,15 @@ class Activity(Base):
         nullable=False,
         default=ActivityStatus.not_started,
     )
+
+    # --- Team annotations, owned by Poko rather than P6 ---------------------
+    # Set from the Activity modal and deliberately NOT touched by .xer import,
+    # unlike everything in the P6 block below: an activity's dates come from the
+    # programme, but "we flagged this one" is the team's own note on it and has
+    # to survive every re-import.
+    is_important: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    tags: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # --- P6/CPM fields, populated by .xer import (backend/app/services/xer_import.py). ---
     # `remaining_duration_days` above stays the field the subcontractor scope page

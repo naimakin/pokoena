@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.models.activity import Activity
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
+from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship
 from app.models.baseline import (
     Baseline,
@@ -128,6 +129,12 @@ def _populate_everything(client, db_session, tenant, project, admin):
         RiskActionItem(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, risk_item_id=risk.id, action="Expedite")
     )
 
+    # --- activity timeline (a comment + the change rows a PATCH writes) ---
+    first_activity = db_session.query(Activity).filter(Activity.project_id == project.id).first()
+    if first_activity is not None:
+        client.post(f"/activities/{first_activity.id}/comments", json={"body": "Blocked on the permit"})
+        client.patch(f"/activities/{first_activity.id}", json={"is_important": True})
+
     # --- recovery plan + item (item cascades via recovery_plan delete) ---
     plan = RecoveryPlan(
         id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, activity_external_id="A100",
@@ -210,7 +217,7 @@ def _populate_everything(client, db_session, tenant, project, admin):
 
 
 _PROJECT_SCOPED_MODELS = [
-    Activity, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship,
+    Activity, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
     Baseline, Calendar, DashboardLayout, EvmSnapshot, ProgressEntry, ProjectMembership, ProjectScope,
     RecoveryPlan, RecoveryPlanItem, Resource, ResourceAssignment, RiskItem, RiskActionItem,
     SavedActivityFilter, ScheduleExport, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod, WbsNode,
