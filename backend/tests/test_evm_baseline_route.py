@@ -63,11 +63,31 @@ def test_baseline_auto_locked_after_first_import(client, db_session):
     active = body["active_baseline"]
     assert active["version_label"] == "Baseline"
     # A100(8) + A200(40) + A300(24) + A400(8) + A500(16) = 96 — A600 is a
-    # zero-duration milestone, excluded from BAC same as the reference.
+    # zero-duration milestone, excluded from BAC same as the reference, but it
+    # still counts as an activity (only WBS Summary rows don't) and gets its
+    # own BaselineActivity row for date-variance tracking.
     assert active["total_budget_manhours"] == 96.0
-    assert active["activity_count"] == 5
+    assert active["activity_count"] == 6
     assert active["target_start_date"] == "2026-01-05"
     assert active["target_end_date"] == "2026-01-14"
+
+
+def test_milestone_gets_a_baseline_activity_row_for_variance_tracking(client, db_session):
+    # A600 "Substantial Completion" is a 0-duration Finish Milestone (TT_FinMile)
+    # — it's correctly excluded from BAC (no manhours to budget) but must still
+    # get its own BaselineActivity row so it shows up in date-variance tracking.
+    # Previously the same duration>0 filter used for BAC also gated which
+    # activities became BaselineActivity rows, so every milestone silently
+    # vanished from "Activities behind" / worst-slip / the variance table.
+    tenant, project = _setup(db_session)
+    _login(client)
+    assert _import_fixture(client, project.id).status_code == 201
+
+    response = client.get(f"/projects/{project.id}/evm/baseline/variance")
+
+    assert response.status_code == 200
+    rows_by_external_id = {r["external_id"]: r for r in response.json()["rows"]}
+    assert "A600" in rows_by_external_id
 
 
 def test_manual_lock_conflicts_with_the_auto_locked_baseline(client, db_session):
@@ -92,7 +112,7 @@ def test_manual_lock_after_superseding_the_auto_baseline_computes_bac(client, db
     assert response.status_code == 201
     body = response.json()
     assert body["bac"] == 96.0
-    assert body["activity_count"] == 5
+    assert body["activity_count"] == 6
     assert body["target_start"] == "2026-01-05"
     assert body["target_end"] == "2026-01-14"
 

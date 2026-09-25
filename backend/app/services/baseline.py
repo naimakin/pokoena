@@ -52,29 +52,47 @@ class BaselineConflictError(BaselineLockError):
 def _compute_baseline_scope(
     activities: list[Activity],
 ) -> tuple[list[Activity], float, date, date]:
-    """Duration-loaded activities + BAC + target start/end. Raises
-    BaselineValidationError if the schedule isn't lockable yet."""
-    eligible = [a for a in activities if (a.target_duration_hours or 0) > 0]
+    """Baseline scope + BAC + target start/end. Raises BaselineValidationError
+    if the schedule isn't lockable yet.
 
-    bac = sum(a.target_duration_hours or 0.0 for a in eligible)
+    Scope excludes only WBS Summary rows (TT_WBS) — P6 auto-generates one per
+    WBS node purely for legacy rollup-bar compatibility; it isn't a real,
+    independently trackable activity and P6's own Activities view never lists
+    it as one. Everything else — including 0-duration Start/Finish Milestones,
+    Level of Effort and Resource Dependent activities — stays in scope so it
+    gets a BaselineActivity row and shows up in date-variance tracking
+    (previously only duration-loaded activities did, which silently dropped
+    every milestone from "Activities behind" / worst-slip / the variance
+    table on Planning > Baselines). Only duration-loaded activities count
+    toward BAC: a 0-duration milestone has no manhours to budget under this
+    linear-distribution PV curve.
+    """
+    scope = [a for a in activities if (a.task_type or "") != "TT_WBS"]
+    if not scope:
+        raise BaselineValidationError("Snapshot has no activities to baseline.")
+
+    duration_loaded = [a for a in scope if (a.target_duration_hours or 0) > 0]
+    bac = sum(a.target_duration_hours or 0.0 for a in duration_loaded)
     if bac <= 0:
         raise BaselineValidationError(
             "Snapshot has no duration-loaded activities (BAC = 0). Ensure activities have a target duration."
         )
 
-    starts = [s for s in (a.planned_start or a.early_start for a in eligible) if s]
-    ends = [e for e in (a.planned_finish or a.early_finish for a in eligible) if e]
+    starts = [s for s in (a.planned_start or a.early_start for a in scope) if s]
+    ends = [e for e in (a.planned_finish or a.early_finish for a in scope) if e]
     if not starts or not ends:
         raise BaselineValidationError("Activities have no planned dates. Run CPM (import a scheduled .xer) first.")
-    return eligible, round(bac, 4), min(starts), max(ends)
+    return scope, round(bac, 4), min(starts), max(ends)
 
 
 def _populate_baseline_children(
-    db: Session, tenant_id: uuid.UUID, baseline_id: uuid.UUID, eligible: list[Activity], bac: float
+    db: Session, tenant_id: uuid.UUID, baseline_id: uuid.UUID, scope: list[Activity], bac: float
 ) -> None:
-    """Write the BaselineActivity rows + the linear PV curve for a baseline."""
+    """Write the BaselineActivity rows (full scope — see _compute_baseline_scope)
+    + the linear PV curve for a baseline (duration-loaded activities only; a
+    0-duration milestone contributes nothing to a linear budget distribution)."""
     curve_input = []
-    for a in eligible:
+    for a in scope:
         a_start = a.planned_start or a.early_start
         a_end = a.planned_finish or a.early_finish
         db.add(
@@ -84,9 +102,10 @@ def _populate_baseline_children(
                 wbs_code=a.wbs_path,
             )
         )
-        curve_input.append(
-            {"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end}
-        )
+        if (a.target_duration_hours or 0) > 0:
+            curve_input.append(
+                {"planned_manhours": a.target_duration_hours or 0.0, "baseline_start": a_start, "baseline_end": a_end}
+            )
 
     for curve_date, pv_daily, pv_cumulative in generate_pv_curve(curve_input, bac):
         db.add(
@@ -149,7 +168,7 @@ def unique_baseline_label(db: Session, project_id: uuid.UUID) -> str:
     return f"Baseline r{n}"
 
 
-def _eligible_from_parsed(
+def _scope_from_parsed(
     db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, parsed_activities: list
 ) -> list:
     """Match a freshly-uploaded baseline .xer's own activities to the
@@ -170,6 +189,7 @@ def _eligible_from_parsed(
         items.append(
             SimpleNamespace(
                 id=row.id,
+                task_type=act.task_type,
                 target_duration_hours=act.target_drtn_hr_cnt,
                 planned_start=act.target_start_date.date() if act.target_start_date else None,
                 early_start=act.early_start_date.date() if act.early_start_date else None,
@@ -236,8 +256,8 @@ def lock_baseline_from_parsed(
     frozen dates/durations/BAC come from THIS file, never from whatever the
     live schedule currently says, so re-uploading/replacing the baseline can
     no longer clobber "Current update"."""
-    eligible = _eligible_from_parsed(db, tenant_id, project_id, parsed.activities)
-    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(eligible)
+    scope = _scope_from_parsed(db, tenant_id, project_id, parsed.activities)
+    scope, bac, target_start_date, target_end_date = _compute_baseline_scope(scope)
 
     existing_active = (
         db.query(Baseline)
@@ -254,9 +274,9 @@ def lock_baseline_from_parsed(
 
     baseline_id = _insert_baseline_row(
         db, tenant_id, project_id, schedule_import_id, locked_by_user_id, version_label, None,
-        eligible, bac, target_start_date, target_end_date,
+        scope, bac, target_start_date, target_end_date,
     )
-    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _populate_baseline_children(db, tenant_id, baseline_id, scope, bac)
     _snapshot_baseline_resources_from_parsed(db, tenant_id, baseline_id, project_id, parsed)
 
     db.flush()
@@ -282,8 +302,8 @@ def overwrite_active_baseline_from_parsed(
     if baseline is None:
         raise BaselineConflictError("No active baseline to overwrite.")
 
-    eligible = _eligible_from_parsed(db, tenant_id, project_id, parsed.activities)
-    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(eligible)
+    scope = _scope_from_parsed(db, tenant_id, project_id, parsed.activities)
+    scope, bac, target_start_date, target_end_date = _compute_baseline_scope(scope)
 
     db.query(BaselineResourceAssignment).filter(BaselineResourceAssignment.baseline_id == baseline.id).delete()
     db.query(BaselineResource).filter(BaselineResource.baseline_id == baseline.id).delete()
@@ -297,10 +317,10 @@ def overwrite_active_baseline_from_parsed(
     baseline.total_budget_manhours = bac
     baseline.target_start_date = target_start_date
     baseline.target_end_date = target_end_date
-    baseline.activity_count = len(eligible)
+    baseline.activity_count = len(scope)
     db.flush()
 
-    _populate_baseline_children(db, tenant_id, baseline.id, eligible, bac)
+    _populate_baseline_children(db, tenant_id, baseline.id, scope, bac)
     _snapshot_baseline_resources_from_parsed(db, tenant_id, baseline.id, project_id, parsed)
 
     db.flush()
@@ -317,7 +337,7 @@ def lock_baseline_for_project(
     notes: str | None = None,
 ) -> Baseline:
     activities = db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
-    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
+    scope, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
 
     existing_active = (
         db.query(Baseline)
@@ -334,9 +354,9 @@ def lock_baseline_for_project(
 
     baseline_id = _insert_baseline_row(
         db, tenant_id, project_id, schedule_import_id, locked_by_user_id, version_label, notes,
-        eligible, bac, target_start_date, target_end_date,
+        scope, bac, target_start_date, target_end_date,
     )
-    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _populate_baseline_children(db, tenant_id, baseline_id, scope, bac)
     _snapshot_baseline_resources(db, tenant_id, baseline_id, project_id)
 
     db.flush()
@@ -351,7 +371,7 @@ def _insert_baseline_row(
     locked_by_user_id: uuid.UUID,
     version_label: str,
     notes: str | None,
-    eligible: list,
+    scope: list,
     bac: float,
     target_start_date: date,
     target_end_date: date,
@@ -362,7 +382,7 @@ def _insert_baseline_row(
             id=baseline_id, tenant_id=tenant_id, project_id=project_id, schedule_import_id=schedule_import_id,
             version_label=version_label, locked_at=datetime.utcnow(), locked_by_user_id=locked_by_user_id,
             total_budget_manhours=bac, target_start_date=target_start_date, target_end_date=target_end_date,
-            distribution_method="linear", status=BaselineStatus.active, activity_count=len(eligible), notes=notes,
+            distribution_method="linear", status=BaselineStatus.active, activity_count=len(scope), notes=notes,
         )
     )
     db.flush()
@@ -404,6 +424,7 @@ def lock_baseline_from_snapshot(
         items.append(
             SimpleNamespace(
                 id=row.id,
+                task_type=entry.get("task_type"),
                 target_duration_hours=entry.get("target_duration_hours"),
                 planned_start=_iso_date(entry.get("planned_start")),
                 early_start=_iso_date(entry.get("early_start")),
@@ -412,13 +433,13 @@ def lock_baseline_from_snapshot(
                 wbs_path=entry.get("wbs_path"),
             )
         )
-    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(items)
+    scope, bac, target_start_date, target_end_date = _compute_baseline_scope(items)
 
     baseline_id = _insert_baseline_row(
         db, tenant_id, project_id, schedule_import.id, locked_by_user_id, version_label, None,
-        eligible, bac, target_start_date, target_end_date,
+        scope, bac, target_start_date, target_end_date,
     )
-    _populate_baseline_children(db, tenant_id, baseline_id, eligible, bac)
+    _populate_baseline_children(db, tenant_id, baseline_id, scope, bac)
     db.flush()
     return db.get(Baseline, baseline_id)
 
@@ -445,7 +466,7 @@ def overwrite_active_baseline(
         raise BaselineConflictError("No active baseline to overwrite.")
 
     activities = db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
-    eligible, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
+    scope, bac, target_start_date, target_end_date = _compute_baseline_scope(activities)
 
     db.query(BaselineResourceAssignment).filter(BaselineResourceAssignment.baseline_id == baseline.id).delete()
     db.query(BaselineResource).filter(BaselineResource.baseline_id == baseline.id).delete()
@@ -459,10 +480,10 @@ def overwrite_active_baseline(
     baseline.total_budget_manhours = bac
     baseline.target_start_date = target_start_date
     baseline.target_end_date = target_end_date
-    baseline.activity_count = len(eligible)
+    baseline.activity_count = len(scope)
     db.flush()
 
-    _populate_baseline_children(db, tenant_id, baseline.id, eligible, bac)
+    _populate_baseline_children(db, tenant_id, baseline.id, scope, bac)
     _snapshot_baseline_resources(db, tenant_id, baseline.id, project_id)
 
     db.flush()
