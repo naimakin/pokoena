@@ -24,6 +24,9 @@ class FieldChangeOut(BaseModel):
     new: str | int | float | None
     delta_days: int | float | None = None
     delta_hours: float | None = None
+    # Set on "logic": one line per relationship added/removed/retyped, written
+    # from this activity's point of view.
+    detail: list[str] | None = None
 
 
 class ActivityChangeOut(BaseModel):

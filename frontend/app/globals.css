@@ -438,6 +438,21 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .card-title{font-size:.875rem;font-weight:700}
 .card-title-sub{font-size:.75rem;color:var(--text-muted);font-weight:400;margin-top:.1rem}
 
+/* A card-head you can click to fold the card shut. The caret points down when
+   open and right when closed; the bottom border goes with the body so a folded
+   card reads as a single bar. */
+.section-head{
+  display:flex;align-items:center;gap:.55rem;width:100%;
+  padding:.9rem 1.1rem;background:none;border:0;border-bottom:1px solid var(--border);
+  font:inherit;color:inherit;text-align:left;cursor:pointer;
+}
+.section-head:hover{background:var(--surface-2)}
+.section-head[aria-expanded="false"]{border-bottom-color:transparent}
+.section-head > span,.section-head .card-title,.section-head .card-title-sub{display:block}
+.section-caret{flex:none;color:var(--text-muted);transition:transform .15s ease}
+.section-head[aria-expanded="false"] .section-caret{transform:rotate(-90deg)}
+.section-head .spacer{flex:1}
+
 /* ---------- table ---------- */
 table{width:100%;border-collapse:collapse}
 thead th{
@@ -802,7 +817,11 @@ tr.resolved{opacity:.45}
 
 /* ---------- print (Recovery Plan report) ---------- */
 @media print{
-  .a-topnav,.a-sidebar,.a-topbar,.no-print,.segmented,button{display:none!important}
+  /* Collapsible section headings are buttons so they can fold — on paper they
+     are still the headings, so they're the one button kind that prints. */
+  .a-topnav,.a-sidebar,.a-topbar,.no-print,.segmented,button:not(.section-head){display:none!important}
+  .section-head{border-bottom:1px solid var(--border)}
+  .section-caret{display:none!important}
   .a-content{padding:0;gap:.75rem;overflow:visible}
   .card{box-shadow:none;border:1px solid var(--border);break-inside:avoid}
   .table-wrap{overflow:visible}

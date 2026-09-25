@@ -57,7 +57,27 @@ def test_finish_and_start_and_duration_changes():
     f = _fields(compute_schedule_diff(prev, curr, [], [])["activities"]["modified"], "A")
     assert f["finish"]["delta_days"] == 10
     assert f["start"]["delta_days"] == 4
-    assert f["duration"]["delta_hours"] == 40.0
+    assert f["duration"]["delta_days"] == 5.0  # 40h, read in days like P6's own column
+
+
+def test_original_and_remaining_duration_are_reported_separately():
+    prev = [_a("A", planned_finish="2026-06-01", target_duration_hours=80, remaining_duration_hours=80)]
+    curr = [_a("A", planned_finish="2026-06-01", target_duration_hours=80, remaining_duration_hours=40)]
+    f = _fields(compute_schedule_diff(prev, curr, [], [])["activities"]["modified"], "A")
+    # Scope untouched, half the work burned down.
+    assert "duration" not in f
+    assert f["remaining_duration"]["old"] == 10.0 and f["remaining_duration"]["new"] == 5.0
+    assert f["remaining_duration"]["delta_days"] == -5.0
+
+
+def test_a_renamed_activity_reports_its_id_change_on_the_row():
+    d = compute_schedule_diff(
+        [_a("OLD", p6_task_id="t1", planned_finish="2026-06-01")],
+        [_a("NEW", p6_task_id="t1", planned_finish="2026-06-01")],
+        [], [],
+    )
+    f = _fields(d["activities"]["modified"], "NEW")
+    assert f["external_id"]["old"] == "OLD" and f["external_id"]["new"] == "NEW"
 
 
 def test_status_percent_criticality_constraint_wbs():
@@ -98,3 +118,29 @@ def test_relationship_changes_delegated():
     d = compute_schedule_diff([], [], rel_prev, rel_curr)
     assert d["summary"]["relationships_modified"] == 1
     assert d["relationships"]["changes"][0]["change_type"] == "MODIFIED"
+
+
+def _rel(pred, succ, link_type="FS", lag_hours=0):
+    return {"pred_external_id": pred, "pred_name": pred, "succ_external_id": succ,
+            "succ_name": succ, "link_type": link_type, "lag_hours": lag_hours}
+
+
+def test_a_relinked_activity_shows_up_as_modified_with_both_ends_described():
+    acts = [_a("A", planned_finish="2026-06-01"), _a("B", planned_finish="2026-06-01"),
+            _a("C", planned_finish="2026-06-01")]
+    # B's predecessor moves from A to C — nothing else about B changes.
+    d = compute_schedule_diff(acts, acts, [_rel("A", "B")], [_rel("C", "B")])
+
+    f = _fields(d["activities"]["modified"], "B")
+    assert list(f) == ["logic"]
+    assert f["logic"]["old"] == "1 links" and f["logic"]["new"] == "1 links"
+    assert f["logic"]["detail"] == ["+ ← C FS", "− ← A FS"]
+    # And the same change is on the other end of each link, pointing outward.
+    assert _fields(d["activities"]["modified"], "A")["logic"]["detail"] == ["− → B FS"]
+    assert _fields(d["activities"]["modified"], "C")["logic"]["detail"] == ["+ → B FS"]
+
+
+def test_activities_with_untouched_logic_stay_out_of_modified():
+    acts = [_a("A", planned_finish="2026-06-01"), _a("B", planned_finish="2026-06-01")]
+    rels = [_rel("A", "B")]
+    assert compute_schedule_diff(acts, acts, rels, rels)["activities"]["modified"] == []

@@ -1,14 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
-import { ArrowRightIcon, CompareIcon, DownloadIcon } from "@/components/icons";
+import { ArrowRightIcon, ChevronDownIcon, CompareIcon, DownloadIcon } from "@/components/icons";
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
 
 type SectionKey = "added" | "removed" | "renamed" | "modified" | "logic";
+
+// Start and finish dates move on almost every update, which buries the changes
+// this page is actually read for — logic, durations, scope. They stay one click
+// away rather than on by default.
+const MUTED_FIELDS = ["start", "finish"];
 
 function fmt(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -25,6 +30,33 @@ function deltaLabel(f: ActivityChange["fields"][number]): string {
   return "";
 }
 
+function Section({
+  title,
+  sub,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  title: string;
+  sub?: ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="card">
+      <button className="section-head" aria-expanded={!collapsed} onClick={onToggle}>
+        <ChevronDownIcon className="icon section-caret" />
+        <span>
+          <span className="card-title">{title}</span>
+          {sub && <span className="card-title-sub">{sub}</span>}
+        </span>
+      </button>
+      {!collapsed && children}
+    </div>
+  );
+}
+
 export default function ScheduleChangesPage() {
   const { project } = useProjectContext();
   const [imports, setImports] = useState<ScheduleImport[]>([]);
@@ -37,7 +69,8 @@ export default function ScheduleChangesPage() {
   const [comparing, setComparing] = useState(false);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [search, setSearch] = useState("");
-  const [hidden, setHidden] = useState<Set<SectionKey>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
+  const [offFields, setOffFields] = useState<Set<string>>(new Set(MUTED_FIELDS));
 
   useEffect(() => {
     if (!project) return;
@@ -82,21 +115,42 @@ export default function ScheduleChangesPage() {
     }
   }, [project, runCompare]);
 
+  // Only offer a filter chip for the kinds of change this comparison actually
+  // contains, so the row stays short on a quiet update.
+  const fieldTypes = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const r of report?.activities.modified ?? []) {
+      for (const f of r.fields) labels.set(f.field, f.label);
+    }
+    return [...labels].map(([field, label]) => ({ field, label }));
+  }, [report]);
+
   const modifiedRows = useMemo(() => {
-    const rows = report?.activities.modified ?? [];
     const q = search.trim().toLowerCase();
-    return rows.filter(
-      (r) =>
-        (!criticalOnly || r.is_critical) &&
-        (!q || r.external_id.toLowerCase().includes(q) || (r.name ?? "").toLowerCase().includes(q)),
-    );
-  }, [report, criticalOnly, search]);
+    return (report?.activities.modified ?? [])
+      .filter(
+        (r) =>
+          (!criticalOnly || r.is_critical) &&
+          (!q || r.external_id.toLowerCase().includes(q) || (r.name ?? "").toLowerCase().includes(q)),
+      )
+      .map((r) => ({ ...r, fields: r.fields.filter((f) => !offFields.has(f.field)) }))
+      .filter((r) => r.fields.length > 0);
+  }, [report, criticalOnly, search, offFields]);
 
   function toggleSection(k: SectionKey) {
-    setHidden((prev) => {
+    setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(k)) next.delete(k);
       else next.add(k);
+      return next;
+    });
+  }
+
+  function toggleField(field: string) {
+    setOffFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
       return next;
     });
   }
@@ -129,7 +183,7 @@ export default function ScheduleChangesPage() {
   const CHIPS: { key: SectionKey; label: string; count: number; chip: string }[] = [
     { key: "added", label: "added", count: s.activities_added, chip: "chip-good" },
     { key: "removed", label: "removed", count: s.activities_removed, chip: "chip-crit" },
-    { key: "renamed", label: "renamed", count: s.activities_renamed, chip: "chip-neutral" },
+    { key: "renamed", label: "ID changed", count: s.activities_renamed, chip: "chip-neutral" },
     { key: "modified", label: "modified", count: s.activities_modified, chip: "chip-warn" },
     { key: "logic", label: "logic changes", count: s.relationships_added + s.relationships_removed + s.relationships_modified, chip: "chip-info" },
   ];
@@ -219,8 +273,9 @@ export default function ScheduleChangesPage() {
                 <button
                   key={c.key}
                   className={`chip ${c.chip}`}
-                  style={{ border: "none", cursor: "pointer", opacity: hidden.has(c.key) ? 0.4 : 1 }}
+                  style={{ border: "none", cursor: "pointer", opacity: collapsed.has(c.key) ? 0.4 : 1 }}
                   onClick={() => toggleSection(c.key)}
+                  title={`${collapsed.has(c.key) ? "Expand" : "Collapse"} this section`}
                 >
                   {c.count} {c.label}
                 </button>
@@ -239,9 +294,34 @@ export default function ScheduleChangesPage() {
               />
             </div>
 
-            {!hidden.has("added") && report.activities.added.length > 0 && (
-              <div className="card">
-                <div className="card-head"><div className="card-title">Added activities ({report.activities.added.length})</div></div>
+            {fieldTypes.length > 0 && !collapsed.has("modified") && (
+              <div
+                className="card no-print"
+                style={{ padding: "0.7rem 1.1rem", display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap" }}
+              >
+                <span style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                  What changed
+                </span>
+                {fieldTypes.map((f) => (
+                  <button
+                    key={f.field}
+                    className="chip chip-neutral"
+                    style={{ border: "none", cursor: "pointer", opacity: offFields.has(f.field) ? 0.4 : 1 }}
+                    onClick={() => toggleField(f.field)}
+                    aria-pressed={!offFields.has(f.field)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {report.activities.added.length > 0 && (
+              <Section
+                title={`Added activities (${report.activities.added.length})`}
+                collapsed={collapsed.has("added")}
+                onToggle={() => toggleSection("added")}
+              >
                 <div className="table-wrap">
                   <table>
                     <tbody>
@@ -255,12 +335,15 @@ export default function ScheduleChangesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Section>
             )}
 
-            {!hidden.has("removed") && report.activities.removed.length > 0 && (
-              <div className="card">
-                <div className="card-head"><div className="card-title">Removed activities ({report.activities.removed.length})</div></div>
+            {report.activities.removed.length > 0 && (
+              <Section
+                title={`Removed activities (${report.activities.removed.length})`}
+                collapsed={collapsed.has("removed")}
+                onToggle={() => toggleSection("removed")}
+              >
                 <div className="table-wrap">
                   <table>
                     <tbody>
@@ -273,12 +356,16 @@ export default function ScheduleChangesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Section>
             )}
 
-            {!hidden.has("renamed") && report.activities.renamed.length > 0 && (
-              <div className="card">
-                <div className="card-head"><div className="card-title">Renamed activities ({report.activities.renamed.length})</div></div>
+            {report.activities.renamed.length > 0 && (
+              <Section
+                title={`Activity ID changed (${report.activities.renamed.length})`}
+                sub="Same P6 task, new Activity ID — matched on the task's internal id"
+                collapsed={collapsed.has("renamed")}
+                onToggle={() => toggleSection("renamed")}
+              >
                 <div className="table-wrap">
                   <table>
                     <tbody>
@@ -291,12 +378,15 @@ export default function ScheduleChangesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Section>
             )}
 
-            {!hidden.has("modified") && modifiedRows.length > 0 && (
-              <div className="card">
-                <div className="card-head"><div className="card-title">Modified activities ({modifiedRows.length})</div></div>
+            {modifiedRows.length > 0 && (
+              <Section
+                title={`Modified activities (${modifiedRows.length})`}
+                collapsed={collapsed.has("modified")}
+                onToggle={() => toggleSection("modified")}
+              >
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -314,12 +404,21 @@ export default function ScheduleChangesPage() {
                           </td>
                           <td>
                             {r.fields.map((f, i) => (
-                              <div key={i} style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".8125rem", padding: ".1rem 0" }}>
-                                <span className="chip chip-neutral" style={{ minWidth: 70, justifyContent: "center" }}>{f.label}</span>
-                                <span style={{ color: "var(--text-muted)" }}>{String(f.old ?? "—")}</span>
-                                <ArrowRightIcon className="icon" style={{ width: 11, height: 11 }} />
-                                <span style={{ fontWeight: 600 }}>{String(f.new ?? "—")}</span>
-                                {deltaLabel(f) && <span className="mono" style={{ color: "var(--crit)" }}>{deltaLabel(f)}</span>}
+                              <div key={i} style={{ padding: ".1rem 0" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".8125rem", flexWrap: "wrap" }}>
+                                  <span className="chip chip-neutral" style={{ minWidth: 70, justifyContent: "center" }}>{f.label}</span>
+                                  <span style={{ color: "var(--text-muted)" }}>{String(f.old ?? "—")}</span>
+                                  <ArrowRightIcon className="icon" style={{ width: 11, height: 11 }} />
+                                  <span style={{ fontWeight: 600 }}>{String(f.new ?? "—")}</span>
+                                  {deltaLabel(f) && <span className="mono" style={{ color: "var(--crit)" }}>{deltaLabel(f)}</span>}
+                                </div>
+                                {f.detail && (
+                                  <div className="mono" style={{ fontSize: ".6875rem", color: "var(--text-muted)", paddingLeft: "calc(70px + .4rem)" }}>
+                                    {f.detail.map((line, j) => (
+                                      <div key={j}>{line}</div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </td>
@@ -328,21 +427,15 @@ export default function ScheduleChangesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Section>
             )}
 
-            {!hidden.has("logic") && report.relationships.changes.length > 0 && (
-              <div className="card">
-                <div className="card-head">
-                  <div>
-                    <div className="card-title">
-                      Logic changes — {report.relationships.summary.added} added · {report.relationships.summary.removed} removed · {report.relationships.summary.modified} modified
-                    </div>
-                    <div className="card-title-sub">
-                      <Link href="/logic-diff" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>Open in Logic Diff →</Link>
-                    </div>
-                  </div>
-                </div>
+            {report.relationships.changes.length > 0 && (
+              <Section
+                title={`Logic changes — ${report.relationships.summary.added} added · ${report.relationships.summary.removed} removed · ${report.relationships.summary.modified} modified`}
+                collapsed={collapsed.has("logic")}
+                onToggle={() => toggleSection("logic")}
+              >
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -370,18 +463,30 @@ export default function ScheduleChangesPage() {
                     </tbody>
                   </table>
                 </div>
-                {report.relationships.changes.length > 15 && (
-                  <div style={{ padding: ".5rem 1rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
-                    +{report.relationships.changes.length - 15} more — see Logic Diff
-                  </div>
-                )}
-              </div>
+                <div style={{ padding: ".5rem 1.1rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
+                  {report.relationships.changes.length > 15 && (
+                    <>+{report.relationships.changes.length - 15} more — </>
+                  )}
+                  <Link href="/logic-diff" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
+                    Open in Logic Diff →
+                  </Link>
+                </div>
+              </Section>
             )}
 
             {s.activities_added + s.activities_removed + s.activities_renamed + s.activities_modified + report.relationships.summary.total === 0 && (
               <div className="card">
                 <p className="empty-state">
                   No changes between {report.from_import?.revision_label} and {report.to_import?.revision_label}.
+                </p>
+              </div>
+            )}
+
+            {s.activities_modified > 0 && modifiedRows.length === 0 && !collapsed.has("modified") && (
+              <div className="card">
+                <p className="empty-state">
+                  {s.activities_modified} activities changed, but none of them under the filters above.
+                  {offFields.size > 0 && " Start and finish dates are hidden by default."}
                 </p>
               </div>
             )}

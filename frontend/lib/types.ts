@@ -269,6 +269,8 @@ export interface FieldChange {
   new: string | number | null;
   delta_days: number | null;
   delta_hours: number | null;
+  /** Set on "logic": one line per relationship added/removed/retyped. */
+  detail: string[] | null;
 }
 
 export interface ActivityChange {

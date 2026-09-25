@@ -12,12 +12,16 @@ comparison that spans the change degrades gracefully.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 
-from app.engine.diff.logic_diff import compare_relationship_snapshots
+from app.engine.diff.logic_diff import RelationshipChange, compare_relationship_snapshots
 
 _START_KEYS = ("actual_start", "planned_start", "early_start")
 _FINISH_KEYS = ("actual_finish", "planned_finish", "early_finish")
+
+_LOGIC_SIGN = {"ADDED": "+", "REMOVED": "−", "MODIFIED": "~"}
+_LOGIC_DETAIL_LIMIT = 6
 
 
 def _parse(value: str | None) -> date | None:
@@ -36,10 +40,20 @@ def _has_any(snap: dict, keys: tuple[str, ...]) -> bool:
     return any(k in snap for k in keys)
 
 
+def _field(field: str, label: str, old, new, **extra) -> dict:
+    return {
+        "field": field, "label": label, "old": old, "new": new,
+        "delta_days": None, "delta_hours": None, "detail": None, **extra,
+    }
+
+
 def _diff_activity(
     prev: dict, curr: dict, *, date_threshold_days: int, duration_threshold_hours: float
 ) -> list[dict]:
     fields: list[dict] = []
+
+    if prev.get("name") != curr.get("name"):
+        fields.append(_field("name", "Name", prev.get("name"), curr.get("name")))
 
     pf, cf = _pick(prev, _FINISH_KEYS), _pick(curr, _FINISH_KEYS)
     if pf and cf and abs((cf - pf).days) >= date_threshold_days:
@@ -56,11 +70,22 @@ def _diff_activity(
                  "delta_days": (cs - ps).days, "delta_hours": None}
             )
 
-    pd, cd = prev.get("target_duration_hours"), curr.get("target_duration_hours")
-    if pd is not None and cd is not None and abs(cd - pd) >= duration_threshold_hours:
+    # Original vs remaining duration are different questions: the first says the
+    # plan was re-scoped, the second says work is being burned down (or isn't).
+    # P6 keeps both, so report both rather than one "Duration".
+    for key, field_name, label in (
+        ("target_duration_hours", "duration", "Original duration (d)"),
+        ("remaining_duration_hours", "remaining_duration", "Remaining duration (d)"),
+    ):
+        po, cu = prev.get(key), curr.get(key)
+        if po is None or cu is None or abs(cu - po) < duration_threshold_hours:
+            continue
+        # Stored in hours, read in days — P6's own unit for a duration column.
         fields.append(
-            {"field": "duration", "label": "Duration", "old": pd, "new": cd,
-             "delta_days": None, "delta_hours": round(cd - pd, 1)}
+            _field(
+                field_name, label, round(po / 8.0, 1), round(cu / 8.0, 1),
+                delta_days=round((cu - po) / 8.0, 1),
+            )
         )
 
     if prev.get("status") and curr.get("status") and prev["status"] != curr["status"]:
@@ -115,6 +140,59 @@ def _diff_activity(
     return fields
 
 
+def _link_counts(rels: list[dict]) -> Counter:
+    """How many relationships each activity sits on, either end."""
+    counts: Counter = Counter()
+    for r in rels or []:
+        counts[r["pred_external_id"]] += 1
+        counts[r["succ_external_id"]] += 1
+    return counts
+
+
+def _describe_link(c: RelationshipChange, ext_id: str) -> str:
+    """One line of a logic change, written from `ext_id`'s point of view: an
+    arrow into it for a predecessor, out of it for a successor."""
+    other, arrow = (
+        (c.pred_external_id, "←") if c.succ_external_id == ext_id else (c.succ_external_id, "→")
+    )
+    link = c.new_link_type or c.old_link_type or ""
+    if c.change_type == "MODIFIED":
+        bits = []
+        if c.old_link_type != c.new_link_type:
+            bits.append(f"{c.old_link_type} → {c.new_link_type}")
+        if c.old_lag_hours != c.new_lag_hours:
+            bits.append(f"lag {c.old_lag_hours}h → {c.new_lag_hours}h")
+        link = ", ".join(bits) or link
+    elif c.new_lag_hours or c.old_lag_hours:
+        link = f"{link} lag {c.new_lag_hours if c.change_type == 'ADDED' else c.old_lag_hours}h"
+    return f"{_LOGIC_SIGN[c.change_type]} {arrow} {other} {link}".rstrip()
+
+
+def _logic_by_activity(
+    rel_changes: list[RelationshipChange], prev_rels: list[dict], curr_rels: list[dict]
+) -> dict[str, dict]:
+    """Per-activity view of the relationship diff, so "did this activity's logic
+    change?" is answerable on the activity row rather than only in the separate
+    Logic changes table."""
+    touched: dict[str, list[RelationshipChange]] = {}
+    for c in rel_changes:
+        for ext_id in (c.pred_external_id, c.succ_external_id):
+            touched.setdefault(ext_id, []).append(c)
+
+    before, after = _link_counts(prev_rels), _link_counts(curr_rels)
+    out: dict[str, dict] = {}
+    for ext_id, changes in touched.items():
+        detail = [_describe_link(c, ext_id) for c in changes[:_LOGIC_DETAIL_LIMIT]]
+        if len(changes) > _LOGIC_DETAIL_LIMIT:
+            detail.append(f"+{len(changes) - _LOGIC_DETAIL_LIMIT} more")
+        out[ext_id] = {
+            "old": f"{before.get(ext_id, 0)} links",
+            "new": f"{after.get(ext_id, 0)} links",
+            "detail": detail,
+        }
+    return out
+
+
 def compute_schedule_diff(
     prev_acts: list[dict],
     curr_acts: list[dict],
@@ -128,6 +206,12 @@ def compute_schedule_diff(
     prev_by_ext = {a["external_id"]: a for a in prev_acts}
     curr_by_ext = {a["external_id"]: a for a in curr_acts}
     prev_by_p6 = {a["p6_task_id"]: a for a in prev_acts if a.get("p6_task_id")}
+
+    # Logic first: each surviving activity gets its own relationship changes
+    # folded in as a field, so an activity that was only re-linked still shows
+    # up under Modified instead of only in the Logic changes table.
+    rel_summary, rel_changes = compare_relationship_snapshots(prev_rels, curr_rels, lag_threshold_hours)
+    logic_by_ext = _logic_by_activity(rel_changes, prev_rels, curr_rels)
 
     added: list[dict] = []
     removed: list[dict] = []
@@ -165,6 +249,20 @@ def compute_schedule_diff(
         fields = _diff_activity(
             p, c, date_threshold_days=date_threshold_days, duration_threshold_hours=duration_threshold_hours
         )
+        # A rename is also an Activity ID change — it has its own section, but
+        # repeat it here so a row read on its own is complete.
+        if is_rename:
+            fields.insert(0, _field("external_id", "Activity ID", p["external_id"], c["external_id"]))
+        logic = logic_by_ext.get(c["external_id"]) or (
+            logic_by_ext.get(p["external_id"]) if is_rename else None
+        )
+        if logic:
+            fields.append(
+                _field(
+                    "logic", "Logic", logic["old"], logic["new"],
+                    detail=logic["detail"],
+                )
+            )
         if fields:
             modified.append(
                 {
@@ -183,8 +281,6 @@ def compute_schedule_diff(
             )
 
     modified.sort(key=lambda m: (not m["is_critical"], -len(m["fields"])))
-
-    rel_summary, rel_changes = compare_relationship_snapshots(prev_rels, curr_rels, lag_threshold_hours)
 
     date_changes = sum(
         1 for m in modified if any(f["field"] in ("start", "finish") for f in m["fields"])
