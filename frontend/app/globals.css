@@ -975,6 +975,15 @@ tr.resolved{opacity:.45}
 .gantt-maxlevel input{width:110px;accent-color:var(--accent)}
 
 .gantt-panes{display:flex;height:68vh;min-height:360px;--gantt-row:28px}
+/* Full screen: the card IS the viewport, so the panes take whatever's left
+   under the header and toolbar rather than a fixed slice of it. The explicit
+   background matters — the browser paints a fullscreen element black by
+   default. */
+.gantt-viz.is-fullscreen{
+  display:flex;flex-direction:column;height:100vh;
+  border-radius:0;background:var(--surface);
+}
+.gantt-viz.is-fullscreen .gantt-panes{flex:1;height:auto;min-height:0}
 .gantt-pane{overflow:auto;flex-shrink:0;background:var(--surface)}
 .gantt-pane-chart{flex:1;flex-shrink:1;min-width:0}
 .gantt-head{

@@ -300,6 +300,28 @@ export function ExpandIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function MaximizeIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+export function MinimizeIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M3 8h3a2 2 0 0 0 2-2V3" />
+      <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+      <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+      <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+    </svg>
+  );
+}
+
 export function InfoIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

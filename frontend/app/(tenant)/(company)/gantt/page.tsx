@@ -12,7 +12,7 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, ActivityCodes, BaselineVariance, ScheduleImport, WbsNode } from "@/lib/types";
-import { ChevronDownIcon, ExpandIcon, XIcon } from "@/components/icons";
+import { ChevronDownIcon, ExpandIcon, MaximizeIcon, MinimizeIcon, XIcon } from "@/components/icons";
 import { buildGridRows, groupByLeaf, UNGROUPED_KEY, type GridRow } from "@/lib/wbs-tree";
 
 // Hand-rolled split-pane Gantt (no charting library — every open-source one
@@ -117,6 +117,21 @@ function fmtDate(iso: string | null | undefined): string {
 
 function isMilestone(a: Activity): boolean {
   return Boolean(a.task_type && MILESTONE_TYPES.has(a.task_type));
+}
+
+// A milestone is a single point in time, and P6 shows it against the one date it
+// actually has: a Start Milestone has a start and no finish, a Finish Milestone
+// the other way round. The .xer stores both (equal to each other) on every
+// activity, so blank the one that isn't real instead of printing the same date
+// in both columns.
+function milestoneDates(
+  a: Activity,
+  start: string | null,
+  finish: string | null,
+): { start: string | null; finish: string | null } {
+  if (a.task_type === "TT_Mile" || a.task_type === "TT_StartMile") return { start, finish: null };
+  if (a.task_type === "TT_FinMile") return { start: null, finish };
+  return { start, finish };
 }
 
 function earliestDate(a: Activity): string | null {
@@ -241,12 +256,14 @@ export default function GanttPage() {
   const [maxLevel, setMaxLevel] = useState(10);
   const [leftW, setLeftW] = useState(560);
   const [colWidths, setColWidths] = useState<Record<ColKey, number>>({ ...DEFAULT_COL_WIDTHS });
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
   const paneWrapRef = useRef<HTMLDivElement>(null);
   const scrollLock = useRef<"left" | "right" | null>(null);
   const releaseRaf = useRef<number | null>(null);
+  const vizRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startPxPerDay: number } | null>(null);
   const latestClientX = useRef(0);
   const dragRaf = useRef<number | null>(null);
@@ -631,6 +648,23 @@ export default function GanttPage() {
     [],
   );
 
+  // Fullscreen is driven by the browser, not by us: Esc and the window chrome
+  // can both exit it without going through the button, so the button only ever
+  // asks — `fullscreenchange` is what actually sets the state.
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === vizRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      vizRef.current?.requestFullscreen().catch(() => undefined);
+    }
+  }
+
   function applyMaxLevel(level: number) {
     setMaxLevel(level);
     if (level >= 10) {
@@ -1010,7 +1044,11 @@ export default function GanttPage() {
         )}
 
         {/* ---------------- schedule visualization ---------------- */}
-        <div className="card" style={{ overflow: "hidden" }}>
+        <div
+          ref={vizRef}
+          className={`card gantt-viz${isFullscreen ? " is-fullscreen" : ""}`}
+          style={{ overflow: "hidden" }}
+        >
           <div className="card-head">
             <div>
               <div className="card-title">Schedule Visualization</div>
@@ -1037,6 +1075,15 @@ export default function GanttPage() {
                 onClick={fitToScreen}
               >
                 <ExpandIcon className="icon" /> Fit
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                title={isFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+                aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+                onClick={toggleFullscreen}
+              >
+                {isFullscreen ? <MinimizeIcon className="icon" /> : <MaximizeIcon className="icon" />}
               </button>
             </div>
           </div>
@@ -1322,12 +1369,14 @@ function GridRowCells({
   const a = row.activity;
   const bl = baselineByActivity.get(a.id);
   const dur = durationDays(a);
+  const current = milestoneDates(a, earliestDate(a), latestDate(a));
+  const baseline = milestoneDates(a, bl?.start ?? null, bl?.finish ?? null);
   const cells: Record<ColKey, string> = {
     name: a.name,
-    current_start: fmtDate(earliestDate(a)),
-    current_finish: fmtDate(latestDate(a)),
-    baseline_start: fmtDate(bl?.start ?? null),
-    baseline_finish: fmtDate(bl?.finish ?? null),
+    current_start: fmtDate(current.start),
+    current_finish: fmtDate(current.finish),
+    baseline_start: fmtDate(baseline.start),
+    baseline_finish: fmtDate(baseline.finish),
     duration: dur != null ? `${dur} days` : "—",
     metric: metricCell(a),
   };

@@ -29,6 +29,7 @@ from app.schemas.activity import (
     ActivityRelationshipOut,
     ActivityUpdate,
 )
+from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -195,6 +196,25 @@ def list_activities(
         if not ctx.scope_ids:
             return []
         query = query.filter(Activity.project_scope_id.in_(ctx.scope_ids))
+    # An .xer is a full snapshot: importing one prunes WBS nodes that are no
+    # longer in the file, but activity rows are deliberately kept, because they
+    # carry subcontractor progress, comments and annotations (see services/
+    # xer_import.py). An activity dropped from the programme therefore survived
+    # with a wbs_path pointing at a node that no longer exists, so every grid
+    # showed it under "Ungrouped" as if it were live work, and it kept inflating
+    # the project's activity counts. It isn't part of the current programme, so
+    # it doesn't belong in this list — Execution > Changes is where a removed
+    # activity is reported, off the frozen per-import snapshots. The row itself
+    # is never deleted, and returns here as soon as an import brings it back.
+    #
+    # last_import_id IS NULL means the activity was created by a user, or its
+    # import was deleted (routes/schedule_imports.py nulls the column rather
+    # than orphaning the row), so those always stay listed.
+    current_import = get_current_import(db, ctx.tenant_id, project_id)
+    if current_import is not None:
+        query = query.filter(
+            (Activity.last_import_id.is_(None)) | (Activity.last_import_id == current_import.id)
+        )
     return query.order_by(Activity.external_id).all()
 
 
