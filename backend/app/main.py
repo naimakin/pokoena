@@ -13,6 +13,7 @@ from app.api.routes import (
     dcma,
     evm,
     export,
+    float_path,
     invites,
     logic_diff,
     metadata,
@@ -22,6 +23,7 @@ from app.api.routes import (
     project_status,
     projects,
     recovery_plans,
+    reports,
     risk,
     risks,
     saved_activity_filters,
@@ -98,6 +100,8 @@ app.include_router(recovery_plans.router)
 app.include_router(risks.router)
 app.include_router(saved_activity_filters.router)
 app.include_router(schedule_changes.router)
+app.include_router(float_path.router)
+app.include_router(reports.router)
 
 
 @app.get("/healthz")

@@ -87,6 +87,7 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
+      { href: "/planning/float-path", label: "Float Path", icon: TrendingUpIcon, visible: always },
       { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
       { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
@@ -127,15 +128,14 @@ const TOP_SECTIONS: NavSection[] = [
     key: "reporting",
     label: "Reporting",
     icon: BarChartIcon,
-    href: "/reporting/project-dashboard",
+    href: "/reporting/reports",
     visible: always,
+    // Progress Reports / Schedule Reports / Custom Reports / Project Dashboard
+    // were four empty slots for the same thing: a report you assemble and hand
+    // to someone. They are one page now, and the old routes redirect to it.
     children: [
-      { href: "/reporting/project-dashboard", label: "Project Dashboard", icon: GridIcon, visible: always },
-      { href: "/reporting/progress-reports", label: "Progress Reports", icon: ClockIcon, visible: always },
-      { href: "/reporting/schedule-reports", label: "Schedule Reports", icon: GanttIcon, visible: always },
-      { href: "/evm", label: "S-Curve", icon: TrendingUpIcon, visible: always },
-      { href: "/evm", label: "EVM", icon: TrendingUpIcon, visible: always },
-      { href: "/reporting/custom-reports", label: "Custom Reports", icon: BarChartIcon, visible: always },
+      { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: always },
+      { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: always },
       { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: always },
       { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: always },
     ],

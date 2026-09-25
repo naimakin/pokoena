@@ -24,6 +24,7 @@ from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.report_format import ReportFormat
 from app.models.recovery_plan import (
     RecoveryItemStatus,
     RecoveryPlan,
@@ -97,6 +98,7 @@ __all__ = [
     "RecoveryPlan",
     "RecoveryPlanItem",
     "RecoveryPlanStatus",
+    "ReportFormat",
     "RecoveryItemStatus",
     "Resource",
     "ResourceAssignment",

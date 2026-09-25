@@ -269,7 +269,11 @@ via `next/font/google` in `frontend/app/layout.tsx`.
 - Uppercase micro-labels: 0.06–0.11em tracking, weight 500–600, `--text-muted`
 - Primary action buttons: `--accent` background, white text, `--radius-sm`, `--shadow-xs` at rest →
   `--shadow-sm` on hover, `--accent-focus` on `:active`
-- Destructive/warning badges: float-* color ramp, not generic red/green
+- Destructive/warning badges: float-* color ramp, not generic red/green. Implemented as
+  `--float-zero` … `--float-high` (plus a `-soft` tint for each) with the `.float-badge` class;
+  pick the step with `floatClass()` in `components/reporting/format.tsx`, which bands on total
+  float in days at 0 / 5 / 15 / 30. `--float-zero` shares `--crit`'s value so a zero-float badge
+  and a critical row agree.
 - Radius: use the `--radius-*` scale (xs 4 / sm 6 / md 8 / lg 10 / xl 12 / pill), never ad-hoc px
 - Elevation: use the `--shadow-*` scale (xs/sm/md/lg), never ad-hoc shadows
 - Focus: rely on the global `:focus-visible` rule (accent outline + accent-soft halo) — don't restyle per component

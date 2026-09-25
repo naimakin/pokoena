@@ -1,7 +1,6 @@
-import { ComingSoon } from "@/components/ComingSoon";
+import { redirect } from "next/navigation";
 
-export default function ReportingProjectDashboardPage() {
-  return (
-    <ComingSoon label="Project Dashboard" description="A configurable reporting dashboard for this project will live here." />
-  );
+// Folded into the single Reports page; kept so existing links don't 404.
+export default function Page() {
+  redirect("/reporting/reports");
 }

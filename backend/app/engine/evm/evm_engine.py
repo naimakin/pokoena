@@ -93,7 +93,7 @@ def _parse_hhmm(s: str) -> time:
     return time(int(s[:2]), int(s[3:5]))
 
 
-def _build_calendar_engine(calendar_row: CalendarModel) -> CalendarEngine:
+def build_calendar_engine(calendar_row: CalendarModel) -> CalendarEngine:
     """Reconstructs the parser's in-memory Calendar dataclass from our stored
     JSON (inverse of the shape `services/xer_import.py` writes) so we can
     reuse CalendarEngine.work_hours_between without duplicating its logic."""
@@ -215,7 +215,7 @@ def calculate_evm(
         if row is None:
             return None
         if row.id not in engine_cache:
-            engine_cache[row.id] = _build_calendar_engine(row)
+            engine_cache[row.id] = build_calendar_engine(row)
         return engine_cache[row.id]
 
     assign_map: dict[uuid.UUID, list[ResourceAssignment]] = {}

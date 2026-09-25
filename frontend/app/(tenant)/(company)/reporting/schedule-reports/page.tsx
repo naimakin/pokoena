@@ -1,5 +1,6 @@
-import { ComingSoon } from "@/components/ComingSoon";
+import { redirect } from "next/navigation";
 
-export default function ScheduleReportsPage() {
-  return <ComingSoon label="Schedule Reports" description="Formatted schedule reports for stakeholders will live here." />;
+// Folded into the single Reports page; kept so existing links don't 404.
+export default function Page() {
+  redirect("/reporting/reports");
 }

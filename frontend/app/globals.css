@@ -58,6 +58,21 @@ a{color:inherit}
   --info:#3f6f69;
   --info-soft:rgba(63,111,105,.10);
 
+  /* float ramp — the five steps DESIGN.md specifies for total-float badges.
+     Its own scale rather than reusing crit/warn/good, because float is a
+     measurement read against thresholds, not a pass/fail state; --float-zero
+     shares --crit's value so a zero-float badge and a critical row agree. */
+  --float-zero:#c21f13;
+  --float-low:#c9622f;
+  --float-medium:#b5720e;
+  --float-adequate:#4a9a6e;
+  --float-high:#1f8f5f;
+  --float-zero-soft:rgba(194,31,19,.10);
+  --float-low-soft:rgba(201,98,47,.10);
+  --float-medium-soft:rgba(181,114,14,.10);
+  --float-adequate-soft:rgba(74,154,110,.10);
+  --float-high-soft:rgba(31,143,95,.10);
+
   /* status ramp — "In Progress" and general info badges now share ONE hue
      (the demoted brand teal) at two depths instead of two unrelated hues:
      --status-active is the saturated/solid "doing work now" reading,
@@ -177,6 +192,18 @@ a{color:inherit}
     --crit-line:rgba(241,123,110,.35);
     --info:#8fb5ae;
     --info-soft:rgba(143,181,174,.15);
+
+    /* Float ramp lifted for dark, same way --crit becomes #f17b6e. */
+    --float-zero:#f17b6e;
+    --float-low:#e9925f;
+    --float-medium:#f0a93e;
+    --float-adequate:#6fc59b;
+    --float-high:#4fc78d;
+    --float-zero-soft:rgba(241,123,110,.15);
+    --float-low-soft:rgba(233,146,95,.15);
+    --float-medium-soft:rgba(240,169,62,.15);
+    --float-adequate-soft:rgba(111,197,155,.15);
+    --float-high-soft:rgba(79,199,141,.15);
 
     --status-active:#3fd0c0;
     --status-active-soft:rgba(63,208,192,.18);
@@ -1160,3 +1187,115 @@ tr.resolved{opacity:.45}
   .modal-body{overflow-y:auto}
   .act-modal-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
 }
+
+/* ---------- Float Path (Planning > Float Path) ---------- */
+/* Float badge — the five-step ramp from DESIGN.md. The class is picked from
+   the total-float value in days, not from a pass/fail verdict. */
+.float-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:.6875rem;font-weight:700;
+  padding:.1rem .4rem;border-radius:var(--radius-pill);font-variant-numeric:tabular-nums;
+}
+.float-zero{background:var(--float-zero-soft);color:var(--float-zero)}
+.float-low{background:var(--float-low-soft);color:var(--float-low)}
+.float-medium{background:var(--float-medium-soft);color:var(--float-medium)}
+.float-adequate{background:var(--float-adequate-soft);color:var(--float-adequate)}
+.float-high{background:var(--float-high-soft);color:var(--float-high)}
+
+.fp-summary{display:flex;gap:.6rem;flex-wrap:wrap}
+.fp-card{
+  flex:1 1 180px;min-width:180px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-md);padding:.7rem .85rem;border-left-width:3px;border-left-style:solid;
+  cursor:pointer;text-align:left;font:inherit;color:inherit;
+}
+.fp-card:hover{background:var(--surface-2)}
+.fp-card[aria-pressed="true"]{border-color:var(--accent);border-left-color:var(--accent);background:var(--accent-subtle)}
+.fp-card-no{font-size:.6875rem;font-weight:700;color:var(--text-muted)}
+.fp-card-float{font-family:var(--font-mono);font-size:1.15rem;font-weight:700;line-height:1.3}
+.fp-card-meta{font-size:.6875rem;color:var(--text-muted);margin-top:.15rem}
+
+/* The chain rail: a hairline down the left of the path table linking each row
+   to the next, so a path reads as one sequence rather than a list of rows. */
+.fp-link{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);white-space:nowrap}
+.fp-link-driving{color:var(--crit);font-weight:700}
+
+@media (max-width:640px){
+  .fp-card{flex:1 1 100%}
+}
+
+/* ---------- Reporting (Reporting > Reports) ---------- */
+.report-block{break-inside:avoid}
+
+.report-metrics{display:flex;flex-wrap:wrap;gap:1.4rem}
+.report-metric-label{font-size:.6875rem;color:var(--text-muted);font-weight:600}
+.report-metric-value{font-family:var(--font-mono);font-size:1.25rem;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums}
+.report-metric-note{font-size:.6875rem;color:var(--text-muted)}
+
+.report-body{padding:1rem 1.1rem;font-size:.8125rem;line-height:1.65}
+.report-body p{margin:0 0 .7rem}
+.report-note{padding:.6rem 1.1rem;font-size:.75rem;color:var(--text-muted)}
+
+/* Progress bar in the WBS rollup — the number is inside it, so the cell reads
+   at a glance without a legend. */
+.report-bar{position:relative;background:var(--surface-3);border-radius:var(--radius-pill);height:16px;min-width:90px}
+.report-bar-fill{position:absolute;inset:0 auto 0 0;background:var(--accent-soft);border-radius:var(--radius-pill)}
+.report-bar span{position:relative;display:block;text-align:center;font-size:.6875rem;font-weight:700;line-height:16px}
+
+.report-cover-body{padding:2rem 1.6rem}
+.report-cover-kicker{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);font-weight:700}
+.report-cover-title{font-family:var(--font-display);font-weight:var(--display-weight);font-size:1.9rem;letter-spacing:-.015em;margin:.2rem 0 1.3rem}
+.report-cover-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.9rem 1.4rem;margin:0}
+.report-cover-facts dt{font-size:.6875rem;color:var(--text-muted);font-weight:600}
+.report-cover-facts dd{margin:.1rem 0 0;font-size:.875rem;font-weight:600}
+.report-cover-basis{margin-top:1.3rem;font-size:.75rem;color:var(--text-muted)}
+.report-signoff{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1.2rem;margin-top:2.2rem}
+.report-signoff > div{border-top:1px solid var(--border-strong);padding-top:.35rem}
+.report-signoff span{font-size:.6875rem;color:var(--text-muted);font-weight:600}
+
+.report-picker{display:flex;flex-direction:column;gap:.15rem}
+.report-picker-row{
+  display:flex;align-items:flex-start;gap:.6rem;padding:.5rem .6rem;
+  border:1px solid transparent;border-radius:var(--radius-sm);
+}
+.report-picker-row.is-on{background:var(--surface-2);border-color:var(--border)}
+.report-picker-title{display:block;font-size:.8125rem;font-weight:600}
+.report-picker-desc{display:block;font-size:.75rem;color:var(--text-muted);margin-top:.05rem}
+
+/* The running header rides in a <thead> so the browser repeats it on every
+   printed page; on screen it is just a bar above the report. */
+.report-running{width:100%;border-collapse:collapse}
+.report-running > thead > tr > th,
+.report-running > tbody > tr > td{
+  padding:0;border:0;background:none;text-align:left;font-weight:inherit;
+  vertical-align:top;font-size:inherit;
+}
+/* The outer table is layout, not data: none of the data-table row behaviour
+   should reach it, or hovering anywhere tints the whole report. */
+.report-running > tbody > tr:hover{background:none}
+.report-running > tbody > tr > td > *{margin-bottom:.9rem}
+.report-runhead{
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  padding:.5rem 0 .45rem;margin-bottom:.9rem;font-size:.75rem;
+  border-bottom:1px solid var(--border-strong);color:var(--text-secondary);
+}
+.report-runhead-right{color:var(--text-muted);font-size:.6875rem}
+.report-footer{
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  padding-top:.5rem;border-top:1px solid var(--border);
+  font-size:.6875rem;color:var(--text-muted);
+}
+
+@media print{
+  /* A report is a document, so it gets real page setup — the rest of the app
+     prints as whatever the browser defaults to. */
+  .report-sheet{padding:0}
+  .report-sheet .report-runhead{padding-top:0}
+  .report-cover{break-after:page}
+  .report-cover-body{padding:0 0 1rem}
+}
+
+/* Page setup for print. A named page is the only way to let one format print
+   landscape (the quality review's tables are wide) while the rest stay
+   portrait — @page cannot be scoped to an element any other way. */
+@page{size:A4 portrait;margin:14mm 12mm}
+@page report-landscape{size:A4 landscape;margin:12mm 14mm}
+.report-sheet.is-landscape{page:report-landscape}

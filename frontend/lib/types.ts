@@ -1065,3 +1065,105 @@ export interface RecoveryPlan {
   scope_name: string | null;
   items?: RecoveryPlanItem[];
 }
+
+// --- Planning → Float Path: P6's multiple float paths ---
+
+export type FloatPathMethod = "free_float" | "total_float";
+
+export interface FloatPathActivity {
+  external_id: string;
+  name: string | null;
+  wbs_path: string | null;
+  status: string | null;
+  percent_complete: number;
+  early_start: string | null;
+  early_finish: string | null;
+  late_start: string | null;
+  late_finish: string | null;
+  total_float_days: number | null;
+  free_float_days: number | null;
+  is_critical: boolean;
+  is_longest_path: boolean;
+  /** The relationship driving this activity from the one above it on the path. */
+  link_type: string | null;
+  lag_days: number | null;
+  link_gap_days: number | null;
+}
+
+export interface FloatPath {
+  path_no: number;
+  total_float_days: number | null;
+  joins_at_external_id: string | null;
+  join_link_type: string | null;
+  join_lag_days: number | null;
+  join_gap_days: number | null;
+  activities: FloatPathActivity[];
+}
+
+export interface FloatPathEndCandidate {
+  external_id: string;
+  name: string;
+  task_type: string | null;
+  early_finish: string | null;
+  total_float_days: number | null;
+  is_critical: boolean;
+}
+
+export interface FloatPathReport {
+  project_id: string;
+  data_date: string | null;
+  revision_label: string | null;
+  end_activity_external_id: string;
+  end_activity_name: string | null;
+  method: FloatPathMethod;
+  requested_paths: number;
+  hours_per_day: number;
+  truncated: boolean;
+  acceleration_headroom_days: number | null;
+  paths: FloatPath[];
+}
+
+// --- Reporting → Reports: saved report formats ---
+
+export interface ReportBlockConfig {
+  key: string;
+  order: number;
+  enabled: boolean;
+  options: Record<string, unknown>;
+}
+
+export interface ReportBlockCatalogueEntry {
+  key: string;
+  title: string;
+  description: string;
+  requires: string | null;
+  default_options: Record<string, unknown>;
+}
+
+export interface ReportFormat {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  blocks: ReportBlockConfig[];
+  page_setup: { orientation?: string; paper?: string };
+  is_preset: boolean;
+  narrative: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportHeader {
+  project_id: string;
+  project_name: string;
+  project_code: string | null;
+  data_date: string | null;
+  schedule_revision: string | null;
+  schedule_filename: string | null;
+  imported_at: string | null;
+  baseline_label: string | null;
+  baseline_changed_since: boolean;
+  progress_basis: string;
+  generated_at: string;
+  generated_by: string | null;
+}
