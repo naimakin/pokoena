@@ -3,6 +3,11 @@ name: Deploy
 on:
   push:
     branches: [main]
+  # Manual re-run from the Actions tab. A deploy can fail for a reason that
+  # lives on the server rather than in the commit (a missing Swarm secret, for
+  # one), and without this there's no way to retry once that's fixed short of
+  # pushing an empty commit.
+  workflow_dispatch:
 
 concurrency:
   group: deploy-production
