@@ -33,15 +33,15 @@ interface WidgetDef {
   render: (ctx: WidgetContext) => ReactNode;
 }
 
-// Where each Project Health factor's detail lives. Schedule takes a preset filter
-// (see schedule/page.tsx) so the critical-path / overdue rows land on the exact
-// activity list behind the number.
+// Where each Project Health factor's detail lives. Project Activities takes a
+// preset filter (see progress/page.tsx) so the critical-path / overdue rows
+// land on the exact activity list behind the number.
 const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
   scope_submissions: "/update-period-control",
   evm: "/evm",
-  critical_path: "/schedule?filter=critical",
+  critical_path: "/progress?filter=critical",
   pending_reviews: "/review-queue",
-  overdue: "/schedule?filter=overdue",
+  overdue: "/progress?filter=overdue",
 };
 
 function Kpi({

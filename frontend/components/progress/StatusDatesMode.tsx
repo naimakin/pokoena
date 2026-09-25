@@ -33,6 +33,13 @@ function fmtDate(iso: string | null | undefined): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
 }
 
+// Same as Planning > Activities used to show (total float is stored in hours).
+function fmtFloat(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined) return "—";
+  const days = hours / 8;
+  return `${days >= 0 ? "" : "-"}${Math.abs(days).toFixed(1)}d`;
+}
+
 export function StatusDatesMode({
   hidden,
   nodes,
@@ -40,6 +47,7 @@ export function StatusDatesMode({
   dataDate,
   canEdit,
   snapshotOnly,
+  sortByFloat = false,
   collapsed,
   onToggle,
   onActivitiesUpdated,
@@ -50,6 +58,8 @@ export function StatusDatesMode({
   dataDate: string | null;
   canEdit: boolean;
   snapshotOnly: boolean;
+  // "Sort by float" — folded in from the old Planning > Activities view.
+  sortByFloat?: boolean;
   collapsed: Set<string>;
   onToggle: (wbsId: string) => void;
   onActivitiesUpdated: (rows: Activity[]) => void;
@@ -67,13 +77,21 @@ export function StatusDatesMode({
         collapsed={collapsed}
         onToggle={onToggle}
         onActivityClick={setOpenActivity}
-        colCount={5}
+        sortWithinBand={
+          sortByFloat
+            ? (a, b) => (a.total_float_hours ?? Number.POSITIVE_INFINITY) - (b.total_float_hours ?? Number.POSITIVE_INFINITY)
+            : undefined
+        }
+        colCount={8}
         header={
           <>
             <th>Activity</th>
             <th>Status</th>
+            <th style={{ width: 110 }}>Early Start</th>
+            <th style={{ width: 110 }}>Early Finish</th>
             <th style={{ width: 130 }}>Actual Start</th>
             <th style={{ width: 130 }}>Actual Finish</th>
+            <th style={{ width: 90 }}>Total Float</th>
             <th style={{ width: 70 }}>%</th>
             <th style={{ width: 120 }}>Flags</th>
           </>
@@ -85,6 +103,8 @@ export function StatusDatesMode({
               <td>
                 <span className={`chip ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
               </td>
+              <td className="mono">{fmtDate(a.early_start)}</td>
+              <td className="mono">{fmtDate(a.early_finish)}</td>
               <td className="mono">
                 {fmtDate(a.actual_start)}
                 {afterDataDate(a.actual_start) && <div className="pg-warn">after data date</div>}
@@ -93,6 +113,7 @@ export function StatusDatesMode({
                 {fmtDate(a.actual_finish)}
                 {afterDataDate(a.actual_finish) && <div className="pg-warn">after data date</div>}
               </td>
+              <td className="mono">{fmtFloat(a.total_float_hours)}</td>
               <td className="mono">{a.percent_complete}%</td>
               <td>
                 <div className="pg-flags">

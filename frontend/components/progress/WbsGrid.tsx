@@ -21,6 +21,7 @@ export function WbsGrid({
   header,
   renderActivityCells,
   onActivityClick,
+  sortWithinBand,
   emptyLabel = "No activities match the current filter.",
 }: {
   nodes: WbsNode[];
@@ -33,10 +34,17 @@ export function WbsGrid({
   // Set by callers that open the Activity modal on row click (Progress). Left
   // unset the row stays inert, for grids that are purely a readout.
   onActivityClick?: (activity: Activity) => void;
+  // Optional re-sort of activities within each WBS band, on top of the default
+  // external-id order (e.g. "sort by float" in Status & Dates). Left unset,
+  // ordering is unchanged.
+  sortWithinBand?: (a: Activity, b: Activity) => number;
   emptyLabel?: string;
 }) {
   const knownWbsIds = new Set(nodes.map((n) => n.wbs_id));
   const byLeaf = groupByLeaf(activities, knownWbsIds);
+  if (sortWithinBand) {
+    for (const list of byLeaf.values()) list.sort(sortWithinBand);
+  }
   const rows = buildGridRows(nodes, byLeaf, collapsed);
 
   return (

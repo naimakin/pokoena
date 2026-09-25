@@ -86,7 +86,6 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
-      { href: "/schedule", label: "Activities", icon: GridIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
       { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
       { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always },
@@ -102,7 +101,7 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always },
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
-      { href: "/progress", label: "Progress", icon: ClockIcon, visible: always },
+      { href: "/progress", label: "Project Activities", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
       { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always },

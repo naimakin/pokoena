@@ -65,6 +65,12 @@ export default function ProgressPage() {
   const [filterDirty, setFilterDirty] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
+  // Folded in from the old Planning > Activities view — CPM-side quick filters,
+  // scoped to Status & Dates only (Burned MH Loading keeps its own filtered set).
+  const [criticalOnly, setCriticalOnly] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [floatAsc, setFloatAsc] = useState(false);
+
   // Only the manhours mode still holds unsaved page-level state: status/date
   // edits moved into the Activity modal, which saves on its own.
   const [manhoursDirty, setManhoursDirty] = useState(0);
@@ -76,6 +82,21 @@ export default function ProgressPage() {
       if (m === "status" || m === "manhours") setMode(m);
     } catch {
       /* ignore */
+    }
+  }, []);
+
+  // Deep links from the dashboard's Project Health card: /progress?filter=critical|overdue
+  // (used to point at Planning > Activities before that view folded in here).
+  useEffect(() => {
+    const preset = new URLSearchParams(window.location.search).get("filter");
+    if (preset === "critical") {
+      setMode("status");
+      setCriticalOnly(true);
+      setFloatAsc(true);
+    } else if (preset === "overdue") {
+      setMode("status");
+      setOverdueOnly(true);
+      setFloatAsc(true);
     }
   }, []);
 
@@ -191,6 +212,19 @@ export default function ProgressPage() {
     () => applyFilter(activities, nodeByWbsId, criteria),
     [activities, nodeByWbsId, criteria],
   );
+  // Critical/overdue quick filters narrow the Status & Dates grid only —
+  // Burned MH Loading keeps working off `filtered`, unchanged.
+  const statusFiltered = useMemo(() => {
+    if (!criticalOnly && !overdueOnly) return filtered;
+    const today = new Date().toISOString().slice(0, 10);
+    return filtered.filter((a) => {
+      if (criticalOnly && !a.is_critical) return false;
+      if (overdueOnly && (a.status === "complete" || !a.planned_finish || a.planned_finish.slice(0, 10) >= today)) {
+        return false;
+      }
+      return true;
+    });
+  }, [filtered, criticalOnly, overdueOnly]);
   const completedCount = useMemo(() => activities.filter((a) => a.status === "complete").length, [activities]);
   const hasUngrouped = useMemo(
     () => filtered.some((a) => !a.wbs_path || !nodeByWbsId.has(a.wbs_path)),
@@ -311,14 +345,14 @@ export default function ProgressPage() {
 
   // Editing (status/dates/manhours) only ever applies to the live schedule —
   // a historical program is viewed read-only via its frozen snapshot, same as
-  // Planning > Activities/WBS/Gantt. Route-level role checks still apply on top.
+  // Planning > WBS/Gantt. Route-level role checks still apply on top.
   const canEdit = isViewingCurrent;
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Progress</b>
+          {project?.name ?? "—"} / <b>Project Activities</b>
         </span>
         <div className="spacer" />
         {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}
@@ -326,13 +360,16 @@ export default function ProgressPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Progress</div>
+            <div className="page-title">Project Activities</div>
             <div className="page-desc">
               {dataLoading
                 ? "Loading…"
-                : (filtered.length !== activities.length
-                    ? `${filtered.length} of ${activities.length} activities shown`
-                    : `${activities.length} activities`) +
+                : (() => {
+                    const shown = mode === "status" ? statusFiltered.length : filtered.length;
+                    return shown !== activities.length
+                      ? `${shown} of ${activities.length} activities shown`
+                      : `${activities.length} activities`;
+                  })() +
                   ` · ${completedCount} completed` +
                   (dataDate ? ` · data date ${fmtDate(dataDate)}` : "") +
                   (!isViewingCurrent ? " · read-only — showing an earlier program" : "")}
@@ -388,6 +425,22 @@ export default function ProgressPage() {
                 </button>
               </>
             )}
+            {mode === "status" && (
+              <>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={criticalOnly} onChange={(e) => setCriticalOnly(e.target.checked)} />
+                  Critical path only
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+                  Overdue only
+                </label>
+                <label className="checkbox-row" title="Sort activities within each WBS band by total float, lowest first">
+                  <input type="checkbox" checked={floatAsc} onChange={(e) => setFloatAsc(e.target.checked)} />
+                  Sort by float
+                </label>
+              </>
+            )}
           </div>
           <div className="segmented">
             <button className={mode === "status" ? "active" : ""} onClick={() => switchMode("status")}>
@@ -437,10 +490,11 @@ export default function ProgressPage() {
               <StatusDatesMode
                 hidden={mode !== "status"}
                 nodes={wbsNodes}
-                activities={filtered}
+                activities={statusFiltered}
                 dataDate={dataDate}
                 canEdit={canEdit}
                 snapshotOnly={!isViewingCurrent}
+                sortByFloat={floatAsc}
                 collapsed={collapsed}
                 onToggle={toggleCollapse}
                 onActivitiesUpdated={onActivitiesUpdated}

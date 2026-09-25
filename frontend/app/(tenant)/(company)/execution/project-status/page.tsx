@@ -408,7 +408,7 @@ export default function ProjectStatusPage() {
                   {focusedQuadrant?.label} · {(focusedQuadrant?.program_count ?? 0) + (focusedQuadrant?.user_count ?? 0)} activities
                 </div>
                 <div className="card-title-sub">
-                  <Link href="/schedule" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
+                  <Link href="/progress" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
                     View in Project Activities →
                   </Link>
                 </div>
