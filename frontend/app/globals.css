@@ -1099,9 +1099,23 @@ tr.resolved{opacity:.45}
   .navitem.active::before{left:0;right:0;top:auto;bottom:0;transform:none;width:auto;height:2px;border-radius:0}
   .navitem .count,.navitem .soon{position:static;margin-left:.3rem}
 
-  .a-topnav{padding:0 .6rem;gap:.5rem}
+  /* The tabs are the only way between sections, and squeezed onto one row
+     beside the brand and the project switcher they shrink to nothing (they
+     carry overflow-x, so flexbox is free to take them to zero width). Give
+     them their own full-width scrollable row instead, with the labels back —
+     seven unlabelled icons are not a navigation. */
+  .a-topnav{height:auto;flex-wrap:wrap;gap:.5rem;padding:.4rem .6rem}
   .a-topnav-right{gap:.4rem}
   .a-topnav-right .project-switcher{width:130px}
+  .a-topnav-tabs{order:3;flex:1 0 100%;height:36px;gap:.1rem;border-top:1px solid var(--border)}
+  .a-topnav .topnav-tab span{display:inline}
+  .topnav-tab{padding:0 .55rem;font-size:.75rem}
+
+  /* Action clusters are inline flex rows on nearly every page and none of them
+     wrap, so one row of three buttons is wider than the screen. .a-content
+     scrolls rather than growing the page, but its children still stretch to
+     that width — which is why cards ran off the right edge. */
+  .page-head > div,.card-head > div,.banner-actions{flex-wrap:wrap}
 
   .a-topbar{padding:.6rem .85rem;gap:.6rem}
   .a-content{padding:.85rem;gap:.85rem}

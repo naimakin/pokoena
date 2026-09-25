@@ -229,7 +229,7 @@ export default function DashboardPage() {
             <div className="page-title">Dashboard</div>
             <div className="page-desc">{summary?.active_period_label ?? "No open update period"}</div>
           </div>
-          <div style={{ display: "flex", gap: ".55rem" }}>
+          <div style={{ display: "flex", gap: ".55rem", flexWrap: "wrap" }}>
             <button className="btn btn-secondary" onClick={() => setConfigOpen(true)}>
               <SettingsIcon className="icon" /> Configure
             </button>
