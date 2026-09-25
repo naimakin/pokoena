@@ -110,3 +110,45 @@ def test_sync_log_rejects_other_tenant(client, db_session):
     _login(client, email)
 
     assert client.get(f"/projects/{other_project.id}/sync-log").status_code == 403
+
+
+def _sync_log(client, project_id):
+    response = client.get(f"/projects/{project_id}/sync-log")
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_export_entry_can_be_renamed_in_the_sync_log(client, db_session):
+    _tenant, project, email = _setup(db_session, "sync-exp-rename")
+    _login(client, email)
+    _import(client, project.id)
+    assert client.get(f"/projects/{project.id}/export/xer").status_code == 200
+
+    export_id = next(e["id"] for e in _sync_log(client, project.id) if e["kind"] == "export")
+    response = client.patch(
+        f"/projects/{project.id}/exports/{export_id}", json={"revision_label": "EXP-1 sent to ENKA"}
+    )
+
+    assert response.status_code == 200
+    labels = [e["label"] for e in _sync_log(client, project.id) if e["kind"] == "export"]
+    assert labels == ["EXP-1 sent to ENKA"]
+
+
+def test_deleting_an_export_unlinks_the_import_that_came_back_from_it(client, db_session):
+    _tenant, project, email = _setup(db_session, "sync-exp-delete")
+    _login(client, email)
+    _import(client, project.id)
+    assert client.get(f"/projects/{project.id}/export/xer").status_code == 200
+    export_id = next(e["id"] for e in _sync_log(client, project.id) if e["kind"] == "export")
+    _import(client, project.id, name="back-from-p6.xer", roundtrip_from_export_id=export_id)
+
+    linked = [e for e in _sync_log(client, project.id) if e["kind"] == "import" and e["linked_export_label"]]
+    assert len(linked) == 1
+
+    assert client.delete(f"/projects/{project.id}/exports/{export_id}").status_code == 204
+
+    log = _sync_log(client, project.id)
+    assert not [e for e in log if e["kind"] == "export"]
+    # The import itself survives, just no longer pointing at a deleted export.
+    assert [e for e in log if e["kind"] == "import" and e["linked_export_label"]] == []
+    assert len([e for e in log if e["kind"] == "import"]) == 2

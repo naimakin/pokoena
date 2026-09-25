@@ -32,6 +32,10 @@ export default function ExportSyncP6Page() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<SyncLogEntry | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [rowBusy, setRowBusy] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!project) {
@@ -67,6 +71,65 @@ export default function ExportSyncP6Page() {
       return Number.isFinite(n) && n > max ? n : max;
     }, 0);
   const nextFilename = project ? `${project.code}-EXP-${lastExportNo + 1}.xer` : "";
+
+  // Exports and imports live in different tables but read as one log, so each
+  // row's actions route by `kind`. Imports already had these endpoints (they
+  // guard the current schedule and any locked baseline); exports are log rows
+  // with nothing derived from them — see routes/sync.py.
+  function rowPath(entry: SyncLogEntry): string {
+    return entry.kind === "export"
+      ? `/projects/${project?.id}/exports/${entry.id}`
+      : `/projects/${project?.id}/schedule-imports/${entry.id}`;
+  }
+
+  function startEdit(entry: SyncLogEntry) {
+    setEditing(entry);
+    setEditLabel(entry.label);
+    setRowError(null);
+  }
+
+  async function saveLabel() {
+    if (!editing || !project) return;
+    const label = editLabel.trim();
+    if (!label) return;
+    setRowBusy(true);
+    setRowError(null);
+    try {
+      await api.patch(rowPath(editing), { revision_label: label });
+      setEditing(null);
+      await load();
+    } catch (err) {
+      setRowError(err instanceof ApiError ? err.message : "Could not rename this entry.");
+    } finally {
+      setRowBusy(false);
+    }
+  }
+
+  async function deleteEntry(entry: SyncLogEntry) {
+    if (!project) return;
+    const what = entry.kind === "export" ? "export" : "import";
+    if (
+      !window.confirm(
+        `Delete ${entry.label} (${entry.filename}) from the sync log?\n\n` +
+          (entry.kind === "import"
+            ? "The schedule data this import brought in stays as it is — only its history entry is removed."
+            : "This only removes the log entry; the file you already downloaded is unaffected.") +
+          `\n\nThis can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setRowBusy(true);
+    setRowError(null);
+    try {
+      await api.delete(rowPath(entry));
+      await load();
+    } catch (err) {
+      setRowError(err instanceof ApiError ? err.message : `Could not delete this ${what}.`);
+    } finally {
+      setRowBusy(false);
+    }
+  }
 
   async function downloadXer() {
     if (!project) return;
@@ -197,12 +260,13 @@ export default function ExportSyncP6Page() {
                       <th>By</th>
                       <th>Activities</th>
                       <th>File</th>
+                      <th style={{ width: 120 }} />
                     </tr>
                   </thead>
                   <tbody>
                     {log.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="empty-state">
+                        <td colSpan={8} className="empty-state">
                           Nothing exported or imported yet.
                         </td>
                       </tr>
@@ -210,9 +274,34 @@ export default function ExportSyncP6Page() {
                       log.map((e) => (
                         <tr key={`${e.kind}-${e.id}`}>
                           <td>
-                            <div className="subname">{e.label}</div>
-                            {e.linked_export_label && (
-                              <div className="actid">from {e.linked_export_label}</div>
+                            {editing && editing.kind === e.kind && editing.id === e.id ? (
+                              <input
+                                value={editLabel}
+                                onChange={(ev) => setEditLabel(ev.target.value)}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === "Enter") saveLabel();
+                                  if (ev.key === "Escape") setEditing(null);
+                                }}
+                                maxLength={30}
+                                autoFocus
+                                aria-label="Revision label"
+                                style={{
+                                  width: "100%",
+                                  minWidth: 110,
+                                  background: "var(--surface)",
+                                  border: "1px solid var(--accent)",
+                                  borderRadius: 6,
+                                  padding: ".3rem .4rem",
+                                  fontSize: ".8125rem",
+                                }}
+                              />
+                            ) : (
+                              <>
+                                <div className="subname">{e.label}</div>
+                                {e.linked_export_label && (
+                                  <div className="actid">from {e.linked_export_label}</div>
+                                )}
+                              </>
                             )}
                           </td>
                           <td>
@@ -227,12 +316,58 @@ export default function ExportSyncP6Page() {
                           <td className="mono" style={{ fontSize: ".6875rem" }}>
                             {e.filename}
                           </td>
+                          <td>
+                            <div style={{ display: "flex", gap: ".3rem", justifyContent: "flex-end" }}>
+                              {editing && editing.kind === e.kind && editing.id === e.id ? (
+                                <>
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    disabled={rowBusy || !editLabel.trim()}
+                                    onClick={saveLabel}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={rowBusy}
+                                    onClick={() => setEditing(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={rowBusy}
+                                    onClick={() => startEdit(e)}
+                                    title="Rename this entry"
+                                  >
+                                    Rename
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={rowBusy}
+                                    onClick={() => deleteEntry(e)}
+                                    title="Remove this entry from the log"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+              {rowError && (
+                <p className="login-error" style={{ margin: ".75rem 1rem" }}>
+                  {rowError}
+                </p>
+              )}
             </div>
           </>
         )}

@@ -1073,3 +1073,57 @@ tr.resolved{opacity:.45}
   .a-topnav{gap:.6rem;padding:0 .75rem}
   .a-topnav .brand-name,.a-topnav .brand-sub,.topnav-tab span,.topnav-user .who,.topnav-user .role{display:none}
 }
+
+/* Phones. The 900px rules above shrink the sidebar to an icon rail, which still
+   costs ~76px of a 390px-wide screen and leaves the icons unlabelled. Below
+   640px the shell stacks instead: the section's pages become a horizontally
+   scrollable strip under the top nav, where the labels fit again. Everything
+   here is layout-only — no colour, type or component styling changes. */
+@media (max-width:640px){
+  .tenant-body{flex-direction:column}
+
+  .a-sidebar{
+    width:100%;flex-direction:row;align-items:center;gap:.5rem;
+    padding:.4rem .6rem;overflow-x:auto;overflow-y:hidden;
+    border-right:none;border-bottom:1px solid var(--border);
+    -webkit-overflow-scrolling:touch;
+  }
+  .a-sidebar .nav-group-label,.a-sidebar .a-foot{display:none}
+  .navlist{flex-direction:row;gap:.25rem}
+  .navitem{
+    width:auto;flex:none;justify-content:flex-start;white-space:nowrap;
+    padding:.4rem .6rem;font-size:.75rem;
+  }
+  /* The active marker is a left edge on a vertical list; underline it instead. */
+  .navitem span:not(.count):not(.soon){display:inline}
+  .navitem.active::before{left:0;right:0;top:auto;bottom:0;transform:none;width:auto;height:2px;border-radius:0}
+  .navitem .count,.navitem .soon{position:static;margin-left:.3rem}
+
+  .a-topnav{padding:0 .6rem;gap:.5rem}
+  .a-topnav-right{gap:.4rem}
+  .a-topnav-right .project-switcher{width:130px}
+
+  .a-topbar{padding:.6rem .85rem;gap:.6rem}
+  .a-content{padding:.85rem;gap:.85rem}
+
+  .kpi-row{grid-template-columns:1fr}
+  .page-head{align-items:flex-start;flex-direction:column;gap:.6rem}
+  .page-title{font-size:1.125rem}
+  .card-head{flex-wrap:wrap;gap:.5rem;padding:.75rem .85rem}
+  .table-wrap{-webkit-overflow-scrolling:touch}
+  .filter-bar{flex-wrap:wrap}
+
+  /* The Gantt is a two-pane desktop instrument; on a phone keep it usable by
+     giving the chart most of the width and the whole thing less height. */
+  .gantt-panes{height:60vh;min-height:280px}
+  .act-field-grid,.act-detail-grid{grid-template-columns:1fr}
+
+  /* Dialogs become full-screen sheets — a centred card with a max-width has
+     nowhere to be centred on a phone, and the Activity modal is tall enough
+     to need its body scrolling rather than the page behind it. */
+  .modal-overlay{padding:0;align-items:stretch}
+  .modal{max-width:none;border:none;border-radius:0;max-height:100dvh}
+  .act-modal{max-width:none}
+  .modal-body{overflow-y:auto}
+  .act-modal-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+}

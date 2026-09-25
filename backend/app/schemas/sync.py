@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ScheduleExportOut(BaseModel):
@@ -17,6 +17,12 @@ class ScheduleExportOut(BaseModel):
     activity_count: int
     exported_by_user_id: uuid.UUID
     exported_at: datetime
+
+
+class ScheduleExportUpdate(BaseModel):
+    # An export row is a log entry: only its label is the user's to change. The
+    # EXP-n sequence runs off revision_no, so a rename never renumbers anything.
+    revision_label: str = Field(min_length=1, max_length=30)
 
 
 class SyncLogEntry(BaseModel):

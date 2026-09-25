@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,7 +9,7 @@ from app.models.project import Project
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.user import User
-from app.schemas.sync import SyncLogEntry
+from app.schemas.sync import ScheduleExportOut, ScheduleExportUpdate, SyncLogEntry
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["sync"])
 
@@ -79,3 +79,54 @@ def get_sync_log(
     # the per-source ordering above.
     entries.sort(key=lambda e: (e.at, 1 if e.kind == "import" else 0), reverse=True)
     return entries
+
+
+def _get_export(db: Session, project_id: uuid.UUID, export_id: uuid.UUID, ctx: AuthContext) -> ScheduleExport:
+    row = get_tenant_scoped_or_404(db, ScheduleExport, export_id, ctx)
+    if row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="ScheduleExport not found")
+    require_project_permission(db, project_id, ctx, need_edit=True)
+    return row
+
+
+@router.patch("/exports/{export_id}", response_model=ScheduleExportOut)
+def update_schedule_export(
+    project_id: uuid.UUID,
+    export_id: uuid.UUID,
+    payload: ScheduleExportUpdate,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> ScheduleExport:
+    """Renames an export in the sync log (e.g. "EXP-2" → "EXP-2 sent to ENKA").
+    The EXP sequence runs off revision_no, so later exports keep their numbers.
+    Imports have the same endpoint on routes/schedule_imports.py."""
+    row = _get_export(db, project_id, export_id, ctx)
+    label = payload.revision_label.strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Revision label can't be blank")
+    row.revision_label = label
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/exports/{export_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_schedule_export(
+    project_id: uuid.UUID,
+    export_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> None:
+    """Removes an export from the sync log. Unlike an import, an export owns no
+    schedule data — the file was handed to the user and nothing in Poko is
+    derived from it — so the only thing to tidy up is the round-trip link on any
+    import that was matched back to it, which becomes an unlinked import."""
+    row = _get_export(db, project_id, export_id, ctx)
+
+    db.query(ScheduleImport).filter(
+        ScheduleImport.tenant_id == ctx.tenant_id,
+        ScheduleImport.roundtrip_from_export_id == export_id,
+    ).update({ScheduleImport.roundtrip_from_export_id: None}, synchronize_session=False)
+
+    db.delete(row)
+    db.commit()
