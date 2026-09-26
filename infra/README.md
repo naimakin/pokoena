@@ -63,18 +63,17 @@ echo "<GHCR_READ_PAT>" | docker login ghcr.io -u naimakin --password-stdin
 
 Row-level security needs two new, non-superuser DB roles — see the RLS design in
 `backend/alembic/versions/0001_initial_schema.py` and `backend/app/db/session.py`.
-The original setup's `db_url` secret turned out to hold the `doadmin` superuser DSN
-directly (not a dedicated least-privilege app user, despite step 6 originally saying
-to create one) — **that matters a lot here**: a superuser always bypasses RLS, no
-exception, so the running `backend` service can never connect as `doadmin` or every
-RLS policy silently never applies. Keep `db_url`/`doadmin` for migrations only (it
-already needs full schema-owner rights for those); create two new roles for
-everything else, connected to the same database `db_url` points at (check with
-`docker exec <backend-container> cat /run/secrets/db_url` — for this deployment
-it's `defaultdb`, substitute your own if different):
+The original setup's `db_url` secret held the `doadmin` superuser DSN directly (not a
+dedicated least-privilege app user, despite step 6 originally saying to create one) —
+**that matters a lot here**: a superuser always bypasses RLS, no exception, so the
+running `backend` service can never connect as `doadmin` or every RLS policy silently
+never applies. `doadmin` stays for migrations only, under its own `db_url_migrate`
+secret (step 7), since it already owns the schema and DDL is the one thing the app
+roles must not be able to do. Create two new roles for everything else, in the same
+database — for this deployment that's `defaultdb`, substitute your own if different:
 
 ```sql
--- Run as doadmin (DO control panel → your database → Console, or `psql "$(cat db_url-value)"`)
+-- Run as doadmin (DO control panel → your database → Console)
 CREATE ROLE poko_app LOGIN PASSWORD 'REPLACE_STRONG_PASSWORD_1';
 GRANT USAGE ON SCHEMA public TO poko_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO poko_app;
@@ -99,11 +98,22 @@ Also:
   DB → Settings → Trusted Sources) from the original setup.
 - DO managed Postgres requires TLS — the DSNs below include `sslmode=require`.
 
-## 7. Create the two new Docker Swarm secrets
+## 7. Create the new Docker Swarm secrets
 
-`db_url` and `jwt_secret` already exist from the original setup and don't change —
-`db_url_app` and `db_url_bypass` are new (same host/port/database as `db_url`, just
-the new role names and passwords from step 6):
+`jwt_secret` already exists from the original setup and doesn't change.
+`db_url_app` and `db_url_bypass` are the two role DSNs from step 6 (same
+host/port/database, different role names and passwords).
+
+`db_url_migrate` is the account that owns the schema — on DigitalOcean's
+managed Postgres that is `doadmin`. It exists as its own secret because the
+migration job is the only thing that may issue DDL: granting `CREATE` to
+`poko_app` instead would give the role every HTTP request runs under the
+right to reshape the schema, which is the separation these three roles exist
+to maintain. The original `db_url` secret was supposed to be this, but
+production's copy turned out to hold a `poko_app` DSN, so every migration
+after that substitution failed with `permission denied for schema public` —
+and nothing needed a migration for long enough that it went unnoticed. An
+explicit name is harder to swap by mistake.
 
 ```bash
 printf 'postgresql+psycopg://poko_app:REPLACE_STRONG_PASSWORD_1@REPLACE-db-host.db.ondigitalocean.com:25060/defaultdb?sslmode=require' \
@@ -111,6 +121,11 @@ printf 'postgresql+psycopg://poko_app:REPLACE_STRONG_PASSWORD_1@REPLACE-db-host.
 
 printf 'postgresql+psycopg://poko_bypass:REPLACE_STRONG_PASSWORD_2@REPLACE-db-host.db.ondigitalocean.com:25060/defaultdb?sslmode=require' \
   | docker secret create db_url_bypass -
+
+# doadmin's DSN, straight from the DO control panel -> your database ->
+# Connection details. Used by the CI migration job and nothing else.
+printf 'postgresql+psycopg://doadmin:REPLACE_DOADMIN_PASSWORD@REPLACE-db-host.db.ondigitalocean.com:25060/defaultdb?sslmode=require' \
+  | docker secret create db_url_migrate -
 
 # Cloudflare dashboard -> My Profile -> API Tokens -> Create Token -> "Edit zone DNS"
 # template, scoped to the pokoena.com zone only.
@@ -154,7 +169,7 @@ update the same way, via `deploy.yml`):
 
 ```bash
 docker service create --name pokoena-migrate --network traefik-public \
-  --secret db_url --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url \
+  --secret db_url_migrate --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url_migrate \
   --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest alembic upgrade head
 docker service logs pokoena-migrate -f
@@ -181,14 +196,14 @@ publish nothing and carry no Traefik labels.
 
 ```bash
 docker service create --name pokoena-seed --network traefik-public \
-  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --secret db_url_app --env DATABASE_URL_FILE=/run/secrets/db_url_app \
   --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest python -m scripts.seed_demo
 docker service logs pokoena-seed -f
 docker service rm pokoena-seed
 
 docker service create --name pokoena-admin --network traefik-public \
-  --secret db_url --env DATABASE_URL_FILE=/run/secrets/db_url \
+  --secret db_url_app --env DATABASE_URL_FILE=/run/secrets/db_url_app \
   --restart-condition none --with-registry-auth \
   ghcr.io/naimakin/pokoena-backend:latest \
   python -m scripts.create_admin --email admin@pokoena.com --password 'REPLACE_ME' --name "Jordan Diaz"
@@ -212,7 +227,8 @@ curl -I https://api.pokoena.com/healthz
 | `DO_SSH_HOST` / `DO_SSH_USER` / `DO_SSH_KEY` | GitHub Actions secrets | Deploy job's `DOCKER_HOST=ssh://` |
 | `GITHUB_TOKEN` | Built-in per workflow run | Push images to GHCR; forwarded for `--with-registry-auth` |
 | GHCR read PAT | Local `docker login` on the droplet only (not a GitHub secret) | Manual `docker service` ops outside CI |
-| `db_url` | Docker Swarm secret | Postgres DSN as `doadmin` (superuser) — migration job only, `app-stack.yml`'s `backend` never uses it |
+| `db_url_migrate` | Docker Swarm secret | Postgres DSN as `doadmin` (owns the schema) — the migration job only, nothing else mounts it |
+| `db_url` | Docker Swarm secret | Legacy. Was meant to be the `doadmin` DSN, but production's copy holds a `poko_app` DSN, which is why the migration job broke — see step 7. Nothing reads it any more. |
 | `db_url_app` | Docker Swarm secret | Postgres DSN as `poko_app` (ordinary, RLS-bound) — what `backend` actually connects with |
 | `db_url_bypass` | Docker Swarm secret | Postgres DSN as `poko_bypass` (BYPASSRLS) — platform support-access path only |
 | `jwt_secret` | Docker Swarm secret | JWT signing key — wired to both `backend` and `frontend` (middleware/`auth()` verify the same JWTs) in `app-stack.yml` |

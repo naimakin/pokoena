@@ -83,12 +83,31 @@ jobs:
           JOB="pokoena-migrate-${{ github.run_id }}"
           # traefik-public purely for internet egress to the managed Postgres host —
           # this job publishes nothing and carries no traefik labels.
-          # Reuses the existing db_url secret for DATABASE_URL_MIGRATE: the app
-          # DB user it points to already owns the schema (it ran every prior
-          # migration), so it already has the DDL rights the RLS migration
-          # needs — no separate migration-owner role/secret required. Only
-          # poko_bypass (db_url_bypass, BYPASSRLS) is a genuinely new role —
-          # see infra/README.md.
+          #
+          # Migrations need a role that can CREATE in schema public. That used
+          # to be db_url, back when it held the schema-owning account — but
+          # db_url now points at poko_app, the RLS-bound application role, which
+          # has no DDL rights at all. The first migration attempted after that
+          # change failed with "permission denied for schema public", and it
+          # failed silently in the sense that nothing had needed a migration in
+          # between, so the breakage sat unnoticed.
+          #
+          # So the migration role is its own secret. Granting CREATE to poko_app
+          # instead would hand the role every request runs under the right to
+          # reshape the schema, which is exactly the privilege separation
+          # db_url_app / db_url_bypass exist to maintain — see infra/README.md.
+          # Falls back to db_url so this stays a no-op until the secret exists —
+          # a deploy that has no migration to run must not start failing over a
+          # secret it never needed.
+          MIGRATE_SECRET=db_url_migrate
+          if ! docker secret ls --format '{{.Name}}' | grep -qx "$MIGRATE_SECRET"; then
+            MIGRATE_SECRET=db_url
+            echo "::warning::Swarm secret 'db_url_migrate' does not exist, falling back to 'db_url'."
+            echo "db_url holds a poko_app DSN, which cannot issue DDL, so any migration that"
+            echo "actually has work to do will fail with 'permission denied for schema public'."
+            echo "Fix, on the droplet, with the schema owner's connection string:"
+            echo "  printf %s '<doadmin connection string>' | docker secret create db_url_migrate -"
+          fi
           # --detach is required, not cosmetic: this is a one-shot task
           # (--restart-condition none) that exits the moment alembic finishes,
           # and the CLI's convergence progress bar only ever accepts a task that
@@ -98,8 +117,8 @@ jobs:
           docker service create --detach \
             --name "$JOB" \
             --network traefik-public \
-            --secret db_url \
-            --env DATABASE_URL_MIGRATE_FILE=/run/secrets/db_url \
+            --secret "$MIGRATE_SECRET" \
+            --env "DATABASE_URL_MIGRATE_FILE=/run/secrets/$MIGRATE_SECRET" \
             --restart-condition none \
             --with-registry-auth \
             "ghcr.io/naimakin/pokoena-backend:${IMAGE_TAG}" \
