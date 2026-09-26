@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
 import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
-import { BaselineGate, BASELINE_GATED_SECTIONS } from "@/components/BaselineGate";
+import { BaselineGate, BASELINE_GATED_SECTIONS, isBaselineGated } from "@/components/BaselineGate";
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -87,7 +87,6 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
-      { href: "/planning/float-path", label: "Float Path", icon: TrendingUpIcon, visible: always },
       { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
       { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
@@ -135,6 +134,7 @@ const TOP_SECTIONS: NavSection[] = [
     // to someone. They are one page now, and the old routes redirect to it.
     children: [
       { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: always },
+      { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: always },
       { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: always },
       { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: always },
       { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: always },
@@ -299,7 +299,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           )}
 
           <main className="a-main">
-            <BaselineGate gated={BASELINE_GATED_SECTIONS.has(activeSection?.key ?? "")}>{children}</BaselineGate>
+            <BaselineGate gated={isBaselineGated(activeSection?.key, pathname)}>{children}</BaselineGate>
           </main>
         </div>
       </div>

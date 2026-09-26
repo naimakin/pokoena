@@ -11,6 +11,17 @@ import { LockIcon } from "@/components/icons";
 // baseline in the first place.
 export const BASELINE_GATED_SECTIONS = new Set(["dashboard", "execution", "risk", "reporting", "ai"]);
 
+// Pages inside a gated section that measure the programme against itself rather
+// than against a baseline, so the gate would only be in the way. Float Path
+// reads total float, early/late dates and the relationship set — all of which
+// P6 computed and the .xer import stored, none of which involve a baseline.
+export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path"]);
+
+export function isBaselineGated(sectionKey: string | undefined, pathname: string | null): boolean {
+  if (pathname && BASELINE_UNGATED_PATHS.has(pathname)) return false;
+  return BASELINE_GATED_SECTIONS.has(sectionKey ?? "");
+}
+
 export function BaselineGate({ gated, children }: { gated: boolean; children: ReactNode }) {
   const { project, baselineReady } = useProjectContext();
 
