@@ -30,6 +30,7 @@ from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan, RecoveryPlanItem
+from app.models.report_format import ReportFormat
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.risk_item import RiskActionItem, RiskItem
@@ -204,11 +205,17 @@ def _populate_everything(client, db_session, tenant, project, admin):
         )
     )
 
-    # --- schedule export ---
+    # --- report formats (the Reporting presets are seeded on first read) ---
+    assert client.get(f"/projects/{project.id}/report-formats").status_code == 200
+
+    # --- schedule export, built from the import above: schedule_exports and
+    # schedule_imports reference each other, which is what makes the delete
+    # order in services/project_deletion.py load-bearing. ---
     db_session.add(
         ScheduleExport(
             id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, revision_no=1, revision_label="EXP-1",
             source_filename="export.xer", exported_by_user_id=admin.id,
+            source_import_id=uuid.UUID(schedule_import_id),
         )
     )
 
@@ -220,7 +227,8 @@ _PROJECT_SCOPED_MODELS = [
     Activity, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
     Baseline, Calendar, DashboardLayout, EvmSnapshot, ProgressEntry, ProjectMembership, ProjectScope,
     RecoveryPlan, RecoveryPlanItem, Resource, ResourceAssignment, RiskItem, RiskActionItem,
-    SavedActivityFilter, ScheduleExport, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod, WbsNode,
+    ReportFormat, SavedActivityFilter, ScheduleExport, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod,
+    WbsNode,
 ]
 
 # These four only carry baseline_id (no project_id of their own — see
@@ -338,3 +346,32 @@ def test_update_project_rejects_empty_payload(client, db_session):
     _login(client)
 
     assert client.patch(f"/projects/{project.id}", json={}).status_code == 422
+
+
+def test_every_project_scoped_table_is_covered_by_this_test():
+    """Tripwire for the enumerated delete in services/project_deletion.py.
+
+    Nothing in the schema cascades on project_id, so a new table carrying one
+    is only ever deleted if somebody remembers to add it there — and a miss is
+    invisible until a real Postgres refuses to delete a project (SQLite here
+    enforces FKs too, but only for rows a test actually creates). This fails
+    the moment a model with a project_id appears that the delete test above
+    doesn't populate and assert on, which is what forces both lists to be
+    updated together.
+
+    `report_formats` is why this exists: it shipped with Reporting, was never
+    added to either list, and quietly made every project with a saved report
+    format undeletable.
+    """
+    from app.db.base import Base
+
+    with_project_id = {
+        mapper.class_
+        for mapper in Base.registry.mappers
+        if "project_id" in mapper.class_.__table__.columns
+    }
+    missing = {m.__name__ for m in with_project_id} - {m.__name__ for m in _PROJECT_SCOPED_MODELS}
+    assert not missing, (
+        f"{sorted(missing)} carry a project_id but aren't in this test — add them to "
+        f"_populate_everything/_PROJECT_SCOPED_MODELS and to services/project_deletion.py"
+    )

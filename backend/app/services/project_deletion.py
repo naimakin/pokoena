@@ -46,6 +46,7 @@ from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan
+from app.models.report_format import ReportFormat
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.risk_item import RiskItem
@@ -126,6 +127,14 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
 
     # 4. Tables activities/baselines pointed at, now unreferenced.
     gone(ActivityCodeType, project_id=project_id)
+    # schedule_exports and schedule_imports reference EACH OTHER (an import
+    # names the export it came back from; an export names the programme it was
+    # built from), so neither can simply go first. Cutting one direction here
+    # leaves the other free to delete in order: exports keep their rows until
+    # step 5, imports go now.
+    db.query(ScheduleExport).filter(
+        ScheduleExport.tenant_id == tenant_id, ScheduleExport.project_id == project_id
+    ).update({ScheduleExport.source_import_id: None}, synchronize_session=False)
     gone(ScheduleImport, project_id=project_id)
     gone(Calendar, project_id=project_id)
 
@@ -138,6 +147,7 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
     gone(WbsNode, project_id=project_id)
     gone(DashboardLayout, project_id=project_id)
     gone(SavedActivityFilter, project_id=project_id)
+    gone(ReportFormat, project_id=project_id)
     gone(ProjectMembership, project_id=project_id)
     gone(ScheduleExport, project_id=project_id)  # after schedule_imports, step 4
 
