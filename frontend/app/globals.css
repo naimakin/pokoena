@@ -410,6 +410,10 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .crumb{font-size:.8125rem;color:var(--text-muted)}
 .crumb b{color:var(--text-primary);font-weight:600}
 .a-content{padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem;overflow:auto}
+/* A page's working area taken full screen (Project Activities). It scrolls on
+   its own, and needs an explicit background — the browser paints a fullscreen
+   element black by default. */
+.a-content.is-fullscreen{height:100vh;background:var(--bg)}
 .spacer{flex:1}
 
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}

@@ -8,15 +8,19 @@ external_id/task_code within the project):
   - P6-native fields (target/remaining duration, calendar, task/status code,
     dates, float, criticality, constraints) are overwritten wholesale — the
     .xer file is the source of truth for the schedule logic.
-  - Subcontractor-owned fields (`percent_complete`, `actual_start`,
-    `actual_finish`, `status`, `remaining_duration_days`) are left untouched —
-    those are edited via the existing PATCH /activities/{id} endpoint during
-    an open UpdatePeriod (see api/routes/activities.py::update_activity) and
-    must survive a schedule re-import.
+  - Progress fields (`percent_complete`, `actual_start`, `actual_finish`,
+    `status`, `remaining_duration_days`) are also edited in Poko (PATCH
+    /activities, see api/routes/activities.py). They take P6's values whenever
+    the file is at least as far along as Poko — the normal case, since the
+    round-trip carries Poko's progress into P6 and back — and keep Poko's only
+    when Poko is AHEAD: progress recorded in the field after the file left for
+    P6, which a re-import must not wipe. See `_p6_progress_wins`.
+    (Keeping Poko's unconditionally, the earlier rule, froze every activity at
+    whatever the FIRST import said: upload a baseline, then an update, and
+    everything the update had completed still read "Not Started".)
 On CREATE (no existing row for that external_id), every field is populated
-from the import, including the subcontractor-owned ones (best available P6
-data — physical % complete, actual dates, remaining duration converted to
-days).
+from the import (best available P6 data — physical % complete, actual dates,
+remaining duration converted to days).
 
 Relationships are matched by P6's internal `task_id` (not the human-readable
 `task_code` we store as `external_id`) — that's what TASKPRED rows reference.
@@ -60,6 +64,7 @@ from app.services.baseline import (
     overwrite_active_baseline_from_parsed,
     unique_baseline_label,
 )
+from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished
 from app.services.project_status import compute_status_rollup
 from app.services.schedule_current import get_current_import, mark_current, to_naive
 
@@ -115,6 +120,17 @@ def _derive_status(status_code: str, phys_complete_pct: float) -> tuple[Activity
     if status_code == "TK_Active" or pct > 0:
         return ActivityStatus.in_progress, pct
     return ActivityStatus.not_started, pct
+
+
+_STATUS_RANK = {ActivityStatus.not_started: 0, ActivityStatus.in_progress: 1, ActivityStatus.complete: 2}
+
+
+def _p6_progress_wins(row: Activity, p6_status: ActivityStatus, p6_pct: int) -> bool:
+    """Whether an existing activity takes the file's progress. Ties go to P6:
+    same status and % means the file came back through P6, whose actual dates
+    are then the authoritative ones."""
+    poko = (_STATUS_RANK.get(row.status, 0), int(row.percent_complete or 0))
+    return (_STATUS_RANK[p6_status], p6_pct) >= poko
 
 
 def import_xer(
@@ -291,6 +307,7 @@ def import_xer(
         # import so this is the only history.
         activities_snapshot: list[dict] = []
         renamed_external_ids: list[tuple[str, str]] = []  # (old, new) for recovery-plan re-linking
+        poko_ahead: dict[uuid.UUID, Activity] = {}
 
         for act in parsed.activities:
             row = existing_activities.get(act.task_code)
@@ -342,15 +359,21 @@ def import_xer(
             if is_critical:
                 critical_count += 1
 
-            if is_new:
-                status, pct = _derive_status(act.status_code, act.phys_complete_pct)
+            status, pct = _derive_status(act.status_code, act.phys_complete_pct)
+            if is_new or _p6_progress_wins(row, status, pct):
                 row.status = status
                 row.percent_complete = pct
                 row.actual_start = _to_date(act.act_start_date)
                 row.actual_finish = _to_date(act.act_end_date)
                 row.remaining_duration_days = round(act.remain_drtn_hr_cnt / 8.0)
-            # else: percent_complete/actual_start/actual_finish/status/remaining_duration_days
-            # are left untouched — subcontractor-owned, see module docstring.
+            else:
+                # Poko is ahead of the file — keep its progress (module docstring),
+                # and bring the units of this activity's assignments in line
+                # with it once they're rebuilt from the file below.
+                poko_ahead[row.id] = row
+                clear_float_if_finished(row)
+                if is_critical and not row.is_critical:
+                    critical_count -= 1
 
             db.flush()
             task_id_to_row_id[act.task_id] = row.id
@@ -462,22 +485,23 @@ def import_xer(
             resource_row_id = rsrc_id_to_row_id.get(assign.rsrc_id)
             if activity_row_id is None or resource_row_id is None:
                 continue
-            db.add(
-                ResourceAssignmentModel(
-                    id=uuid.uuid4(),
-                    tenant_id=ctx.tenant_id,
-                    project_id=project_id,
-                    activity_id=activity_row_id,
-                    resource_id=resource_row_id,
-                    remain_qty=assign.remain_qty,
-                    target_qty=assign.target_qty,
-                    act_reg_qty=assign.act_reg_qty,
-                    target_cost=assign.target_cost,
-                    act_reg_cost=assign.act_reg_cost,
-                    remain_cost=assign.remain_cost,
-                    unit_id=assign.unit_id,
-                )
+            assignment_row = ResourceAssignmentModel(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                project_id=project_id,
+                activity_id=activity_row_id,
+                resource_id=resource_row_id,
+                remain_qty=assign.remain_qty,
+                target_qty=assign.target_qty,
+                act_reg_qty=assign.act_reg_qty,
+                target_cost=assign.target_cost,
+                act_reg_cost=assign.act_reg_cost,
+                remain_cost=assign.remain_cost,
+                unit_id=assign.unit_id,
             )
+            if activity_row_id in poko_ahead:
+                apply_units_from_progress(poko_ahead[activity_row_id], [assignment_row])
+            db.add(assignment_row)
 
         # --- activity code types/values: upsert by (project_id, code_type_id) /
         # (project_id, actv_code_id) — same small-stable-tree pattern as WBS nodes. ---

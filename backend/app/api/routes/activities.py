@@ -15,6 +15,7 @@ from app.models.activity import Activity, ActivityStatus
 from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship
 from app.models.project import Project
+from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
@@ -29,6 +30,7 @@ from app.schemas.activity import (
     ActivityRelationshipOut,
     ActivityUpdate,
 )
+from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished
 from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -181,6 +183,24 @@ def _apply_progress_derivation(activity: Activity, changes: dict) -> None:
             activity.remaining_duration_days = round(activity.target_duration_hours / 8.0)
 
 
+_PROGRESS_FIELDS = {"percent_complete", "actual_start", "actual_finish"}
+
+
+def _apply_progress_side_effects(db: Session, activities: list[Activity]) -> None:
+    """Float and resource units follow a progress edit — see
+    services/activity_progress.py. One query for the whole batch."""
+    if not activities:
+        return
+    by_activity: dict[uuid.UUID, list[ResourceAssignment]] = {}
+    for assignment in db.query(ResourceAssignment).filter(
+        ResourceAssignment.activity_id.in_([a.id for a in activities])
+    ):
+        by_activity.setdefault(assignment.activity_id, []).append(assignment)
+    for activity in activities:
+        clear_float_if_finished(activity)
+        apply_units_from_progress(activity, by_activity.get(activity.id, []))
+
+
 @router.get("", response_model=list[ActivityOut])
 def list_activities(
     project_id: uuid.UUID,
@@ -280,6 +300,7 @@ def batch_update_activities(
     }
 
     saved: list[Activity] = []
+    progressed: list[Activity] = []
     failed: list[ActivityBatchRowError] = []
     for item in payload.updates:
         activity = rows.get(item.id)
@@ -295,10 +316,13 @@ def batch_update_activities(
             _apply_progress_derivation(activity, changes)
             _record_edit_events(db, ctx, activity, before)
             saved.append(activity)
+            if _PROGRESS_FIELDS & changes.keys():
+                progressed.append(activity)
         except HTTPException as exc:
             db.expire(activity)  # discard the in-memory mutation (nothing flushed yet)
             failed.append(ActivityBatchRowError(id=item.id, error=str(exc.detail)))
 
+    _apply_progress_side_effects(db, progressed)
     db.commit()
     for activity in saved:
         db.refresh(activity)
@@ -323,6 +347,8 @@ def update_activity(
     _apply_changes(activity, changes)
     _apply_progress_derivation(activity, changes)
     _record_edit_events(db, ctx, activity, before)
+    if _PROGRESS_FIELDS & changes.keys():
+        _apply_progress_side_effects(db, [activity])
 
     db.commit()
     db.refresh(activity)

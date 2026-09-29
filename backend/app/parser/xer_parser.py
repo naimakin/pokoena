@@ -586,6 +586,53 @@ def _parse_taskactv(rows: list[dict]) -> list[ActivityCode]:
     ]
 
 
+def main_project_id(project_rows: list[dict]) -> str:
+    """The proj_id of the project this file is ABOUT.
+
+    A P6 export can carry more than one project. The common case is "export
+    with baselines": the baselines ride along as extra PROJECT rows with
+    `export_flag` N and `orig_proj_id` pointing back at the real project, and
+    every TASK / PROJWBS / TASKPRED / TASKRSRC row of theirs is written too —
+    with the SAME task_codes as the live programme, since a baseline is a copy
+    of it. Pick the first project that is neither; fall back to the first row
+    for files that don't carry the flags at all."""
+    for r in project_rows:
+        if r.get("export_flag", "Y").strip().upper() != "N" and not r.get("orig_proj_id", "").strip():
+            return r.get("proj_id", "")
+    return project_rows[0].get("proj_id", "") if project_rows else ""
+
+
+def _only_main_project(tables: dict[str, list[dict]], proj_id: str, parse_log: list[str]) -> dict[str, list[dict]]:
+    """Drop every row that belongs to another project in the file (see
+    `main_project_id`). Without this a baseline exported alongside the
+    programme merged into it: its rows share task_codes with the live ones, so
+    whichever came last in the file won — not-started baseline copies
+    overwriting progressed activities, and both networks fed to one CPM run."""
+    other_projects = [r.get("proj_id", "") for r in tables.get("PROJECT", []) if r.get("proj_id", "") != proj_id]
+    if not other_projects:
+        return tables
+    parse_log.append(
+        f"File carries {len(other_projects)} other project(s) {other_projects} (baselines or companions) "
+        f"— reading only proj_id {proj_id}"
+    )
+
+    out = dict(tables)
+    out["PROJECT"] = [r for r in tables.get("PROJECT", []) if r.get("proj_id", "") == proj_id]
+    out["PROJWBS"] = [r for r in tables.get("PROJWBS", []) if r.get("proj_id", "") == proj_id]
+    out["TASK"] = [r for r in tables.get("TASK", []) if r.get("proj_id", "") == proj_id]
+    task_ids = {r.get("task_id", "") for r in out["TASK"]}
+    out["TASKPRED"] = [
+        r for r in tables.get("TASKPRED", []) if r.get("task_id", "") in task_ids and r.get("pred_task_id", "") in task_ids
+    ]
+    out["TASKRSRC"] = [r for r in tables.get("TASKRSRC", []) if r.get("task_id", "") in task_ids]
+    out["TASKACTV"] = [r for r in tables.get("TASKACTV", []) if r.get("task_id", "") in task_ids]
+    # Global code types (no proj_id) stay; project-scoped ones only for ours.
+    out["ACTVTYPE"] = [r for r in tables.get("ACTVTYPE", []) if r.get("proj_id", "").strip() in ("", proj_id)]
+    type_ids = {r.get("actv_code_type_id", "") for r in out["ACTVTYPE"]}
+    out["ACTVCODE"] = [r for r in tables.get("ACTVCODE", []) if r.get("actv_code_type_id", "") in type_ids]
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -606,6 +653,10 @@ def parse_xer(file_bytes: bytes) -> ParsedSchedule:
     parse_log: list[str] = [f"parse_xer started: size={len(file_bytes)} bytes"]
     text = _decode(file_bytes)
     tables = _read_tables(text, parse_log)
+
+    if not tables.get("PROJECT"):
+        raise XerParseError("No PROJECT table found in this file")
+    tables = _only_main_project(tables, main_project_id(tables["PROJECT"]), parse_log)
 
     projects = _parse_projects(tables.get("PROJECT", []))
     if not projects:

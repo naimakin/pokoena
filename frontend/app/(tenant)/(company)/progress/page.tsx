@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -10,6 +10,7 @@ import { FilterPanel } from "@/components/progress/FilterPanel";
 import { StatusDatesMode } from "@/components/progress/StatusDatesMode";
 import { ManhoursMode } from "@/components/progress/ManhoursMode";
 import { UNGROUPED_KEY } from "@/lib/wbs-tree";
+import { MaximizeIcon, MinimizeIcon } from "@/components/icons";
 
 type Mode = "status" | "manhours";
 const MODE_KEY = "poko:progress:mode";
@@ -64,6 +65,11 @@ export default function ProgressPage() {
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [filterDirty, setFilterDirty] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Full screen, same as Planning > Schedule: the whole working area (controls,
+  // filters and grid) goes full screen, so filtering still works from there.
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Folded in from the old Planning > Activities view — CPM-side quick filters,
   // scoped to Status & Dates only (Burned MH Loading keeps its own filtered set).
@@ -319,6 +325,22 @@ export default function ProgressPage() {
     }
   }
 
+  // Driven by the browser, not by us: Esc and the window chrome can leave full
+  // screen without asking, so `fullscreenchange` is what sets the state.
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === contentRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      contentRef.current?.requestFullscreen().catch(() => undefined);
+    }
+  }
+
   if (loading) {
     return (
       <div className="a-content">
@@ -357,7 +379,7 @@ export default function ProgressPage() {
         <div className="spacer" />
         {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}
       </div>
-      <div className="a-content">
+      <div ref={contentRef} className={`a-content${isFullscreen ? " is-fullscreen" : ""}`}>
         <div className="page-head">
           <div>
             <div className="page-title">Project Activities</div>
@@ -450,6 +472,15 @@ export default function ProgressPage() {
               Burned MH Loading
             </button>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            title={isFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+            aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? <MinimizeIcon className="icon" /> : <MaximizeIcon className="icon" />}
+          </button>
           </div>
         </div>
 
