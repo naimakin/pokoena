@@ -14,6 +14,7 @@ class ScheduleExportOut(BaseModel):
     revision_label: str
     source_filename: str
     data_date: datetime | None
+    source_import_id: uuid.UUID | None = None
     activity_count: int
     exported_by_user_id: uuid.UUID
     exported_at: datetime
@@ -40,3 +41,5 @@ class SyncLogEntry(BaseModel):
     filename: str
     # Only set on an import the user linked back to a Poko export.
     linked_export_label: str | None = None
+    # Only set on an export: the programme (import) whose .xer it was built from.
+    source_import_label: str | None = None

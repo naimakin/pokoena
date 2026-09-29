@@ -24,6 +24,12 @@ class ScheduleExport(Base):
     revision_label: Mapped[str] = mapped_column(String(30), nullable=False)
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     data_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The programme this file was built from — the user picks one on Export /
+    # Sync to P6, defaulting to the current update. NULL on a project with no
+    # imports at all, and on exports made before the picker shipped.
+    source_import_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("schedule_imports.id"), nullable=True
+    )
     activity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     exported_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     exported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -601,6 +601,9 @@ export interface ScheduleExport {
   revision_label: string;
   source_filename: string;
   data_date: string | null;
+  // The programme (import) this file was built from. Null on exports made
+  // before the programme picker, and on a project with no imports.
+  source_import_id: string | null;
   activity_count: number;
   exported_by_user_id: string;
   exported_at: string;
@@ -616,7 +619,10 @@ export interface SyncLogEntry {
   activity_count: number;
   data_date: string | null;
   filename: string;
+  // On an import the user linked back to a Poko export; on an export, the
+  // programme (import) whose .xer it was built from.
   linked_export_label: string | null;
+  source_import_label: string | null;
 }
 
 export interface ActivityUpdatePayload {

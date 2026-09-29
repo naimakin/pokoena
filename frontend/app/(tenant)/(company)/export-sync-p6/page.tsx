@@ -1,10 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
-import type { Activity, SyncLogEntry } from "@/lib/types";
+import type { Activity, ScheduleImport, SyncLogEntry } from "@/lib/types";
 import { DownloadIcon } from "@/components/icons";
+
+const selectStyle: CSSProperties = {
+  fontSize: ".8125rem",
+  height: 32,
+  padding: "0 .5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  color: "var(--text-primary)",
+};
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -27,6 +37,8 @@ function fmtWhen(iso: string): string {
 export default function ExportSyncP6Page() {
   const { project } = useProjectContext();
   const [activityCount, setActivityCount] = useState(0);
+  const [imports, setImports] = useState<ScheduleImport[]>([]);
+  const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
   const [log, setLog] = useState<SyncLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +52,8 @@ export default function ExportSyncP6Page() {
   const load = useCallback(async () => {
     if (!project) {
       setActivityCount(0);
+      setImports([]);
+      setSelectedImportId(null);
       setLog([]);
       setLoading(false);
       return;
@@ -47,11 +61,19 @@ export default function ExportSyncP6Page() {
     setLoading(true);
     setError(null);
     try {
-      const [activities, syncLog] = await Promise.all([
+      const [activities, importList, syncLog] = await Promise.all([
         api.get<Activity[]>(`/activities?project_id=${project.id}`),
+        api.get<ScheduleImport[]>(`/projects/${project.id}/schedule-imports`),
         api.get<SyncLogEntry[]>(`/projects/${project.id}/sync-log`),
       ]);
       setActivityCount(activities.length);
+      setImports(importList);
+      // Default to the current update — the schedule every other page shows —
+      // and keep whatever the user picked across a reload.
+      setSelectedImportId((prev) => {
+        if (prev && importList.some((i) => i.id === prev)) return prev;
+        return (importList.find((i) => i.is_current) ?? importList[0])?.id ?? null;
+      });
       setLog(syncLog);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load the project.");
@@ -63,6 +85,25 @@ export default function ExportSyncP6Page() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const currentImportId = useMemo(
+    () => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null,
+    [imports],
+  );
+  // A programme can only be exported from its own stored .xer — an upload made
+  // before Poko kept source files can only go out while it IS the current
+  // update, where the export falls back to building the file from the live
+  // tables (see backend routes/export.py).
+  const exportable = useMemo(
+    () => imports.filter((i) => i.has_source_file || i.id === currentImportId),
+    [imports, currentImportId],
+  );
+  const selectedImport = useMemo(
+    () => exportable.find((i) => i.id === selectedImportId) ?? null,
+    [exportable, selectedImportId],
+  );
+  const isCurrentSelected = selectedImport !== null && selectedImport.id === currentImportId;
+  const exportCount = selectedImport ? selectedImport.activity_count : activityCount;
 
   const lastExportNo = log
     .filter((e) => e.kind === "export")
@@ -136,7 +177,10 @@ export default function ExportSyncP6Page() {
     setExporting(true);
     setExportError(null);
     try {
-      const { blob, filename } = await api.getBlob(`/projects/${project.id}/export/xer`);
+      const path = `/projects/${project.id}/export/xer${
+        selectedImport && !isCurrentSelected ? `?import_id=${selectedImport.id}` : ""
+      }`;
+      const { blob, filename } = await api.getBlob(path);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -182,7 +226,7 @@ export default function ExportSyncP6Page() {
           <div>
             <div className="page-title">Export / Sync to P6</div>
             <div className="page-desc">
-              Download the current schedule as a .xer file to update it back in Primavera P6. Every export
+              Download a programme as a .xer file to update it back in Primavera P6. Every export
               and import is numbered per project — <span className="mono">EXP-n</span> going out,{" "}
               <span className="mono">UPD-n</span> coming back — so it&apos;s clear which file is which.
             </div>
@@ -207,7 +251,10 @@ export default function ExportSyncP6Page() {
                       lineHeight: 1.6,
                     }}
                   >
-                    <li>Download the .xer file below — it reflects the current schedule and progress in Poko.</li>
+                    <li>
+                      Pick the programme to send back and download its .xer below — it carries the progress
+                      recorded in Poko.
+                    </li>
                     <li>Open it in Primavera P6 and run F9 (schedule recalculation).</li>
                     <li>
                       Re-upload the F9 result via Program Library. Link it back to this export there so the sync
@@ -216,24 +263,53 @@ export default function ExportSyncP6Page() {
                   </ol>
                 </div>
 
+                {exportable.length > 0 && (
+                  <label
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: ".3rem",
+                      fontSize: ".75rem",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    Programme to export
+                    <select
+                      style={selectStyle}
+                      value={selectedImportId ?? ""}
+                      onChange={(e) => setSelectedImportId(e.target.value)}
+                    >
+                      {exportable.map((imp) => (
+                        <option key={imp.id} value={imp.id}>
+                          {imp.revision_label ?? imp.filename}
+                          {imp.data_date ? ` · ${fmtDate(imp.data_date)}` : ""}
+                          {imp.id === currentImportId ? " — Current update" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
                 <div className="banner">
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: ".8125rem" }}>{activityCount} activities included</div>
+                    <div style={{ fontWeight: 700, fontSize: ".8125rem" }}>{exportCount} activities included</div>
                     <div style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
-                      Calendars, resources, and activity codes from the last import are included automatically.
+                      {selectedImport && !isCurrentSelected
+                        ? `${selectedImport.revision_label ?? selectedImport.filename} goes out as the file it was uploaded as — its own calendars, resources, and activity codes — with the progress recorded in Poko written onto the activities it shares with the current schedule.`
+                        : "Calendars, resources, and activity codes from the last import are included automatically."}
                     </div>
                   </div>
                 </div>
 
-                <button className="btn btn-primary" onClick={downloadXer} disabled={exporting || activityCount === 0}>
+                <button className="btn btn-primary" onClick={downloadXer} disabled={exporting || exportCount === 0}>
                   <DownloadIcon className="icon" /> {exporting ? "Preparing…" : "Export .xer"}
                 </button>
-                {activityCount > 0 && (
+                {exportCount > 0 && (
                   <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
                     Next file: <span className="mono">{nextFilename}</span>
                   </p>
                 )}
-                {activityCount === 0 && (
+                {exportCount === 0 && (
                   <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
                     Import a schedule from Program Library before exporting.
                   </p>
@@ -298,8 +374,10 @@ export default function ExportSyncP6Page() {
                             ) : (
                               <>
                                 <div className="subname">{e.label}</div>
-                                {e.linked_export_label && (
-                                  <div className="actid">from {e.linked_export_label}</div>
+                                {/* An import says which export it came back from; an export
+                                    says which programme it was built from. */}
+                                {(e.linked_export_label ?? e.source_import_label) && (
+                                  <div className="actid">from {e.linked_export_label ?? e.source_import_label}</div>
                                 )}
                               </>
                             )}

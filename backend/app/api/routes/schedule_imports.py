@@ -300,7 +300,7 @@ def delete_schedule_import(
     see services/xer_import.py) and one the ACTIVE baseline is locked from
     (a permanent commitment, never silently discarded). Deleting any other
     import also drops its ScheduleStatusSnapshot trend point, clears the
-    now-dangling references on activities/recovery plans, and — since the
+    now-dangling references on activities/recovery plans/exports, and — since the
     baseline can now be moved elsewhere (see evm.py's from-import route,
     which keeps the old one around as `superseded` for exact restoration) —
     cascades away any superseded baseline still pointing at it. Baseline.
@@ -357,6 +357,9 @@ def delete_schedule_import(
 
     db.query(ScheduleStatusSnapshot).filter(ScheduleStatusSnapshot.schedule_import_id == import_id).delete()
     db.query(Activity).filter(Activity.last_import_id == import_id).update({Activity.last_import_id: None})
+    db.query(ScheduleExport).filter(ScheduleExport.source_import_id == import_id).update(
+        {ScheduleExport.source_import_id: None}, synchronize_session=False
+    )
     db.query(RecoveryPlan).filter(RecoveryPlan.from_import_id == import_id).update({RecoveryPlan.from_import_id: None})
     db.query(RecoveryPlan).filter(RecoveryPlan.to_import_id == import_id).update({RecoveryPlan.to_import_id: None})
 

@@ -38,6 +38,7 @@ def get_sync_log(
         .all()
     )
     export_label_by_id = {e.id: e.revision_label for e in exports}
+    import_label_by_id = {i.id: (i.revision_label or i.filename) for i in imports}
 
     user_ids = {e.exported_by_user_id for e in exports} | {i.imported_by_user_id for i in imports}
     name_by_user_id = {
@@ -56,6 +57,7 @@ def get_sync_log(
             activity_count=e.activity_count,
             data_date=e.data_date,
             filename=e.source_filename,
+            source_import_label=import_label_by_id.get(e.source_import_id),
         )
         for e in exports
     ]
