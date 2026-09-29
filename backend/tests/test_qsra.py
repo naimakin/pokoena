@@ -168,6 +168,21 @@ def test_pert_inverse_is_monotone_and_bounded():
     assert values[0] >= 2 - 1e-9 and values[-1] <= 20 + 1e-9
 
 
+def test_pert_never_leaves_its_range_at_the_extremes():
+    # The tabulated CDF's last entry can land a hair under 1.0, by an amount
+    # that depends on the platform's pow() — once, that put u = 1 beyond `high`
+    # on Linux CI but not on Windows. Sweep enough shapes to hit it anywhere.
+    for low in (0, 1, 2.5, 10):
+        for width in (1, 3, 7.7, 18, 55):
+            for mode_share in (0.0, 0.1, 0.37, 0.5, 0.83, 1.0):
+                high = low + width
+                mode = low + width * mode_share
+                d = RiskDriver("R", "t", 1.0, (low, mode, high), "pert")
+                for u in (0.0, 1e-12, 0.5, 1 - 1e-12, 1.0):
+                    v = inv_impact(d, u)
+                    assert low <= v <= high, (low, mode, high, u, v)
+
+
 def test_percentile_interpolates():
     assert percentile([0, 10], 50) == 5
     assert percentile([1, 2, 3, 4, 5], 80) == pytest.approx(4.2)

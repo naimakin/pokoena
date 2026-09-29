@@ -162,6 +162,10 @@ def _pert_table(low: float, mode: float, high: float, steps: int = 2000, points:
     for d in dens:
         running += d / total
         cum.append(running)
+    # Floating-point summation leaves the last entry a hair off 1.0, and by how
+    # much depends on the platform's pow(). Below 1.0, a draw of u = 1 fell past
+    # the table and was extrapolated beyond `high`. Pin the ends exactly.
+    cum[-1] = 1.0
     xs = [k / steps for k in range(steps + 1)]
     # Thin to `points` evenly spaced probabilities.
     probs = [i / (points - 1) for i in range(points)]
@@ -170,7 +174,7 @@ def _pert_table(low: float, mode: float, high: float, steps: int = 2000, points:
         j = bisect.bisect_left(cum, p)
         j = min(max(j, 1), len(cum) - 1)
         c0, c1 = cum[j - 1], cum[j]
-        t = 0.0 if c1 == c0 else (p - c0) / (c1 - c0)
+        t = 0.0 if c1 == c0 else min(1.0, max(0.0, (p - c0) / (c1 - c0)))
         values.append(low + (high - low) * (xs[j - 1] + t * (xs[j] - xs[j - 1])))
     return probs, values
 
@@ -187,8 +191,8 @@ def inv_impact(driver: RiskDriver, u: float) -> float:
         probs, values = driver._pert_table
         j = min(max(bisect.bisect_left(probs, u), 1), len(probs) - 1)
         p0, p1 = probs[j - 1], probs[j]
-        t = 0.0 if p1 == p0 else (u - p0) / (p1 - p0)
-        return values[j - 1] + t * (values[j] - values[j - 1])
+        t = 0.0 if p1 == p0 else min(1.0, max(0.0, (u - p0) / (p1 - p0)))
+        return min(high, max(low, values[j - 1] + t * (values[j] - values[j - 1])))
     return tri_inv(u, low, mode, high)
 
 
