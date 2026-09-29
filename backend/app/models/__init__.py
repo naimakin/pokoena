@@ -33,6 +33,7 @@ from app.models.recovery_plan import (
 )
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
+from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
 from app.models.risk_item import (
     MitigationStatus,
     MitigationStrategy,

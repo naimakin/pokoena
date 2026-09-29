@@ -122,6 +122,32 @@ def _derive_status(status_code: str, phys_complete_pct: float) -> tuple[Activity
     return ActivityStatus.not_started, pct
 
 
+def _assignments_snapshot(parsed: ParsedSchedule) -> list[dict]:
+    """This import's resource assignments as the FILE states them — the
+    productivity history Risk > Resources reads across updates."""
+    code_by_task = {a.task_id: a.task_code for a in parsed.activities}
+    rsrc_by_id = {r.rsrc_id: r for r in parsed.resources}
+    out = []
+    for assign in parsed.assignments:
+        code = code_by_task.get(assign.task_id)
+        rsrc = rsrc_by_id.get(assign.rsrc_id)
+        if code is None or rsrc is None:
+            continue
+        out.append(
+            {
+                "external_id": code,
+                "rsrc_id": assign.rsrc_id,
+                "rsrc_name": rsrc.rsrc_name,
+                "rsrc_type": rsrc.rsrc_type,
+                "unit_id": assign.unit_id,
+                "budget": assign.target_qty,
+                "actual": assign.act_reg_qty,
+                "remaining": assign.remain_qty,
+            }
+        )
+    return out
+
+
 _STATUS_RANK = {ActivityStatus.not_started: 0, ActivityStatus.in_progress: 1, ActivityStatus.complete: 2}
 
 
@@ -626,11 +652,16 @@ def import_xer(
             )
 
     if reuse_import is not None:
+        # Imports from before assignment capture get theirs backfilled from the
+        # stored file the first time they're re-applied.
+        if not reuse_import.assignments_snapshot:
+            reuse_import.assignments_snapshot = _assignments_snapshot(parsed)
         mark_current(db, ctx.tenant_id, project_id, import_id)
         db.commit()
         db.refresh(schedule_import)
         return schedule_import
 
+    schedule_import.assignments_snapshot = _assignments_snapshot(parsed)
     schedule_import.activity_count = len(parsed.activities)
     schedule_import.critical_count = critical_count
     schedule_import.warnings = parsed.parse_log

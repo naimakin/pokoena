@@ -71,6 +71,7 @@ def list_schedule_imports(
             defer(ScheduleImport.relationships_snapshot),
             defer(ScheduleImport.activities_snapshot),
             defer(ScheduleImport.wbs_snapshot),
+            defer(ScheduleImport.assignments_snapshot),
         )
         .filter(ScheduleImport.tenant_id == ctx.tenant_id, ScheduleImport.project_id == project_id)
         .order_by(ScheduleImport.imported_at.desc())

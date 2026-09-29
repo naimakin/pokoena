@@ -1303,3 +1303,48 @@ tr.resolved{opacity:.45}
 @page{size:A4 portrait;margin:14mm 12mm}
 @page report-landscape{size:A4 landscape;margin:12mm 14mm}
 .report-sheet.is-landscape{page:report-landscape}
+
+/* --- Risk section: QSRA, early warnings, resources (components/risk/) --- */
+.risk-chart{position:relative;overflow-x:auto;padding:.4rem 1.1rem .8rem}
+.risk-legend{display:flex;flex-wrap:wrap;gap:.9rem;font-size:.75rem;color:var(--text-secondary);padding:.2rem 0 .4rem}
+.risk-legend span{display:inline-flex;align-items:center;gap:.4rem}
+.risk-legend i{display:inline-block;flex:none}
+.risk-tooltip{position:absolute;transform:translateX(-50%);pointer-events:none;z-index:4;min-width:150px;
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-md);
+  padding:.45rem .6rem;font-size:.75rem;display:flex;flex-direction:column;gap:.2rem}
+.risk-tooltip-title{font-weight:600;color:var(--text-secondary)}
+.risk-tooltip-row{display:flex;align-items:center;gap:.4rem;color:var(--text-muted)}
+.risk-tooltip-row i{width:12px;height:2px;flex:none}
+.risk-tooltip-row b{color:var(--text-primary)}
+.risk-tooltip-foot{font-size:.6875rem;color:var(--text-tertiary)}
+.risk-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}
+.risk-kpis .kpi-value{font-size:1.35rem;font-variant-numeric:normal}
+.risk-hbars{display:flex;flex-direction:column;gap:.55rem;padding:.9rem 1.1rem}
+.risk-hbar-row{display:grid;grid-template-columns:minmax(140px,2fr) 3fr 64px;gap:.75rem;align-items:center}
+.risk-hbar-label{display:flex;flex-direction:column;min-width:0;font-size:.8125rem}
+.risk-hbar-label .subname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.risk-hbar-track{position:relative;height:14px;background:var(--surface-2);border-radius:var(--radius-xs)}
+.risk-hbar-axis{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border-strong)}
+.risk-hbar-fill{position:absolute;top:0;bottom:0}
+.risk-hbar-value{text-align:right;font-size:.8125rem}
+.risk-check{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 1.1rem;font-size:.75rem;color:var(--text-secondary)}
+.risk-settings{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;padding:1rem 1.1rem}
+.risk-settings label{display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;color:var(--text-muted);font-weight:600}
+.risk-settings select,.risk-settings input{height:32px;font-size:.8125rem}
+.ew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.ew-card{display:flex;flex-direction:column;gap:.5rem;padding:1rem 1.1rem;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.ew-card.is-open{box-shadow:inset 3px 0 0 var(--accent-line),var(--shadow-xs)}
+.ew-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
+.ew-card-value{font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
+.ew-card-q{font-size:.75rem;color:var(--text-muted)}
+.ew-card-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:.5rem;font-size:.6875rem;color:var(--text-tertiary)}
+.rec-list{display:flex;flex-direction:column}
+.rec-item{display:grid;grid-template-columns:auto 1fr auto;gap:.75rem;align-items:start;padding:.8rem 1.1rem;border-top:1px solid var(--border);font-size:.8125rem}
+.rec-item:first-child{border-top:none}
+.risk-3pt{display:flex;gap:.35rem;align-items:center}
+.risk-3pt input{width:70px}
+@media (max-width:720px){
+  .risk-hbar-row{grid-template-columns:1fr 64px}
+  .risk-hbar-track{grid-column:1 / -1;order:3}
+  .rec-item{grid-template-columns:1fr}
+}

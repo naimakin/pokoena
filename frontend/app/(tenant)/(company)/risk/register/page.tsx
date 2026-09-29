@@ -5,7 +5,8 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { RiskItem, RiskStatusValue, User } from "@/lib/types";
+import type { Activity, RiskItem, RiskStatusValue, User, WbsNode } from "@/lib/types";
+import { QsraRiskEditor } from "@/components/risk/QsraRiskEditor";
 
 const CATEGORIES = ["Design", "Procurement", "Construction", "Weather", "Commercial", "Permitting", "Interface", "Other"];
 const STATUSES: RiskStatusValue[] = ["open", "mitigating", "closed", "occurred"];
@@ -40,6 +41,23 @@ export default function RiskRegisterPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [draft, setDraft] = useState({ title: "", description: "", category: "", probability: 3, impact: 3 });
+  // Loaded once, the first time a row is opened: the QSRA editor links risks
+  // to activities / WBS nodes of the live programme.
+  const [activities, setActivities] = useState<Activity[] | null>(null);
+  const [wbsNodes, setWbsNodes] = useState<WbsNode[]>([]);
+
+  useEffect(() => {
+    if (!expanded || !project || activities !== null) return;
+    Promise.all([
+      api.get<Activity[]>(`/activities?project_id=${project.id}`),
+      api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`).catch(() => [] as WbsNode[]),
+    ])
+      .then(([acts, nodes]) => {
+        setActivities(acts);
+        setWbsNodes(nodes);
+      })
+      .catch(() => setActivities([]));
+  }, [expanded, project, activities]);
 
   useEffect(() => {
     api.get<User>("/auth/me").then(setMe).catch(() => setMe(null));
@@ -132,7 +150,10 @@ export default function RiskRegisterPage() {
         <div className="page-head">
           <div>
             <div className="page-title">Risk Register</div>
-            <div className="page-desc">{risks.length} risks · probability × impact scored 1–25</div>
+            <div className="page-desc">
+              {risks.length} risks · probability × impact scored 1–25 · {risks.filter((r) => r.qsra_enabled).length}{" "}
+              quantified for <Link href="/risk">QSRA</Link>
+            </div>
           </div>
           <button className="btn btn-primary" onClick={() => setNewOpen((v) => !v)}>
             + New risk
@@ -195,6 +216,7 @@ export default function RiskRegisterPage() {
                     <th style={{ textAlign: "center" }}>Score</th>
                     <th>Status</th>
                     <th>Owner</th>
+                    <th>QSRA</th>
                     <th>Mitigation</th>
                   </tr>
                 </thead>
@@ -214,11 +236,26 @@ export default function RiskRegisterPage() {
                         </td>
                         <td><span className={`chip ${STATUS_CHIP[r.status]}`}>{r.status}</span></td>
                         <td>{r.owner_name ?? "—"}</td>
+                        <td className="num" style={{ fontSize: ".75rem" }}>
+                          {r.qsra_enabled ? (
+                            <>
+                              {r.probability_pct ?? `~${[5, 20, 40, 60, 85][r.probability - 1]}`}% ·{" "}
+                              {r.impact_ml ?? r.impact_max ?? "—"}
+                              {r.impact_mode === "duration_pct" ? "%" : " d"}
+                              <div className="actid">
+                                {r.apply_to_wbs ? "WBS" : `${r.activity_external_ids.length} act.`}
+                                {r.risk_kind === "opportunity" ? " · opportunity" : ""}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="actid">Not quantified</span>
+                          )}
+                        </td>
                         <td><span className={`chip ${MIT_CHIP[r.mitigation_status]}`}>{r.mitigation_status.replace("_", " ")}</span></td>
                       </tr>
                       {expanded === r.id && (
                         <tr>
-                          <td colSpan={8} style={{ background: "var(--surface-2)" }}>
+                          <td colSpan={9} style={{ background: "var(--surface-2)" }}>
                             <div style={{ padding: ".7rem .3rem", display: "flex", flexDirection: "column", gap: ".5rem" }}>
                               <textarea
                                 defaultValue={r.description ?? ""}
@@ -261,6 +298,16 @@ export default function RiskRegisterPage() {
                                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                                 </select>
                               </div>
+                              {activities === null ? (
+                                <p className="page-desc">Loading the schedule…</p>
+                              ) : (
+                                <QsraRiskEditor
+                                  risk={r}
+                                  activities={activities}
+                                  wbsNodes={wbsNodes}
+                                  onPatch={(body) => patchRisk(r.id, body)}
+                                />
+                              )}
                               <div style={{ display: "flex", gap: ".5rem" }}>
                                 <Link href="/risk/mitigation-plans" className="btn btn-secondary btn-sm">
                                   Open mitigation plan →

@@ -72,7 +72,7 @@ def test_high_float_flagged_above_44_working_days():
 
 
 def test_mandatory_constraint_flagged():
-    a = _act(external_id="A1", constraint_type="CS_MSOA")
+    a = _act(external_id="A1", constraint_type="CS_MANDSTART")
     report = run_dcma([a], [], hours_per_day=8, data_date=None)
 
     hard = next(c for c in report.checks if c.id == 5)
@@ -80,8 +80,17 @@ def test_mandatory_constraint_flagged():
     assert hard.details == ["A1"]
 
 
+def test_on_or_after_constraints_are_not_hard():
+    # P6's "start / finish on or after" are soft floors, not mandatory dates.
+    acts = [_act(external_id="A1", constraint_type="CS_MSOA"), _act(external_id="A2", constraint_type="CS_MEOA")]
+    report = run_dcma(acts, [], hours_per_day=8, data_date=None)
+
+    hard = next(c for c in report.checks if c.id == 5)
+    assert hard.details == []
+
+
 def test_secondary_constraint_also_flagged():
-    a = _act(external_id="A1", constraint_type_2="CS_MEOA")
+    a = _act(external_id="A1", constraint_type_2="CS_MANDFIN")
     report = run_dcma([a], [], hours_per_day=8, data_date=None)
 
     hard = next(c for c in report.checks if c.id == 5)

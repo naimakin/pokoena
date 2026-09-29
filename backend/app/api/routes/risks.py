@@ -24,6 +24,7 @@ from app.models.risk_item import (
 )
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole
+from app.services.risk_analysis import pct_to_score
 from app.schemas.risk_register import (
     ItemOrderIn,
     MitigationReviewIn,
@@ -57,6 +58,37 @@ def _load_risk(db: Session, project_id: uuid.UUID, risk_id: uuid.UUID, ctx: Auth
     if risk.project_id != project_id:
         raise HTTPException(status_code=404, detail="Not found")
     return risk
+
+
+_QSRA_FIELDS = (
+    "qsra_enabled", "risk_kind", "probability_pct", "impact_mode", "impact_min", "impact_ml", "impact_max",
+    "impact_distribution", "post_probability_pct", "post_impact_min", "post_impact_ml", "post_impact_max",
+    "impact_in_schedule", "apply_to_wbs",
+)
+# Fields where None is a real value ("not entered"), not "leave unchanged".
+_QSRA_NULLABLE = {
+    "probability_pct", "impact_min", "impact_ml", "impact_max",
+    "post_probability_pct", "post_impact_min", "post_impact_ml", "post_impact_max",
+}
+
+
+def _apply_qsra_fields(risk: RiskItem, changes: dict) -> None:
+    """The QSRA inputs (see services/risk_analysis.py). A probability entered as
+    a % re-derives the 1–5 score, so the matrix and the simulation never
+    disagree about how likely a risk is."""
+    for field in _QSRA_FIELDS:
+        if field not in changes:
+            continue
+        value = changes[field]
+        if value is None and field not in _QSRA_NULLABLE:
+            continue
+        setattr(risk, field, value)
+    if changes.get("probability_pct") is not None:
+        risk.probability = pct_to_score(changes["probability_pct"])
+    lo, ml, hi = risk.impact_min, risk.impact_ml, risk.impact_max
+    present = [v for v in (lo, ml, hi) if v is not None]
+    if present != sorted(present):
+        raise HTTPException(status_code=422, detail="Impact must satisfy min ≤ most likely ≤ max")
 
 
 def _decorate(db: Session, risks: list[RiskItem]) -> None:
@@ -183,6 +215,7 @@ def create_risk(
         activity_external_ids=payload.activity_external_ids,
         created_by_user_id=ctx.user.id,
     )
+    _apply_qsra_fields(risk, payload.model_dump(exclude_unset=True))
     db.add(risk)
     db.commit()
     db.refresh(risk)
@@ -210,6 +243,10 @@ def update_risk(
             setattr(risk, field, changes[field])
     if "probability" in changes and changes["probability"] is not None:
         risk.probability = changes["probability"]
+        # A new 1–5 likelihood supersedes an older %: the simulation derives
+        # it from the score again (and flags it for review) until one is entered.
+        if "probability_pct" not in changes:
+            risk.probability_pct = None
     if "impact" in changes and changes["impact"] is not None:
         risk.impact = changes["impact"]
     if "status" in changes and changes["status"] is not None:
@@ -222,6 +259,7 @@ def update_risk(
         )
     if "mitigation_summary" in changes and not mitigation_locked:
         risk.mitigation_summary = changes["mitigation_summary"]
+    _apply_qsra_fields(risk, changes)
 
     risk.score = risk.probability * risk.impact
     db.commit()

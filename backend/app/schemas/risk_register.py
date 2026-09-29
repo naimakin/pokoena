@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _clamp_1_5(v: int | None) -> int | None:
@@ -24,6 +24,31 @@ class RiskItemCreate(BaseModel):
     wbs_path: str | None = Field(default=None, max_length=500)
     activity_external_ids: list[str] = Field(default_factory=list, max_length=200)
 
+    # --- QSRA quantification ---
+    qsra_enabled: bool | None = None
+    risk_kind: Literal["threat", "opportunity"] | None = None
+    probability_pct: float | None = Field(default=None, ge=0, le=100)
+    impact_mode: Literal["duration_pct", "delay_days"] | None = None
+    impact_min: float | None = Field(default=None, ge=0, le=100000)
+    impact_ml: float | None = Field(default=None, ge=0, le=100000)
+    impact_max: float | None = Field(default=None, ge=0, le=100000)
+    impact_distribution: Literal["triangular", "pert", "uniform"] | None = None
+    post_probability_pct: float | None = Field(default=None, ge=0, le=100)
+    post_impact_min: float | None = Field(default=None, ge=0, le=100000)
+    post_impact_ml: float | None = Field(default=None, ge=0, le=100000)
+    post_impact_max: float | None = Field(default=None, ge=0, le=100000)
+    impact_in_schedule: bool | None = None
+    apply_to_wbs: bool | None = None
+
+    @model_validator(mode="after")
+    def _ordered_ranges(self):
+        for prefix in ("impact", "post_impact"):
+            lo, ml, hi = (getattr(self, f"{prefix}_{k}") for k in ("min", "ml", "max"))
+            present = [v for v in (lo, ml, hi) if v is not None]
+            if len(present) >= 2 and present != sorted(present):
+                raise ValueError(f"{prefix.replace('_', ' ')} must satisfy min ≤ most likely ≤ max")
+        return self
+
 
 class RiskItemUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
@@ -39,6 +64,31 @@ class RiskItemUpdate(BaseModel):
     activity_external_ids: list[str] | None = Field(default=None, max_length=200)
     mitigation_strategy: Literal["mitigate", "avoid", "transfer", "accept"] | None = None
     mitigation_summary: str | None = Field(default=None, max_length=8000)
+
+    # --- QSRA quantification ---
+    qsra_enabled: bool | None = None
+    risk_kind: Literal["threat", "opportunity"] | None = None
+    probability_pct: float | None = Field(default=None, ge=0, le=100)
+    impact_mode: Literal["duration_pct", "delay_days"] | None = None
+    impact_min: float | None = Field(default=None, ge=0, le=100000)
+    impact_ml: float | None = Field(default=None, ge=0, le=100000)
+    impact_max: float | None = Field(default=None, ge=0, le=100000)
+    impact_distribution: Literal["triangular", "pert", "uniform"] | None = None
+    post_probability_pct: float | None = Field(default=None, ge=0, le=100)
+    post_impact_min: float | None = Field(default=None, ge=0, le=100000)
+    post_impact_ml: float | None = Field(default=None, ge=0, le=100000)
+    post_impact_max: float | None = Field(default=None, ge=0, le=100000)
+    impact_in_schedule: bool | None = None
+    apply_to_wbs: bool | None = None
+
+    @model_validator(mode="after")
+    def _ordered_ranges(self):
+        for prefix in ("impact", "post_impact"):
+            lo, ml, hi = (getattr(self, f"{prefix}_{k}") for k in ("min", "ml", "max"))
+            present = [v for v in (lo, ml, hi) if v is not None]
+            if len(present) >= 2 and present != sorted(present):
+                raise ValueError(f"{prefix.replace('_', ' ')} must satisfy min ≤ most likely ≤ max")
+        return self
 
     @field_validator("probability", "impact")
     @classmethod
@@ -91,6 +141,20 @@ class RiskItemOut(BaseModel):
     owner_name: str | None
     wbs_path: str | None
     activity_external_ids: list[str]
+    qsra_enabled: bool = False
+    risk_kind: str = "threat"
+    probability_pct: float | None = None
+    impact_mode: str = "duration_pct"
+    impact_min: float | None = None
+    impact_ml: float | None = None
+    impact_max: float | None = None
+    impact_distribution: str = "triangular"
+    post_probability_pct: float | None = None
+    post_impact_min: float | None = None
+    post_impact_ml: float | None = None
+    post_impact_max: float | None = None
+    impact_in_schedule: bool = False
+    apply_to_wbs: bool = False
     mitigation_strategy: str | None
     mitigation_status: str
     mitigation_summary: str | None

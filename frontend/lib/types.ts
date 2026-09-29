@@ -1032,6 +1032,21 @@ export interface RiskItem {
   owner_name: string | null;
   wbs_path: string | null;
   activity_external_ids: string[];
+  // QSRA quantification — see backend services/risk_analysis.py.
+  qsra_enabled: boolean;
+  risk_kind: "threat" | "opportunity";
+  probability_pct: number | null; // null = derived from the 1–5 score
+  impact_mode: "duration_pct" | "delay_days";
+  impact_min: number | null;
+  impact_ml: number | null;
+  impact_max: number | null;
+  impact_distribution: "triangular" | "pert" | "uniform";
+  post_probability_pct: number | null;
+  post_impact_min: number | null;
+  post_impact_ml: number | null;
+  post_impact_max: number | null;
+  impact_in_schedule: boolean;
+  apply_to_wbs: boolean;
   mitigation_strategy: MitigationStrategyValue | null;
   mitigation_status: MitigationStatusValue;
   mitigation_summary: string | null;
@@ -1172,4 +1187,219 @@ export interface ReportHeader {
   progress_basis: string;
   generated_at: string;
   generated_by: string | null;
+}
+
+// --- Risk: QSRA, early warnings, resources, recommendations ---
+// Shapes mirror backend services/risk_analysis.py, risk_signals.py and
+// risk_resources.py; dates are ISO strings.
+
+export type QsraConfidence = "high" | "medium" | "low";
+
+export interface QsraSettings {
+  confidence: QsraConfidence;
+  confidence_options: { value: QsraConfidence; label: string; range: [number, number, number] }[];
+  iterations: number;
+  seed: number;
+  target_date: string | null;
+  finish_activity_external_id: string | null;
+  near_critical_days: number;
+  correlate_by_wbs: boolean;
+  baseline_finish?: string | null;
+}
+
+export interface QsraDistribution {
+  p10: string;
+  p50: string;
+  p80: string;
+  p90: string;
+  p10_days: number;
+  p50_days: number;
+  p80_days: number;
+  p90_days: number;
+  min: string;
+  max: string;
+  mean: string;
+  sd_days: number;
+  prob_meet_cpm: number;
+  prob_meet_target: number | null;
+  contingency_p80_days: number;
+  cdf: { date: string; pct: number }[];
+  histogram: { date: string; count: number }[];
+  bin: "day" | "week";
+}
+
+export interface QsraDriverRow {
+  code: string;
+  title: string;
+  owner: string | null;
+  kind: "threat" | "opportunity";
+  mode: "duration_pct" | "delay_days";
+  distribution: string;
+  probability_pct: number;
+  impact: [number, number, number];
+  post_probability_pct: number;
+  post_impact: [number, number, number];
+  activity_count: number;
+  status: string;
+  mitigation_status: string;
+  probability_derived: boolean;
+  occurred_pct: number;
+  delay_when_occurs_days: number;
+  expected_delay_days: number;
+  critical_hit_pct: number;
+}
+
+export interface QsraActivityRow {
+  external_id: string;
+  name: string;
+  wbs_path: string | null;
+  criticality_pct: number;
+  ssi: number;
+  cruciality: number;
+  sd_days: number;
+  total_float_days: number | null;
+  p6_critical: boolean;
+  hidden_driver: boolean;
+}
+
+export interface RiskRecommendation {
+  id: string;
+  severity: "red" | "amber" | "info";
+  area: string;
+  message: string;
+  link: string;
+}
+
+export interface QsraResults {
+  cpm_finish: string;
+  target_date: string | null;
+  target_source: "settings" | "baseline" | null;
+  measured: { external_id: string; name: string } | null;
+  pre: QsraDistribution;
+  post: QsraDistribution | null;
+  background: { p10: string; p50: string; p80: string; p90: string; p80_days: number };
+  mitigation_benefit_p80_days: number | null;
+  risk_exposure_p80_days: number;
+  waterfall: { label: string; date: string; delta_days: number }[];
+  drivers: QsraDriverRow[];
+  activities: QsraActivityRow[];
+  hidden_drivers: QsraActivityRow[];
+  model_check: {
+    calibration_finish: string;
+    calibration_delta_days: number;
+    calibration_ok: boolean;
+    hard_constraints: string[];
+    hard_constraint_count: number;
+    open_end_count: number;
+    open_ends: string[];
+    summary_excluded: number;
+    no_effect: { code: string; title: string; reason: string }[];
+    warnings: string[];
+    derived_probability: string[];
+    network_size: number;
+    uncertain_activities: number;
+    groups: number;
+    iterations_capped: boolean;
+  };
+  confidence: QsraConfidence;
+  recommendations: RiskRecommendation[];
+  ranking_meta?: { iterations: number; exposure_p80_days: number };
+}
+
+export interface QsraRunSummary {
+  id: string;
+  created_at: string | null;
+  revision_label: string | null;
+  data_date: string | null;
+  cpm_finish: string | null;
+  target_date: string | null;
+  p10: string | null;
+  p50: string | null;
+  p80: string | null;
+  p90: string | null;
+  prob_meet_target: number | null;
+  prob_meet_cpm: number | null;
+  iterations: number;
+}
+
+export interface QsraRun extends QsraRunSummary {
+  duration_ms: number;
+  seed: number;
+  settings: Record<string, unknown>;
+  inputs: { risks?: unknown[] };
+  results: QsraResults;
+  ranking: { code: string; title: string; delta_p80_days: number; delta_p50_days: number; share_pct: number | null }[] | null;
+}
+
+export type SignalStatus = "good" | "amber" | "red" | "na";
+
+export interface EarlyWarningIndicator {
+  id: string;
+  name: string;
+  question: string;
+  status: SignalStatus;
+  value: string;
+  detail: string;
+  basis: string;
+  series: { label: string; value: number | string | null }[];
+  items: Record<string, string | number | boolean | null>[];
+}
+
+export interface EarlyWarnings {
+  updates: { label: string; data_date: string }[];
+  target_date: string | null;
+  near_critical_days: number;
+  indicators: EarlyWarningIndicator[];
+}
+
+export interface ResourceForecastSummary {
+  budget: number;
+  earned: number;
+  actual: number;
+  work_left: number;
+  remaining_p6: number;
+  demonstrated_rate: number | null;
+  best_rate: number | null;
+  planned_peak_rate: number | null;
+  required_rate: number | null;
+  rate_ratio: number | null;
+  cumulative_productivity: number | null;
+  finish_p10: string | null;
+  finish_p50: string | null;
+  finish_p90: string | null;
+  capped: boolean;
+  method: "demonstrated" | "insufficient" | "complete";
+  notes: string[];
+}
+
+export interface ResourceAnalysis {
+  data_date: string;
+  target_date: string | null;
+  types: { value: string; label: string }[];
+  rsrc_type: string | null;
+  resource_id: string | null;
+  resources: { rsrc_id: string; name: string; type: string }[];
+  unit: string | null;
+  total: ResourceForecastSummary;
+  weeks: { week: string; planned: number; earned: number; actual: number; remaining: number }[];
+  periods: {
+    label: string;
+    start: string;
+    end: string;
+    weeks: number;
+    earned: number;
+    actual: number | null;
+    rate: number;
+    productivity: number | null;
+  }[];
+  per_resource: (ResourceForecastSummary & {
+    rsrc_id: string;
+    name: string;
+    type: string;
+    unit: string | null;
+    last_productivity: (number | null)[];
+  })[];
+  snapshots_with_actuals: number;
+  updates: number;
+  qsra: { p10: string | null; p50: string | null; p90: string | null; cpm_finish: string | null; run_at: string | null } | null;
 }

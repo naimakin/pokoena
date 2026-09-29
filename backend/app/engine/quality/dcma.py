@@ -44,7 +44,10 @@ from app.models.activity_relationship import ActivityRelationship, LinkType
 logger = logging.getLogger(__name__)
 
 _MILESTONE_TYPES = {"TT_Mile", "TT_FinMile", "TT_StartMile"}
-_MAND_CONSTRAINTS = {"CS_MSOA", "CS_MEOA"}  # Mandatory Start / Finish
+# P6's mandatory pair. CS_MSOA / CS_MEOA ("start / finish on or after") used to
+# be listed here: they're soft floors, and counting them made nearly every real
+# programme fail this check (see engine/cpm/scheduler.py for the same mix-up).
+_MAND_CONSTRAINTS = {"CS_MANDSTART", "CS_MANDFIN"}  # Mandatory Start / Finish
 _FF_SF_TYPES = {LinkType.FF, LinkType.SF}
 _FLOAT_HIGH_DAYS = 44
 _DURATION_HIGH_DAYS = 44

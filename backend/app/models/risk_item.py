@@ -4,9 +4,11 @@ from datetime import date, datetime
 
 import sqlalchemy as sa
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum as SAEnum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -81,6 +83,31 @@ class RiskItem(Base):
     owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     wbs_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     activity_external_ids: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+
+    # --- quantification for QSRA (engine/risk/qsra.py) ---
+    # Only quantified risks enter the simulation; the register stays usable for
+    # purely qualitative entries.
+    qsra_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    risk_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="threat")  # threat | opportunity
+    # Null = derived from the 1–5 probability score (services/risk_analysis.py).
+    probability_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # duration_pct: impact is a % stretch of each linked activity's duration
+    # (Hulett's risk-driver factor). delay_days: working days added.
+    impact_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="duration_pct")
+    impact_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    impact_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+    impact_max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    impact_distribution: Mapped[str] = mapped_column(String(20), nullable=False, default="triangular")
+    # Post-mitigation values; null = same as pre-mitigation.
+    post_probability_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    post_impact_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    post_impact_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+    post_impact_max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The P6 schedule already carries this impact — keep it out of the
+    # simulation so it isn't counted twice.
+    impact_in_schedule: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Target every incomplete activity under wbs_path instead of the linked list.
+    apply_to_wbs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     mitigation_strategy: Mapped[MitigationStrategy | None] = mapped_column(
         SAEnum(MitigationStrategy, name="mitigation_strategy"), nullable=True

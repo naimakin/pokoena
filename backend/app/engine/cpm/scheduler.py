@@ -76,12 +76,20 @@ def _topo_sort(task_ids: list[str], relationships: list[Relationship]) -> list[s
 # Constraint helpers
 # ---------------------------------------------------------------------------
 
-_SNET_TYPES = {"CS_MSON", "CS_MSO"}  # Start No Earlier Than / Start On
-_SNLT_TYPES = {"CS_MSOB", "CS_MSO"}  # Start No Later Than / Start On
-_FNET_TYPES = {"CS_MEON", "CS_MEO"}  # Finish No Earlier Than / Finish On
-_FNLT_TYPES = {"CS_MEOB", "CS_MEO"}  # Finish No Later Than / Finish On
-_MAND_START = {"CS_MSOA"}  # Mandatory Start
-_MAND_FINISH = {"CS_MEOA"}  # Mandatory Finish
+# P6's own codes, as they appear in a .xer's TASK.cstr_type: the "A"/"B"
+# suffixes are "on or After" / "on or Before", and the mandatory pair is
+# spelled out. CS_MSOA / CS_MEOA used to be read here as MANDATORY start /
+# finish. They are the soft floors "start / finish on or after": treating a
+# floor as a hard date pinned the late finish to it, so any activity logic
+# pushed past its "finish on or after" date showed negative float that P6
+# itself doesn't show. (CS_MSON / CS_MEON never appear in a P6 export; kept
+# only so older hand-built fixtures keep their meaning.)
+_SNET_TYPES = {"CS_MSOA", "CS_MSO", "CS_MSON"}  # Start On or After / Start On
+_SNLT_TYPES = {"CS_MSOB", "CS_MSO"}  # Start On or Before / Start On
+_FNET_TYPES = {"CS_MEOA", "CS_MEO", "CS_MEON"}  # Finish On or After / Finish On
+_FNLT_TYPES = {"CS_MEOB", "CS_MEO"}  # Finish On or Before / Finish On
+_MAND_START = {"CS_MANDSTART"}  # Mandatory Start
+_MAND_FINISH = {"CS_MANDFIN"}  # Mandatory Finish
 _ALAP = {"CS_ALAP"}  # As Late As Possible
 
 

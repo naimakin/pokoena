@@ -69,3 +69,8 @@ class ScheduleImport(Base):
     # Consumed by engine/diff/slip_diff.py. Built in services/xer_import.py
     # alongside relationships_snapshot.
     activities_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    # Frozen per-assignment units (activity external_id, resource, budget /
+    # actual / remaining) at import time. resource_assignments is replaced
+    # wholesale on every import, so this is the only productivity history —
+    # read by Risk > Resources (engine/risk/resource_forecast.py).
+    assignments_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)

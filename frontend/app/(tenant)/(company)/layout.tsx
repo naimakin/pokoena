@@ -117,8 +117,14 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/risk",
     visible: always,
     children: [
-      { href: "/risk", label: "Risk Dashboard", icon: DiceIcon, visible: always },
+      // QSRA / Early Warnings / Resources / Recommendations: the foresight
+      // layer — see backend services/risk_analysis.py, risk_signals.py,
+      // risk_resources.py.
+      { href: "/risk", label: "QSRA & Forecast", icon: DiceIcon, visible: always },
       { href: "/risk/register", label: "Risk Register", icon: LayersIcon, visible: always },
+      { href: "/risk/early-warnings", label: "Early Warnings", icon: AlertTriangleIcon, visible: always },
+      { href: "/risk/resources", label: "Resources Analysis", icon: UsersIcon, visible: always },
+      { href: "/risk/recommendations", label: "Recommendations", icon: FlagIcon, visible: always },
       { href: "/risk/matrix", label: "Risk Matrix", icon: GridIcon, visible: always },
       { href: "/risk/mitigation-plans", label: "Mitigation Plans", icon: ShieldCheckIcon, visible: always },
     ],

@@ -31,6 +31,7 @@ from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan, RecoveryPlanItem
 from app.models.report_format import ReportFormat
+from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.risk_item import RiskActionItem, RiskItem
@@ -208,6 +209,9 @@ def _populate_everything(client, db_session, tenant, project, admin):
     # --- report formats (the Reporting presets are seeded on first read) ---
     assert client.get(f"/projects/{project.id}/report-formats").status_code == 200
 
+    # --- QSRA settings + a persisted run, through the real pipeline ---
+    assert client.post(f"/projects/{project.id}/risk/qsra/runs").status_code == 200
+
     # --- schedule export, built from the import above: schedule_exports and
     # schedule_imports reference each other, which is what makes the delete
     # order in services/project_deletion.py load-bearing. ---
@@ -227,7 +231,7 @@ _PROJECT_SCOPED_MODELS = [
     Activity, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
     Baseline, Calendar, DashboardLayout, EvmSnapshot, ProgressEntry, ProjectMembership, ProjectScope,
     RecoveryPlan, RecoveryPlanItem, Resource, ResourceAssignment, RiskItem, RiskActionItem,
-    ReportFormat, SavedActivityFilter, ScheduleExport, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod,
+    ReportFormat, RiskAnalysisSettings, RiskSimulationRun, SavedActivityFilter, ScheduleExport, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod,
     WbsNode,
 ]
 
