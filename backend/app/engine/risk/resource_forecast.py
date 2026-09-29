@@ -217,10 +217,10 @@ def forecast(
     else:
         method = "demonstrated"
         logs = [math.log(p.rate) for p in recent]
-        mu = sum(l * w for l, w in zip(logs, weights)) / sum(weights)
+        mu = sum(lr * w for lr, w in zip(logs, weights)) / sum(weights)
         m = len(logs)
-        mean_l = sum(logs) / m
-        sd = math.sqrt(sum((l - mean_l) ** 2 for l in logs) / (m - 1)) if m > 1 else 0.0
+        mean_log = sum(logs) / m
+        sd = math.sqrt(sum((lr - mean_log) ** 2 for lr in logs) / (m - 1)) if m > 1 else 0.0
         sigma = max(0.10, sd) * math.sqrt(1 + 1 / m)
 
         def weeks_at(z: float) -> float:

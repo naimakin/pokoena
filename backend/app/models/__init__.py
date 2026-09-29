@@ -103,6 +103,8 @@ __all__ = [
     "RecoveryItemStatus",
     "Resource",
     "ResourceAssignment",
+    "RiskAnalysisSettings",
+    "RiskSimulationRun",
     "RiskItem",
     "RiskActionItem",
     "RiskStatus",
