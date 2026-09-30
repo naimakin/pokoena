@@ -66,7 +66,7 @@ const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 
 // Planned pages keep their routes (they render <ComingSoon>, the PlannedFeature page) but are
 // hidden from the menu. Owner: set to true to list them again.
-const SHOW_PLANNED = false;
+const SHOW_PLANNED = true;
 const inMenu = (child: NavChild, user: User | null) => child.visible(user) && (SHOW_PLANNED || !child.planned);
 
 // Where a destination is reused under more than one top section, TOP_SECTIONS
