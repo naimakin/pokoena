@@ -1,8 +1,9 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.engine.durations import DEFAULT_HOURS_PER_DAY, valid_hours_per_day
 from app.models.activity import ActivityStatus
 from app.models.activity_relationship import LinkType
 
@@ -44,6 +45,15 @@ class ActivityOut(BaseModel):
     constraint_type_2: str | None = None
     constraint_date_2: date | None = None
     is_longest_path: bool = False
+    # The activity's own calendar day length (CALENDAR.day_hr_cnt): every
+    # *_hours field above shows in days as hours / hours_per_day — see
+    # engine/durations.py. Never a flat 8 unless the activity has no calendar.
+    hours_per_day: float = DEFAULT_HOURS_PER_DAY
+
+    @field_validator("hours_per_day", mode="before")
+    @classmethod
+    def _calendar_or_default(cls, v: float | None) -> float:
+        return valid_hours_per_day(v)
 
     # --- Poko's own annotations (see models/activity.py) ---
     is_important: bool = False

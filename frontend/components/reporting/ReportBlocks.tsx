@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { api } from "@/lib/api";
+import { toDays } from "@/lib/duration";
 import { ScurveChart } from "@/components/ScurveChart";
 import { FloatBadge, fmtDays, fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
 import type {
@@ -459,11 +460,11 @@ function CriticalPathBlock({ project, options }: BlockContext) {
                     {a.wbs_path ? ` · ${a.wbs_path}` : ""}
                   </div>
                 </td>
-                <td className="num">{fmtNum((a.remaining_duration_hours ?? 0) / 8, 1)}d</td>
+                <td className="num">{fmtNum(toDays(a.remaining_duration_hours ?? 0, a), 1)}d</td>
                 <td className="num">{fmtP6Date(a.early_start)}</td>
                 <td className="num">{fmtP6Date(a.early_finish)}</td>
                 <td className="num">
-                  <FloatBadge days={a.total_float_hours != null ? a.total_float_hours / 8 : null} />
+                  <FloatBadge days={toDays(a.total_float_hours, a)} />
                 </td>
               </tr>
             ))}
@@ -727,7 +728,7 @@ function LookaheadBlock({ project, header, options }: BlockContext) {
                 <td className="num">{fmtP6Date(a.early_finish ?? a.planned_finish)}</td>
                 <td className="num">{a.percent_complete}%</td>
                 <td className="num">
-                  <FloatBadge days={a.total_float_hours != null ? a.total_float_hours / 8 : null} />
+                  <FloatBadge days={toDays(a.total_float_hours, a)} />
                 </td>
               </tr>
             ))}

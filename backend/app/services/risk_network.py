@@ -23,6 +23,7 @@ from typing import Callable, Optional
 from sqlalchemy.orm import Session
 
 from app.engine.cpm.calendar_engine import CalendarEngine
+from app.engine.durations import activity_hours_per_day
 from app.engine.evm.evm_engine import build_calendar_engine
 from app.engine.risk.qsra import FF, FS, SF, SS, Network, SimActivity, SimLink
 from app.models.activity import Activity, ActivityStatus
@@ -213,7 +214,7 @@ def build_network(
         elif a.remaining_duration_hours is not None:
             remaining = a.remaining_duration_hours
         else:
-            remaining = (a.remaining_duration_days or 0) * hpd
+            remaining = (a.remaining_duration_days or 0) * activity_hours_per_day(a, hpd)
         remaining *= factor(a)
 
         s_floor = f_floor = None
@@ -249,7 +250,9 @@ def build_network(
                 fixed_start_offset=min(0.0, approx_offset(a.actual_start)) if status != "not_started" else 0.0,
                 start_floor_offset=s_floor,
                 finish_floor_offset=f_floor,
-                background=(1.0, 1.0, 1.0) if status == "complete" else background_for(a, hpd),
+                background=(
+                    (1.0, 1.0, 1.0) if status == "complete" else background_for(a, activity_hours_per_day(a, hpd))
+                ),
                 group=group,
             )
         )

@@ -13,9 +13,9 @@ from app.models.wbs_node import WbsNode
 from app.parser.xer_parser import parse_xer
 
 WORK_WEEK = [
-    # 08:00-16:00 = 8h/day, matching the fixture's declared hours_per_day — the
-    # parser recomputes hours_per_day from these shift times on re-import, so
-    # the two must agree for a clean round-trip assertion.
+    # 08:00-16:00 = 8h/day, matching the fixture's declared hours_per_day.
+    # hours_per_day goes back out as CALENDAR.day_hr_cnt, so it round-trips on
+    # its own even where the shifts disagree (see the 7.5h test below).
     {"day_of_week": dow, "shifts": [{"start": "08:00:00", "end": "16:00:00"}] if 1 <= dow <= 5 else []}
     for dow in range(7)
 ]
@@ -96,6 +96,17 @@ def test_round_trips_through_our_own_parser():
     assert rel.pred_task_id == "1001"
     assert rel.task_id == "1002"
     assert rel.pred_type == "PR_FS"
+
+
+def test_calendar_day_hours_round_trip_as_day_hr_cnt():
+    # 8h of shifts, but P6 says a day on this calendar is 7.5h — that setting,
+    # not the shift average, is what every float/duration in days divides by.
+    project = _project()
+    cal = _calendar(hours_per_day=7.5)
+
+    parsed = parse_xer(build_xer(project, [], [], [cal], [], [], [], [], [], [], None))
+
+    assert parsed.calendars[0].hours_per_day == 7.5
 
 
 def test_activity_without_p6_task_id_falls_back_to_our_own_uuid():

@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
+from app.engine.durations import valid_hours_per_day
 from app.models.activity import Activity
 from app.models.baseline import (
     Baseline,
@@ -135,9 +136,20 @@ def get_import_activities(
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
     require_project_permission(db, project_id, ctx)
 
+    # Snapshots taken before hours_per_day was frozen into them fall back to
+    # the live activity's calendar (same external_id), then the default.
+    live_hpd: dict[str, float | None] = {}
+    if any("hours_per_day" not in a for a in row.activities_snapshot):
+        live_hpd = dict(
+            db.query(Activity.external_id, Activity.hours_per_day).filter(
+                Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id
+            )
+        )
+
     out = []
     for a in row.activities_snapshot:
         hours = a.get("remaining_duration_hours")
+        hpd = valid_hours_per_day(a.get("hours_per_day") or live_hpd.get(a["external_id"]))
         out.append(
             ActivityOut(
                 id=uuid.uuid5(import_id, a["external_id"]),
@@ -152,7 +164,7 @@ def get_import_activities(
                 actual_start=a.get("actual_start"),
                 actual_finish=a.get("actual_finish"),
                 percent_complete=a.get("percent_complete") or 0,
-                remaining_duration_days=round(hours / 8) if hours is not None else 0,
+                remaining_duration_days=round(hours / hpd) if hours is not None else 0,
                 status=a.get("status") or "not_started",
                 wbs_path=a.get("wbs_path"),
                 task_type=a.get("task_type"),
@@ -161,6 +173,7 @@ def get_import_activities(
                 early_start=a.get("early_start"),
                 early_finish=a.get("early_finish"),
                 total_float_hours=a.get("total_float_hours"),
+                hours_per_day=hpd,
                 is_critical=bool(a.get("is_critical")),
                 is_longest_path=bool(a.get("is_longest_path")),
                 constraint_type=a.get("constraint_type"),

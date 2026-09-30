@@ -86,6 +86,13 @@ def build_change_report(
         "from_snapshot": bool(from_import and from_import.activities_snapshot),
         "to_snapshot": bool(to_import and to_import.activities_snapshot),
     }
+    # Older snapshots don't carry each activity's calendar day length — the
+    # live activities' calendars stand in for them (engine/durations.py).
+    hours_per_day_by_ext = dict(
+        db.query(Activity.external_id, Activity.hours_per_day).filter(
+            Activity.tenant_id == tenant_id, Activity.project_id == project_id
+        )
+    )
     thresholds = {
         "date_threshold_days": date_threshold_days,
         "duration_threshold_hours": duration_threshold_hours,
@@ -107,6 +114,7 @@ def build_change_report(
                     date_threshold_days=date_threshold_days,
                     duration_threshold_hours=duration_threshold_hours,
                     lag_threshold_hours=lag_threshold_hours,
+                    hours_per_day_by_ext=hours_per_day_by_ext,
                 )
                 return {
                     "project_id": project_id,
@@ -141,6 +149,7 @@ def build_change_report(
         date_threshold_days=date_threshold_days,
         duration_threshold_hours=duration_threshold_hours,
         lag_threshold_hours=lag_threshold_hours,
+        hours_per_day_by_ext=hours_per_day_by_ext,
     )
     return {
         "project_id": project_id,

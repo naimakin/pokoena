@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError } from "@/lib/api";
+import { hoursPerDay } from "@/lib/duration";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, ActivityCodes, BaselineVariance, ScheduleImport, WbsNode } from "@/lib/types";
 import { ChevronDownIcon, ExpandIcon, MaximizeIcon, MinimizeIcon, XIcon } from "@/components/icons";
@@ -143,7 +144,7 @@ function latestDate(a: Activity): string | null {
 }
 
 function durationDays(a: Activity): number | null {
-  if (a.target_duration_hours != null) return Math.round(a.target_duration_hours / 8);
+  if (a.target_duration_hours != null) return Math.round(a.target_duration_hours / hoursPerDay(a));
   const s = earliestDate(a);
   const f = latestDate(a);
   if (!s || !f) return null;
@@ -783,7 +784,7 @@ export default function GanttPage() {
       const tf = a.total_float_hours;
       if (a.is_critical || (tf != null && tf <= 0)) return "var(--crit)";
       if (tf == null) return "var(--info)";
-      const days = tf / 8;
+      const days = tf / hoursPerDay(a);
       if (days <= 5) return "var(--warn)";
       if (days <= 20) return "var(--status-active)";
       return "var(--good)";
@@ -803,7 +804,7 @@ export default function GanttPage() {
 
   function metricCell(a: Activity): string {
     if (lens === "criticality") {
-      return a.total_float_hours != null ? `${(a.total_float_hours / 8).toFixed(1)}d` : "—";
+      return a.total_float_hours != null ? `${(a.total_float_hours / hoursPerDay(a)).toFixed(1)}d` : "—";
     }
     if (lens === "variance") {
       const v = baselineByActivity.get(a.id)?.finishVar;
@@ -1451,7 +1452,7 @@ function ChartRow({
   const base = bl ? geom(bl.start, bl.finish) : null;
   const color = barColor(a);
   const milestone = isMilestone(a);
-  const floatDays = a.total_float_hours != null ? (a.total_float_hours / 8).toFixed(1) : "—";
+  const floatDays = a.total_float_hours != null ? (a.total_float_hours / hoursPerDay(a)).toFixed(1) : "—";
   const title =
     `${a.external_id}: ${a.name}\n` +
     `Current: ${fmtDate(earliestDate(a))} → ${fmtDate(latestDate(a))}\n` +

@@ -14,6 +14,7 @@ from app.engine.cpm.float_path import (
     WorkDays,
     compute_float_paths,
 )
+from app.engine.durations import DEFAULT_HOURS_PER_DAY, activity_days, valid_hours_per_day
 from app.engine.evm.evm_engine import build_calendar_engine
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
@@ -39,10 +40,12 @@ def _calendars(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> list
 
 
 def _hours_per_day(calendars: list[Calendar]) -> float:
+    """Only the fallback for an activity with no calendar of its own — every
+    activity's hours read in days on ITS calendar (engine/durations.py)."""
     for cal in calendars:
         if cal.hours_per_day:
             return cal.hours_per_day
-    return 8.0
+    return DEFAULT_HOURS_PER_DAY
 
 
 def _work_days_fn(calendars: list[Calendar]) -> WorkDays | None:
@@ -55,6 +58,7 @@ def _work_days_fn(calendars: list[Calendar]) -> WorkDays | None:
     # Keyed by calendars.id, because that is what Activity.clndr_id holds (the
     # P6 clndr_id string lives on the row as a separate column).
     engines: dict[str, CalendarEngine] = {}
+    hpd_by_id = {str(cal.id): valid_hours_per_day(cal.hours_per_day) for cal in calendars}
     for cal in calendars:
         try:
             engines[str(cal.id)] = build_calendar_engine(cal)
@@ -68,13 +72,14 @@ def _work_days_fn(calendars: list[Calendar]) -> WorkDays | None:
 
     def work_days(start: date, end: date, clndr_id: str | None) -> float:
         engine = engines.get(str(clndr_id), fallback)
+        hpd = hpd_by_id.get(str(clndr_id), hours_per_day)
         try:
             hours = engine.work_hours_between(datetime.combine(start, time()), datetime.combine(end, time()))
         except Exception:
             # A calendar with no working days in the window. Fall back to plain
             # days for this one link rather than failing the whole analysis.
             return float((end - start).days)
-        return hours / hours_per_day
+        return hours / hpd
 
     return work_days
 
@@ -120,7 +125,6 @@ def list_end_candidates(
     require_project_permission(db, project_id, ctx)
 
     activities, _rels = _load(db, ctx.tenant_id, project_id)
-    hours_per_day = _hours_per_day(_calendars(db, ctx.tenant_id, project_id))
 
     rows = sorted(
         activities,
@@ -137,7 +141,7 @@ def list_end_candidates(
             task_type=a.task_type,
             early_finish=a.early_finish or a.planned_finish,
             total_float_days=(
-                round(a.total_float_hours / hours_per_day, 2) if a.total_float_hours is not None else None
+                round(activity_days(a, a.total_float_hours), 2) if a.total_float_hours is not None else None
             ),
             is_critical=bool(a.is_critical),
         )
@@ -179,6 +183,7 @@ def get_float_paths(
             "free_float_hours": a.free_float_hours,
             "is_critical": a.is_critical,
             "is_longest_path": a.is_longest_path,
+            "hours_per_day": a.hours_per_day,
         }
         for a in activities
     ]

@@ -367,7 +367,17 @@ def _parse_clndr_data(
     return _parse_clndr_data_legacy(clndr_id, clndr_data, parse_log)
 
 
-def _hours_per_day(week: list[CalendarDay]) -> float:
+def _hours_per_day(row: dict, week: list[CalendarDay]) -> float:
+    """The calendar's "Hours per Time Period → Day" — CALENDAR.day_hr_cnt, the
+    exact divisor P6 itself uses to show every hour-stored duration and float
+    in days (TASK.total_float_hr_cnt / day_hr_cnt, TASK.target_drtn_hr_cnt /
+    day_hr_cnt). It's a setting in its own right, not derived from the shifts:
+    a 08:00-17:00 week with a lunch break is 8h/day in P6, not the 9h a shift
+    average gives. Only a file without the column (hand-built ones, very old
+    exports) falls back to averaging the working days' shifts."""
+    day_hr = _safe_float(row.get("day_hr_cnt", ""))
+    if day_hr > 0:
+        return day_hr
     working = [d.total_hours for d in week if d.is_working]
     return round(sum(working) / len(working), 4) if working else 8.0
 
@@ -420,7 +430,7 @@ def _parse_calendars(rows: list[dict], proj_id: str, parse_log: list[str]) -> li
             clndr_name=r.get("clndr_name", ""),
             default_work_week=week,
             exceptions=exceptions,
-            hours_per_day=_hours_per_day(week),
+            hours_per_day=_hours_per_day(r, week),
         )
         parse_log.append(f"CAL {cid} ({r.get('clndr_name', '')}): loaded as GLOBAL")
 
@@ -438,7 +448,7 @@ def _parse_calendars(rows: list[dict], proj_id: str, parse_log: list[str]) -> li
             clndr_name=r.get("clndr_name", ""),
             default_work_week=week,
             exceptions=exceptions,
-            hours_per_day=_hours_per_day(week),
+            hours_per_day=_hours_per_day(r, week),
         )
 
     return list(cal_map.values())

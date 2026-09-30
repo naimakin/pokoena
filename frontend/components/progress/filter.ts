@@ -2,6 +2,7 @@
 // `criteria` blob the backend stores is exactly `FilterCriteria` (+ a
 // `filter_version`); the backend never parses it.
 
+import { toDays } from "@/lib/duration";
 import type { Activity, ActivityStatus, WbsNode } from "@/lib/types";
 
 export type FieldType = "text" | "enum" | "bool" | "number" | "date";
@@ -145,7 +146,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: "Total float (days)",
     type: "number",
     ops: ["lte", "gte", "between"],
-    get: (a) => (a.total_float_hours == null ? null : a.total_float_hours / 8),
+    get: (a) => toDays(a.total_float_hours, a),
   },
   {
     key: "percent_complete",

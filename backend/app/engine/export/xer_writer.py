@@ -118,9 +118,14 @@ def _write_project(buf: io.StringIO, project: Project, default_clndr_id: str, da
 
 def _write_calendars(buf: io.StringIO, calendars: list[Calendar]) -> None:
     buf.write("%T\tCALENDAR\n")
-    buf.write("%F\tclndr_id\tclndr_name\tproj_id\tclndr_data\n")
+    # day_hr_cnt goes back out too: it's P6's hours→days divisor for every
+    # duration and float on the calendar's activities, and a re-import without
+    # it would fall back to a shift average that can disagree with it.
+    buf.write("%F\tclndr_id\tclndr_name\tproj_id\tday_hr_cnt\tclndr_data\n")
     for cal in calendars:
-        buf.write("%R\t" + _tab([_s(cal.clndr_id), _s(cal.name), "", _clndr_data(cal)]) + "\n")
+        buf.write(
+            "%R\t" + _tab([_s(cal.clndr_id), _s(cal.name), "", f"{cal.hours_per_day:g}", _clndr_data(cal)]) + "\n"
+        )
 
 
 def _write_projwbs(buf: io.StringIO, nodes: list[WbsNode], proj_id: str) -> None:

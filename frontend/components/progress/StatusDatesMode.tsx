@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActivityModal } from "@/components/ActivityModal";
 import { FlagIcon } from "@/components/icons";
+import { toDays } from "@/lib/duration";
 import type { Activity, WbsNode } from "@/lib/types";
 import { WbsGrid } from "./WbsGrid";
 
@@ -33,10 +34,11 @@ function fmtDate(iso: string | null | undefined): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
 }
 
-// Same as Planning > Activities used to show (total float is stored in hours).
-function fmtFloat(hours: number | null | undefined): string {
-  if (hours === null || hours === undefined) return "—";
-  const days = hours / 8;
+// Total float is stored in hours; shown in the activity's own calendar days
+// (lib/duration.ts).
+function fmtFloat(a: Activity): string {
+  const days = toDays(a.total_float_hours, a);
+  if (days === null) return "—";
   return `${days >= 0 ? "" : "-"}${Math.abs(days).toFixed(1)}d`;
 }
 
@@ -79,7 +81,9 @@ export function StatusDatesMode({
         onActivityClick={setOpenActivity}
         sortWithinBand={
           sortByFloat
-            ? (a, b) => (a.total_float_hours ?? Number.POSITIVE_INFINITY) - (b.total_float_hours ?? Number.POSITIVE_INFINITY)
+            ? (a, b) =>
+                (toDays(a.total_float_hours, a) ?? Number.POSITIVE_INFINITY) -
+                (toDays(b.total_float_hours, b) ?? Number.POSITIVE_INFINITY)
             : undefined
         }
         colCount={8}
@@ -113,7 +117,7 @@ export function StatusDatesMode({
                 {fmtDate(a.actual_finish)}
                 {afterDataDate(a.actual_finish) && <div className="pg-warn">after data date</div>}
               </td>
-              <td className="mono">{fmtFloat(a.total_float_hours)}</td>
+              <td className="mono">{fmtFloat(a)}</td>
               <td className="mono">{a.percent_complete}%</td>
               <td>
                 <div className="pg-flags">

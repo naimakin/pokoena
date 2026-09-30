@@ -11,6 +11,7 @@ from app.deps import (
     require_project_permission,
     require_scope_access,
 )
+from app.engine.durations import activity_hours_per_day
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship
@@ -180,7 +181,7 @@ def _apply_progress_derivation(activity: Activity, changes: dict) -> None:
         activity.status = ActivityStatus.not_started
         activity.percent_complete = 0
         if activity.target_duration_hours:
-            activity.remaining_duration_days = round(activity.target_duration_hours / 8.0)
+            activity.remaining_duration_days = round(activity.target_duration_hours / activity_hours_per_day(activity))
 
 
 _PROGRESS_FIELDS = {"percent_complete", "actual_start", "actual_finish"}

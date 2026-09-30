@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
+from app.engine.durations import activity_hours_per_day
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship, LinkType
 
@@ -153,8 +154,12 @@ def _check5_hard_constraints(acts: list[Activity], total: int) -> DcmaCheckResul
 
 
 def _check6_high_float(acts: list[Activity], hpd: float, total: int) -> DcmaCheckResult:
-    threshold_hrs = _FLOAT_HIGH_DAYS * hpd
-    high = [a for a in acts if a.total_float_hours is not None and a.total_float_hours > threshold_hrs]
+    # 44 working days on each activity's OWN calendar (engine/durations.py);
+    # `hpd` is only the fallback for one with no calendar.
+    high = [
+        a for a in acts
+        if a.total_float_hours is not None and a.total_float_hours > _FLOAT_HIGH_DAYS * activity_hours_per_day(a, hpd)
+    ]
     return _check(6, f"High Float (TF > {_FLOAT_HIGH_DAYS}d)", len(high), total, 5.0, [a.external_id for a in high])
 
 
@@ -164,10 +169,9 @@ def _check7_negative_float(acts: list[Activity], total: int) -> DcmaCheckResult:
 
 
 def _check8_high_duration(acts: list[Activity], hpd: float, total: int) -> DcmaCheckResult:
-    threshold_hrs = _DURATION_HIGH_DAYS * hpd
     high = [
         a for a in acts
-        if (a.remaining_duration_hours or 0) > threshold_hrs
+        if (a.remaining_duration_hours or 0) > _DURATION_HIGH_DAYS * activity_hours_per_day(a, hpd)
         and a.status_code != "TK_Complete"
         and a.task_type not in _MILESTONE_TYPES
     ]

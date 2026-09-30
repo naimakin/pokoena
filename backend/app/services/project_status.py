@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.engine.durations import activity_days
 from app.engine.quality.dcma import run_dcma
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship
@@ -149,13 +150,17 @@ def _recovery_index(
         for a in activities
         if (a.is_critical or a.is_longest_path) and a.status != ActivityStatus.complete
     ]
-    remaining_hours = sum(
-        a.remaining_duration_hours
-        if a.remaining_duration_hours is not None
-        else (a.target_duration_hours or 0.0)
+    # Each activity's remaining work in days on its own calendar
+    # (engine/durations.py), set against working days left.
+    remaining_days = sum(
+        activity_days(
+            a,
+            a.remaining_duration_hours if a.remaining_duration_hours is not None else (a.target_duration_hours or 0.0),
+            hours_per_day,
+        )
         for a in critical
     )
-    if remaining_hours <= 0:
+    if remaining_days <= 0:
         return None
     finish = baseline_end or max(
         (a.planned_finish for a in activities if a.planned_finish), default=None
@@ -164,8 +169,7 @@ def _recovery_index(
         return None
     calendar_days_left = (finish - dd.date()).days
     working_days_left = max(1.0, calendar_days_left * 5.0 / 7.0)
-    working_hours_left = working_days_left * (hours_per_day or 8.0)
-    return round(remaining_hours / working_hours_left, 3)
+    return round(remaining_days / working_days_left, 3)
 
 
 # --- Eisenhower predicates ---------------------------------------------------
@@ -174,8 +178,8 @@ def _recovery_index(
 def is_important(a: Activity, hours_per_day: float) -> bool:
     if a.is_critical or a.is_longest_path:
         return True
-    tf = a.total_float_hours
-    return tf is not None and tf <= _IMPORTANT_FLOAT_DAYS * (hours_per_day or 8.0)
+    tf = activity_days(a, a.total_float_hours, hours_per_day)
+    return tf is not None and tf <= _IMPORTANT_FLOAT_DAYS
 
 
 def is_urgent(a: Activity, dd: datetime) -> bool:

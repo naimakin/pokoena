@@ -69,6 +69,10 @@ DESIGN.md                 ← full design system spec
 - No real transactional email provider is wired up yet — invite links and password-reset links
   are surfaced directly in the UI to whoever creates them (see `services/invites.py`,
   `services/password_reset.py`) rather than emailed.
+- Durations and floats are stored in hours and shown in days by dividing by the activity's OWN
+  calendar day length (P6 `CALENDAR.day_hr_cnt`, stored as `Calendar.hours_per_day`, exposed as
+  `Activity.hours_per_day`) — never a flat `/ 8`. Use `backend/app/engine/durations.py` and
+  `frontend/lib/duration.ts`.
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

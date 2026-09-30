@@ -11,6 +11,7 @@ from app.deps import (
     get_tenant_scoped_or_404,
     require_project_permission,
 )
+from app.engine.durations import activity_days
 from app.models.activity import Activity
 from app.models.activity_code import TaskActivityCode
 from app.models.project import Project
@@ -167,7 +168,8 @@ def get_project_status(
     flagged = rollup.dcma_flagged_external_ids
 
     def to_row(a: Activity) -> PriorityActivityOut:
-        tf_days = round(a.total_float_hours / hours_per_day, 1) if a.total_float_hours is not None else None
+        tf = activity_days(a, a.total_float_hours, hours_per_day)
+        tf_days = round(tf, 1) if tf is not None else None
         return PriorityActivityOut(
             activity_id=a.id,
             external_id=a.external_id,

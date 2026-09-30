@@ -158,6 +158,9 @@ export interface Activity {
   constraint_type_2?: string | null;
   constraint_date_2?: string | null;
   is_longest_path?: boolean;
+  // The activity's own calendar day length (P6 CALENDAR.day_hr_cnt) — the
+  // divisor for showing any *_hours field above in days. See lib/duration.ts.
+  hours_per_day?: number;
 
   // Poko's own annotations — set from the Activity modal, never touched by
   // .xer import (see backend/app/models/activity.py).

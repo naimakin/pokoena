@@ -16,6 +16,7 @@ from collections import Counter
 from datetime import date
 
 from app.engine.diff.logic_diff import RelationshipChange, compare_relationship_snapshots
+from app.engine.durations import valid_hours_per_day
 
 _START_KEYS = ("actual_start", "planned_start", "early_start")
 _FINISH_KEYS = ("actual_finish", "planned_finish", "early_finish")
@@ -47,10 +48,25 @@ def _field(field: str, label: str, old, new, **extra) -> dict:
     }
 
 
+def _snap_hpd(snap: dict, other: dict, fallback: float | None) -> float:
+    """The snapshot's own calendar day length (frozen on imports since
+    hours_per_day was added), else the other side's, else the caller's."""
+    return valid_hours_per_day(snap.get("hours_per_day") or other.get("hours_per_day") or fallback)
+
+
 def _diff_activity(
-    prev: dict, curr: dict, *, date_threshold_days: int, duration_threshold_hours: float
+    prev: dict,
+    curr: dict,
+    *,
+    date_threshold_days: int,
+    duration_threshold_hours: float,
+    hpd_fallback: float | None = None,
 ) -> list[dict]:
     fields: list[dict] = []
+    # Hours read in days on each side's own calendar (engine/durations.py), so
+    # an activity moved to a different calendar still reads like P6 shows it.
+    p_hpd = _snap_hpd(prev, curr, hpd_fallback)
+    c_hpd = _snap_hpd(curr, prev, hpd_fallback)
 
     if prev.get("name") != curr.get("name"):
         fields.append(_field("name", "Name", prev.get("name"), curr.get("name")))
@@ -83,8 +99,8 @@ def _diff_activity(
         # Stored in hours, read in days — P6's own unit for a duration column.
         fields.append(
             _field(
-                field_name, label, round(po / 8.0, 1), round(cu / 8.0, 1),
-                delta_days=round((cu - po) / 8.0, 1),
+                field_name, label, round(po / p_hpd, 1), round(cu / c_hpd, 1),
+                delta_days=round(cu / c_hpd - po / p_hpd, 1),
             )
         )
 
@@ -129,11 +145,11 @@ def _diff_activity(
 
     ptf, ctf = prev.get("total_float_hours"), curr.get("total_float_hours")
     if ptf is not None and ctf is not None:
-        delta_days = round((ctf - ptf) / 8.0, 1)
+        delta_days = round(ctf / c_hpd - ptf / p_hpd, 1)
         if abs(delta_days) >= date_threshold_days:
             fields.append(
                 {"field": "total_float", "label": "Total float (d)",
-                 "old": round(ptf / 8.0, 1), "new": round(ctf / 8.0, 1),
+                 "old": round(ptf / p_hpd, 1), "new": round(ctf / c_hpd, 1),
                  "delta_days": delta_days, "delta_hours": None}
             )
 
@@ -202,7 +218,12 @@ def compute_schedule_diff(
     date_threshold_days: int = 1,
     duration_threshold_hours: float = 8.0,
     lag_threshold_hours: float = 8.0,
+    hours_per_day_by_ext: dict[str, float | None] | None = None,
 ) -> dict:
+    """`hours_per_day_by_ext` is only a fallback for snapshots frozen before
+    they carried each activity's calendar day length (the live activities'
+    calendars, keyed by external_id)."""
+    hpd_by_ext = hours_per_day_by_ext or {}
     prev_by_ext = {a["external_id"]: a for a in prev_acts}
     curr_by_ext = {a["external_id"]: a for a in curr_acts}
     prev_by_p6 = {a["p6_task_id"]: a for a in prev_acts if a.get("p6_task_id")}
@@ -247,7 +268,11 @@ def compute_schedule_diff(
             )
 
         fields = _diff_activity(
-            p, c, date_threshold_days=date_threshold_days, duration_threshold_hours=duration_threshold_hours
+            p,
+            c,
+            date_threshold_days=date_threshold_days,
+            duration_threshold_hours=duration_threshold_hours,
+            hpd_fallback=hpd_by_ext.get(c["external_id"]),
         )
         # A rename is also an Activity ID change — it has its own section, but
         # repeat it here so a row read on its own is complete.

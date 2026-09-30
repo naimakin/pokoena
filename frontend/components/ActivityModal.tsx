@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { hoursPerDay } from "@/lib/duration";
 import { useToast } from "@/components/Toast";
 import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, XIcon } from "@/components/icons";
 import type {
@@ -74,16 +75,17 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function days(hours: number | null | undefined): string {
-  return hours == null ? "—" : `${(hours / 8).toFixed(1)}d`;
+/** Hours in days on the activity's own calendar (lib/duration.ts). */
+function days(hours: number | null | undefined, hpd: number): string {
+  return hours == null ? "—" : `${(hours / hpd).toFixed(1)}d`;
 }
 
 /** Render a stored history value in the same shape the rest of the UI uses. */
-function historyValue(field: string | null, raw: string | null): string {
+function historyValue(field: string | null, raw: string | null, hpd: number): string {
   if (raw === null || raw === "") return "—";
   if (!field) return raw;
   if (field.endsWith("_start") || field.endsWith("_finish")) return fmtDate(raw);
-  if (field === "total_float_hours") return days(Number(raw));
+  if (field === "total_float_hours") return days(Number(raw), hpd);
   if (field === "status") return STATUS_OPTIONS.find((s) => s.value === raw)?.label ?? raw;
   if (raw === "true") return "Yes";
   if (raw === "false") return "No";
@@ -320,7 +322,7 @@ export function ActivityModal({
                   <FlagIcon className="icon" style={{ width: 11, height: 11 }} /> Important
                 </span>
               )}
-              <span className="act-modal-float">Total float {days(activity.total_float_hours)}</span>
+              <span className="act-modal-float">Total float {days(activity.total_float_hours, hoursPerDay(activity))}</span>
             </div>
           </div>
           <button className="act-btn" onClick={onClose} aria-label="Close" title="Close">
@@ -541,10 +543,10 @@ export function ActivityModal({
               <Detail label="P6 Status" value={activity.status_code ?? "—"} />
               <Detail label="WBS" value={wbsName?.wbs_name ?? activity.wbs_path ?? "—"} />
               <Detail label="Discipline" value={activity.discipline} />
-              <Detail label="Original Duration" value={days(activity.target_duration_hours)} />
-              <Detail label="Remaining Duration" value={days(activity.remaining_duration_hours)} />
-              <Detail label="Total Float" value={days(activity.total_float_hours)} />
-              <Detail label="Free Float" value={days(activity.free_float_hours)} />
+              <Detail label="Original Duration" value={days(activity.target_duration_hours, hoursPerDay(activity))} />
+              <Detail label="Remaining Duration" value={days(activity.remaining_duration_hours, hoursPerDay(activity))} />
+              <Detail label="Total Float" value={days(activity.total_float_hours, hoursPerDay(activity))} />
+              <Detail label="Free Float" value={days(activity.free_float_hours, hoursPerDay(activity))} />
               <Detail label="Critical" value={activity.is_critical ? "Yes" : "No"} />
               <Detail label="On Longest Path" value={activity.is_longest_path ? "Yes" : "No"} />
               <Detail label="% Complete" value={`${activity.percent_complete}%`} />
@@ -639,9 +641,9 @@ export function ActivityModal({
                         ) : (
                           <div>
                             <b>{FIELD_LABELS[h.field ?? ""] ?? h.field}</b>{" "}
-                            <span className="mono">{historyValue(h.field, h.old_value)}</span>
+                            <span className="mono">{historyValue(h.field, h.old_value, hoursPerDay(activity))}</span>
                             {" → "}
-                            <span className="mono">{historyValue(h.field, h.new_value)}</span>
+                            <span className="mono">{historyValue(h.field, h.new_value, hoursPerDay(activity))}</span>
                           </div>
                         )}
                         <div className="act-timeline-meta">

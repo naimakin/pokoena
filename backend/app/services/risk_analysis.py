@@ -37,6 +37,7 @@ from app.engine.risk.qsra import (
     rank_risks,
     simulate,
 )
+from app.engine.durations import activity_hours_per_day
 from app.models.activity import Activity
 from app.models.baseline import Baseline, BaselineStatus
 from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
@@ -391,7 +392,11 @@ def run_qsra(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, user_id: 
         sim_a = sn.network.activities[st.index]
         if sim_a.status == "complete":
             continue
-        tf_days = round((a.total_float_hours or 0.0) / hpd, 1) if a.total_float_hours is not None else None
+        # The stored P6 float reads in the activity's own calendar days
+        # (engine/durations.py); the simulated SD below is already in
+        # project-calendar hours (risk_network's `factor`), so it stays on `hpd`.
+        a_hpd = activity_hours_per_day(a, hpd)
+        tf_days = round(a.total_float_hours / a_hpd, 1) if a.total_float_hours is not None else None
         act_rows.append({
             "external_id": a.external_id,
             "name": a.name,

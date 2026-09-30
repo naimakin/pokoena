@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, Optional
 
+from app.engine.durations import activity_hours_per_day
 from app.models.activity import Activity, ActivityStatus
 from app.parser.xer_parser import main_project_id
 
@@ -86,7 +87,8 @@ def _remaining_hours(activity: Activity) -> float:
         return 0.0
     if activity.remaining_duration_hours is not None:
         return activity.remaining_duration_hours
-    return (activity.remaining_duration_days or 0) * 8.0
+    # Days back to hours on the activity's own calendar (engine/durations.py).
+    return (activity.remaining_duration_days or 0) * activity_hours_per_day(activity)
 
 
 def rewrite_progress(source: bytes, activities: Iterable[Activity]) -> tuple[bytes, int, int]:

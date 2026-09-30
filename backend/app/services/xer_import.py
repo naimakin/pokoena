@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import AuthContext
 from app.engine.cpm.scheduler import schedule
+from app.engine.durations import valid_hours_per_day
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.activity_relationship import ActivityRelationship, LinkType
@@ -192,6 +193,15 @@ def import_xer(
     it just becomes the current one again."""
     parsed: ParsedSchedule = parse_xer(file_bytes)
     schedule(parsed)
+
+    # Each activity's hours→days divisor is its OWN calendar's day_hr_cnt
+    # (engine/durations.py) — falling back to the project calendar, the same
+    # fallback the activity's clndr_id gets below.
+    hpd_by_clndr_id = {c.clndr_id: c.hours_per_day for c in parsed.calendars}
+    project_hpd = hpd_by_clndr_id.get(parsed.meta.clndr_id or "") or next(iter(hpd_by_clndr_id.values()), None)
+
+    def _act_hpd(act) -> float:
+        return valid_hours_per_day(hpd_by_clndr_id.get(act.clndr_id or "") or project_hpd)
 
     is_first_import = db.query(ScheduleImport).filter(ScheduleImport.project_id == project_id).first() is None
     # A baseline programme upload (Planning -> Baselines) never touches the
@@ -391,7 +401,7 @@ def import_xer(
                 row.percent_complete = pct
                 row.actual_start = _to_date(act.act_start_date)
                 row.actual_finish = _to_date(act.act_end_date)
-                row.remaining_duration_days = round(act.remain_drtn_hr_cnt / 8.0)
+                row.remaining_duration_days = round(act.remain_drtn_hr_cnt / _act_hpd(act))
             else:
                 # Poko is ahead of the file — keep its progress (module docstring),
                 # and bring the units of this activity's assignments in line
@@ -423,6 +433,7 @@ def import_xer(
                     "is_critical": bool(row.is_critical),
                     "is_longest_path": bool(row.is_longest_path),
                     "total_float_hours": row.total_float_hours,
+                    "hours_per_day": _act_hpd(act),
                     "status": row.status.value,
                     "percent_complete": int(row.percent_complete or 0),
                 }
@@ -454,7 +465,12 @@ def import_xer(
                     predecessor_id=pred_row_id,
                     successor_id=succ_row_id,
                     link_type=link_type,
-                    lag_days=round(rel.lag_hr_cnt / 8.0),
+                    # P6's default lag calendar is the predecessor's.
+                    lag_days=round(
+                        rel.lag_hr_cnt / _act_hpd(acts_by_task_id[rel.pred_task_id])
+                        if rel.pred_task_id in acts_by_task_id
+                        else rel.lag_hr_cnt / valid_hours_per_day(project_hpd)
+                    ),
                     lag_hours=round(rel.lag_hr_cnt),
                 )
             )
@@ -623,6 +639,7 @@ def import_xer(
                     "is_critical": bool(is_critical),
                     "is_longest_path": bool(act.lp_critical),
                     "total_float_hours": act.total_float_hr_cnt,
+                    "hours_per_day": _act_hpd(act),
                     "status": status.value,
                     "percent_complete": int(pct or 0),
                 }

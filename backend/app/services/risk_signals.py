@@ -30,6 +30,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.engine.durations import activity_days, valid_hours_per_day
 from app.models.activity import Activity
 from app.models.baseline import Baseline, BaselineActivity, BaselineStatus
 from app.models.risk_analysis import RiskSimulationRun
@@ -134,7 +135,13 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
     target = settings.target_date or (baseline.target_end_date if baseline else None)
     near_days = settings.near_critical_days
     live = current_programme_activities(db, tenant_id, project_id)
-    hpd = 8.0
+    # Hours read in days on each activity's own calendar (engine/durations.py).
+    # Snapshot rows carry it since hours_per_day was frozen into them; older
+    # ones borrow the live activity's.
+    live_hpd = {a.external_id: a.hours_per_day for a in live}
+
+    def row_days(e: str, row: dict, key: str) -> float:
+        return (row.get(key) or 0.0) / valid_hours_per_day(row.get("hours_per_day") or live_hpd.get(e))
 
     indicators: list[Indicator] = []
     n = len(updates)
@@ -281,7 +288,7 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
         ))
 
         # Stuck activities: remaining duration not burning down while in progress.
-        elapsed_h = working_days(prev.data_date, last.data_date) * hpd
+        elapsed_d = working_days(prev.data_date, last.data_date)
         stuck = []
         in_prog = 0
         for e, row in last.acts.items():
@@ -289,15 +296,15 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
             if not p or row.get("status") != "in_progress" or p.get("status") != "in_progress":
                 continue
             in_prog += 1
-            rd0 = p.get("remaining_duration_hours") or 0.0
-            rd1 = row.get("remaining_duration_hours") or 0.0
-            growth = rd1 - max(0.0, rd0 - elapsed_h)
+            rd0 = row_days(e, p, "remaining_duration_hours")
+            rd1 = row_days(e, row, "remaining_duration_hours")
+            growth = rd1 - max(0.0, rd0 - elapsed_d)
             pct_same = (row.get("percent_complete") or 0) <= (p.get("percent_complete") or 0)
-            if growth > hpd or pct_same:
+            if growth > 1.0 or pct_same:
                 stuck.append({
                     "external_id": e, "name": row.get("name", ""),
                     "percent_complete": row.get("percent_complete"),
-                    "growth_days": round(growth / hpd, 1),
+                    "growth_days": round(growth, 1),
                     "critical": bool(row.get("is_critical")),
                 })
         crit_stuck = [s for s in stuck if s["critical"]]
@@ -330,18 +337,17 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
 
         # Hidden compression: finish held while critical durations were cut.
         f0, f1 = prev.finish(finish_id), last.finish(finish_id)
-        cut_h = 0.0
+        cut_days = 0.0
         cuts = []
         for e, row in last.acts.items():
             p = prev.acts.get(e)
             if not p or p.get("status") != "not_started" or row.get("status") != "not_started" or not p.get("is_critical"):
                 continue
-            r0 = p.get("remaining_duration_hours") or 0.0
-            r1 = row.get("remaining_duration_hours") or 0.0
+            r0 = row_days(e, p, "remaining_duration_hours")
+            r1 = row_days(e, row, "remaining_duration_hours")
             if r0 - r1 > 0:
-                cut_h += r0 - r1
-                cuts.append({"external_id": e, "name": row.get("name", ""), "cut_days": round((r0 - r1) / hpd, 1)})
-        cut_days = cut_h / hpd
+                cut_days += r0 - r1
+                cuts.append({"external_id": e, "name": row.get("name", ""), "cut_days": round(r0 - r1, 1)})
         held = f0 and f1 and abs((f1 - f0).days) <= 2
         status = "na" if not (f0 and f1) else ("red" if held and cut_days > 15 else "amber" if held and cut_days > 5 else "good")
         indicators.append(Indicator(
@@ -366,7 +372,7 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
     # 6. Near-critical density (live) + negative-float trend -------------------------
     open_acts = [a for a in live if a.status.value != "complete" and (a.task_type or "") not in ("TT_WBS", "TT_LOE")]
     if open_acts:
-        near = [a for a in open_acts if a.total_float_hours is not None and a.total_float_hours / hpd <= near_days]
+        near = [a for a in open_acts if a.total_float_hours is not None and activity_days(a, a.total_float_hours) <= near_days]
         negative = [a for a in open_acts if a.total_float_hours is not None and a.total_float_hours < 0]
         density = len(near) / len(open_acts)
         neg_series = [
@@ -383,7 +389,7 @@ def compute_signals(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) ->
         for w, acts in by_wbs.items():
             if len(acts) < 10:
                 continue
-            nd = sum(1 for a in acts if a.total_float_hours is not None and a.total_float_hours / hpd <= near_days)
+            nd = sum(1 for a in acts if a.total_float_hours is not None and activity_days(a, a.total_float_hours) <= near_days)
             if nd / len(acts) > 0.40:
                 hot.append({"wbs": w, "density_pct": round(100 * nd / len(acts)), "activities": len(acts)})
         indicators.append(Indicator(

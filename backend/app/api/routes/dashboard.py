@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import AuthContext, get_tenant_scoped_or_404, require_role
+from app.engine.durations import activity_days
 from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineStatus
 from app.models.change_request import ChangeRequest, ChangeRequestStatus
@@ -483,8 +484,8 @@ def get_risk_highlights(
         )
 
     # Negative float on the critical path — the sharpest schedule signal.
-    for a in sorted(_negative_float_activities(activities), key=lambda x: x.total_float_hours or 0)[:5]:
-        days = abs(round((a.total_float_hours or 0) / 8.0, 1))
+    for a in sorted(_negative_float_activities(activities), key=lambda x: activity_days(x, x.total_float_hours or 0))[:5]:
+        days = abs(round(activity_days(a, a.total_float_hours or 0), 1))
         candidates.append(
             (
                 1000 + days,

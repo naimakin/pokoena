@@ -3,11 +3,12 @@ import uuid
 from datetime import date
 
 import sqlalchemy as sa
-from sqlalchemy import Boolean, Date, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, select
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.db.base import Base
+from app.models.calendar import Calendar
 
 _JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
 
@@ -88,3 +89,13 @@ class Activity(Base):
     # updates these activities rather than creating duplicates. None for
     # activities that originated in Poko rather than an .xer import.
     p6_task_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # The activity's own calendar day length (Calendar.hours_per_day, i.e. P6's
+    # CALENDAR.day_hr_cnt) — the divisor for showing any of the hour fields
+    # above in days. Read-only, loaded with the row as a correlated subquery so
+    # every consumer converts with the right calendar without a lookup of its
+    # own; None when the activity has no calendar (see engine/durations.py for
+    # the fallback).
+    hours_per_day: Mapped[float | None] = column_property(
+        select(Calendar.hours_per_day).where(Calendar.id == clndr_id).correlate_except(Calendar).scalar_subquery()
+    )

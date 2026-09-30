@@ -135,6 +135,9 @@ class _Act:
     free_float_hours: float | None = None
     is_critical: bool = False
     is_longest_path: bool = False
+    # Its own calendar's day length — the divisor for its hour fields
+    # (engine/durations.py). None falls back to the run's `hours_per_day`.
+    hours_per_day: float | None = None
 
 
 @dataclass
@@ -176,13 +179,20 @@ def _gap(pred: _Act, succ: _Act, link_type: str, lag_days: int, work_days: WorkD
 
 
 class _Walker:
-    def __init__(self, acts: dict[str, _Act], rels: list[_Rel], work_days: WorkDays | None):
+    def __init__(
+        self, acts: dict[str, _Act], rels: list[_Rel], work_days: WorkDays | None, hours_per_day: float
+    ):
         self.acts = acts
         self.work_days = work_days
+        self.hours_per_day = hours_per_day
         self.pred_adj: dict[str, list[_Rel]] = {}
         for r in rels:
             if r.pred_external_id in acts and r.succ_external_id in acts:
                 self.pred_adj.setdefault(r.succ_external_id, []).append(r)
+
+    def days(self, act: _Act, hours: float | None) -> float | None:
+        """One of `act`'s hour fields in days on its own calendar."""
+        return _days(hours, act.hours_per_day or self.hours_per_day)
 
     def gap(self, rel: _Rel) -> float | None:
         return _gap(
@@ -198,7 +208,8 @@ class _Walker:
         predecessor with the least total float. Ties break on the id so a report
         a planner re-runs does not shuffle."""
         gap = self.gap(rel)
-        tf = self.acts[rel.pred_external_id].total_float_hours
+        pred = self.acts[rel.pred_external_id]
+        tf = self.days(pred, pred.total_float_hours)
         return (
             float("inf") if gap is None else gap,
             float("inf") if tf is None else tf,
@@ -254,6 +265,7 @@ def compute_float_paths(
             free_float_hours=a.get("free_float_hours"),
             is_critical=bool(a.get("is_critical")),
             is_longest_path=bool(a.get("is_longest_path")),
+            hours_per_day=a.get("hours_per_day"),
         )
         for a in activities
         if a.get("external_id")
@@ -272,7 +284,7 @@ def compute_float_paths(
     ]
 
     path_count = max(1, min(int(path_count), MAX_PATH_COUNT))
-    walker = _Walker(acts, rels, work_days)
+    walker = _Walker(acts, rels, work_days, hours_per_day)
 
     # P6 leaves completed work out of a float path: it cannot drive anything any
     # more. The end activity itself always stays, or there is nothing to analyse.
@@ -286,7 +298,7 @@ def compute_float_paths(
         done = set()
 
     if method == "total_float":
-        return _float_bands(walker, acts, end_external_id, path_count, hours_per_day, done)
+        return _float_bands(walker, acts, end_external_id, path_count, done)
 
     used: set[str] = set(done)
     paths: list[FloatPath] = []
@@ -326,8 +338,8 @@ def compute_float_paths(
                     early_finish=act.early_finish,
                     late_start=act.late_start,
                     late_finish=act.late_finish,
-                    total_float_days=_days(act.total_float_hours, hours_per_day),
-                    free_float_days=_days(act.free_float_hours, hours_per_day),
+                    total_float_days=walker.days(act, act.total_float_hours),
+                    free_float_days=walker.days(act, act.free_float_hours),
                     is_critical=act.is_critical,
                     is_longest_path=act.is_longest_path,
                     link_type=link.link_type if link else None,
@@ -380,7 +392,6 @@ def _float_bands(
     acts: dict[str, _Act],
     end_external_id: str,
     band_count: int,
-    hours_per_day: float,
     excluded: set[str],
 ) -> FloatPathResult:
     """P6's Total Float method. Not a logic walk at all: take everything that
@@ -400,7 +411,7 @@ def _float_bands(
     by_float: dict[float, list[_Act]] = {}
     for eid in reachable:
         act = acts[eid]
-        tf = _days(act.total_float_hours, hours_per_day)
+        tf = walker.days(act, act.total_float_hours)
         if tf is None:
             continue
         by_float.setdefault(tf, []).append(act)
@@ -428,7 +439,7 @@ def _float_bands(
                         late_start=a.late_start,
                         late_finish=a.late_finish,
                         total_float_days=tf,
-                        free_float_days=_days(a.free_float_hours, hours_per_day),
+                        free_float_days=walker.days(a, a.free_float_hours),
                         is_critical=a.is_critical,
                         is_longest_path=a.is_longest_path,
                     )
