@@ -6,6 +6,7 @@
 // not a model: each message says what triggered it, so it can be checked.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -49,18 +50,10 @@ export default function RiskRecommendationsPage() {
   const shown = area ? items.filter((i) => i.area === area) : items;
 
   if (loadingProject || loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Recommendations" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Recommendations" message={error} />;
   }
 
   const red = items.filter((i) => i.severity === "red").length;
@@ -70,7 +63,7 @@ export default function RiskRecommendationsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Recommendations</b>
+          Risk
         </span>
       </div>
       <div className="a-content">

@@ -269,7 +269,7 @@ h1,h2,h3{text-wrap:balance;font-weight:700;letter-spacing:var(--display-tracking
 .nav-group-label{font-family:var(--font-display);font-weight:700}
 button{cursor:pointer;background:none;border:none}
 button:disabled{cursor:not-allowed}
-button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{
+a:focus-visible,select:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{
   outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-xs);
   box-shadow:0 0 0 4px var(--accent-soft);
 }
@@ -459,7 +459,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 }
 .navitem.disabled{opacity:.5;cursor:default}
 .navitem .count{margin-left:auto;background:var(--warn-soft);color:var(--warn);font-size:.6875rem;font-weight:700;padding:.05rem .4rem;border-radius:var(--radius-pill)}
-.navitem .soon{margin-left:auto;font-size:.5625rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);border:1px solid var(--border-strong);padding:.1rem .35rem;border-radius:var(--radius-xs)}
+.navitem .soon{margin-left:auto;font-size:.5625rem;color:var(--text-muted);border:1px solid var(--border-strong);padding:.1rem .35rem;border-radius:var(--radius-xs)}
 
 /* .a-foot (vertical sidebar footer) is also used, unmodified, by the
    platform-admin shell — kept as-is; .topnav-user below is the equivalent
@@ -469,7 +469,7 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .a-foot .who{font-size:.75rem;font-weight:600}
 .a-foot .role{font-size:.6875rem;color:var(--text-muted)}
 .signout{margin-left:auto;color:var(--text-muted);transition:color var(--dur-1) var(--ease)}
-.signout:hover{color:var(--crit)}
+.signout:hover{color:var(--text-primary)}
 
 .topnav-user{display:flex;align-items:center;gap:.55rem}
 .topnav-user .who{font-size:.75rem;font-weight:600}
@@ -477,11 +477,10 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 
 .a-main{flex:1;min-width:0;display:flex;flex-direction:column}
 .a-topbar{
-  display:flex;align-items:center;gap:1rem;padding:.85rem 1.5rem;border-bottom:1px solid var(--border);
-  background:var(--surface);
+  display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem 0;background:transparent;
 }
-.crumb{font-size:.8125rem;color:var(--text-muted)}
-.crumb b{color:var(--text-primary);font-weight:600}
+.crumb{font-size:.75rem;font-weight:600;color:var(--text-muted)}
+.crumb b{font-weight:600;color:var(--text-muted)}
 .a-content{padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem;overflow:auto}
 /* A page's working area taken full screen (Project Activities). It scrolls on
    its own, and needs an explicit background — the browser paints a fullscreen
@@ -490,8 +489,8 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .spacer{flex:1}
 
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
-.page-title{font-size:1.375rem;font-weight:700}
-.page-desc{font-size:.8125rem;color:var(--text-secondary);margin-top:.15rem}
+.page-title{font-size:1.5rem;font-weight:var(--display-weight);line-height:1.15}
+.page-desc{font-size:.8125rem;color:var(--text-secondary);margin-top:.3rem;max-width:72ch}
 
 /* ---------- buttons ---------- */
 .btn{
@@ -705,7 +704,14 @@ tr.resolved{opacity:.45}
 .sub-footer-label{font-size:.6875rem;color:var(--text-muted);white-space:nowrap}
 
 /* ---------- login ---------- */
-.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:1.5rem}
+.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:transparent;padding:1.5rem;
+  position:relative;overflow:hidden;isolation:isolate}
+/* drafting-sheet backdrop: a 24px hairline grid, masked (alpha only) so it clears behind the card */
+.login-page::before{content:"";position:absolute;inset:0;z-index:-1;opacity:.5;
+  background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:24px 24px;
+  -webkit-mask-image:radial-gradient(ellipse 55% 50% at 50% 50%,transparent 35%,black 100%);
+          mask-image:radial-gradient(ellipse 55% 50% at 50% 50%,transparent 35%,black 100%)}
 .login-card{width:100%;max-width:360px;padding:1.75rem;display:flex;flex-direction:column;gap:1.25rem;box-shadow:var(--shadow-md)}
 .login-brand{display:flex;align-items:center;gap:.6rem}
 .login-brand .mark{width:32px;height:32px;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-contrast);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:var(--shadow-xs)}
@@ -884,7 +890,7 @@ tr.resolved{opacity:.45}
 .dash-reorder-move button{color:var(--text-muted);line-height:.7}
 .dash-reorder-move button:hover:not(:disabled){color:var(--text-primary)}
 .dash-ai-row{display:flex;align-items:center;gap:.5rem;margin-top:.4rem;font-size:.75rem;color:var(--text-muted)}
-.dash-ai-row .soon{font-size:.5625rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border:1px solid var(--border-strong);padding:.1rem .35rem;border-radius:var(--radius-xs)}
+.dash-ai-row .soon{font-size:.5625rem;color:var(--text-muted);border:1px solid var(--border-strong);padding:.1rem .35rem;border-radius:var(--radius-xs)}
 
 @media (max-width:900px){
   .dash-grid{grid-template-columns:1fr}
@@ -1300,7 +1306,7 @@ tr.resolved{opacity:.45}
      that width — which is why cards ran off the right edge. */
   .page-head > div,.card-head > div,.banner-actions{flex-wrap:wrap}
 
-  .a-topbar{padding:.6rem .85rem;gap:.6rem}
+  .a-topbar{padding:.75rem .85rem 0;gap:.6rem}
   .a-content{padding:.85rem;gap:.85rem}
 
   .kpi-row{grid-template-columns:1fr}
@@ -1481,3 +1487,89 @@ tr.resolved{opacity:.45}
   .risk-hbar-track{grid-column:1 / -1;order:3}
   .rec-item{grid-template-columns:1fr}
 }
+
+/* ---------- design pass 1: page patterns ---------- */
+:root{--control-h:34px;--control-h-sm:28px}
+
+.a-topbar + .a-content{padding-top:.5rem}
+.page-actions{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+.card-body{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.75rem}
+
+/* select: colours global, height opt-in (inline selectStyle still wins until removed) */
+select{
+  background:var(--surface);color:var(--text-primary);border:1px solid var(--border-strong);
+  border-radius:var(--radius-sm);padding:.4rem .55rem;font-family:var(--font-ui);font-size:.8125rem;
+  transition:border-color var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease);
+}
+select:hover:not(:disabled){border-color:var(--text-muted)}
+.select{height:var(--control-h);padding-block:0}
+.select-sm{height:var(--control-h-sm);padding-block:0;font-size:.75rem}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
+
+/* banners */
+.banner.good,.banner.crit,.banner.info{border-color:transparent}
+.banner.good{background:var(--good-soft)} .banner.good > .icon{color:var(--good)}
+.banner.crit{background:var(--crit-soft)} .banner.crit > .icon{color:var(--crit)}
+.banner.info{background:var(--info-soft)} .banner.info > .icon{color:var(--info)}
+
+/* empty states */
+.empty-block{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.35rem;padding:2.5rem 1.25rem}
+.empty-title{font-size:.9375rem;font-weight:600;color:var(--text-primary)}
+.empty-body{font-size:.8125rem;color:var(--text-muted);max-width:44ch;line-height:1.5}
+.empty-action{margin-top:.65rem;display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
+
+/* loading */
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.skeleton-stack{display:flex;flex-direction:column;gap:.65rem;padding:1.25rem 1.1rem}
+.skeleton{height:12px;border-radius:var(--radius-xs);
+  background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:shimmer 2s linear infinite}
+.skeleton:nth-child(1){width:38%}.skeleton:nth-child(2){width:92%}
+.skeleton:nth-child(3){width:84%}.skeleton:nth-child(4){width:64%}
+/* opacity only — a transform would re-anchor position:fixed modals and sticky headers */
+@keyframes page-in{from{opacity:0}to{opacity:1}}
+.a-content{animation:page-in 200ms ease-out}
+
+/* icon sizes with stroke compensation */
+.icon-xs{width:12px;height:12px;stroke-width:2.2}
+.icon-sm{width:14px;height:14px;stroke-width:2}
+
+/* error toast */
+.toast.is-error{background:var(--crit);color:var(--surface)}
+.toast.is-error .icon{color:inherit}
+.toast-close{display:flex;margin-left:.35rem;color:inherit;opacity:.75}
+.toast-close:hover{opacity:1}
+
+/* setup checklist (BaselineGate) */
+.setup-steps{list-style:none;margin:0;padding:0 1.1rem 1.25rem;display:flex;flex-direction:column;gap:.5rem}
+.setup-steps li{display:flex;align-items:center;gap:.65rem;font-size:.8125rem;padding:.55rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md)}
+.setup-steps li > .btn,.setup-note{margin-left:auto}
+.setup-num{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);
+  background:var(--surface-3);color:var(--text-secondary);font-family:var(--font-mono);font-size:.6875rem;font-weight:600}
+.setup-steps .is-done .setup-num{background:var(--good-soft);color:var(--good)}
+.setup-steps .is-muted{color:var(--text-muted)}
+.setup-note{font-size:.75rem;color:var(--text-muted)}
+
+/* illustrations (components/illustrations.tsx) — neutral line art, tokens only */
+.illo{display:block;width:120px;height:80px;margin:0 auto .5rem;color:var(--text-tertiary);
+  fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.illo .paper{fill:var(--surface)}
+.illo .recess{fill:var(--surface-2);stroke:none}
+.illo .bar{stroke:var(--border-strong);stroke-width:4}
+.illo .hair{stroke:var(--border);stroke-width:1}
+.illo .dash{stroke-dasharray:3 3}
+.illo .em{stroke:var(--text-secondary)}
+.illo .em-fill{fill:var(--text-secondary);stroke:none}
+.illo text{font-family:var(--font-mono);font-size:7px;fill:var(--text-muted);stroke:none}
+
+/* ---------- brand mark (components/brand.tsx) ---------- */
+.poko-mark{display:block;flex:none;border-radius:var(--radius-sm);box-shadow:var(--shadow-xs)}
+.poko-mark .tile{fill:var(--accent)}
+.poko-mark .glyph{color:var(--accent-contrast)}
+.poko-mark.staff .tile{fill:var(--text-primary)}
+.poko-mark.staff .glyph{color:var(--bg)}
+.brand .mark svg{width:17px;height:17px}
+.login-brand .mark svg{width:20px;height:20px}
+.brand-name{letter-spacing:.03em;font-weight:800}
+/* staff console: graphite tile, so it never reads as a customer workspace */
+.brand.staff .mark,.login-brand.staff .mark{background:var(--text-primary);color:var(--bg)}

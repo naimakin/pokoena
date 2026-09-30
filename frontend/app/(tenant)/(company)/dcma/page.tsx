@@ -1,10 +1,14 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
 import { ChevronDownIcon, ChevronUpIcon } from "@/components/icons";
+import Link from "next/link";
+import { EmptyState } from "@/components/EmptyState";
+import { UploadScheduleIllo } from "@/components/illustrations";
 
 const STATUS_CHIP: Record<DcmaCheckResult["status"], string> = {
   pass: "chip-good",
@@ -71,42 +75,39 @@ export default function DcmaPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="DCMA 14-Point" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Reporting" title="DCMA 14-Point" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>DCMA 14-Point</b>
+          Reporting
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">DCMA 14-Point Check</div>
+            <div className="page-title">DCMA 14-Point</div>
             <div className="page-desc">Schedule quality assessment per DCMA EA PAM 200.1</div>
           </div>
         </div>
 
         {!report || report.total_activities === 0 ? (
           <div className="card">
-            <p className="empty-state">
-              No schedule imported yet — upload a .xer file from Program Library to run the DCMA check.
-            </p>
+            <EmptyState
+              art={<UploadScheduleIllo />}
+              title="No schedule imported yet"
+              body="Upload a Primavera P6 .xer from Program Library to run the DCMA check."
+              action={
+                <Link className="btn btn-primary btn-sm" href="/project-files">
+                  Go to Program Library
+                </Link>
+              }
+            />
           </div>
         ) : (
           <>

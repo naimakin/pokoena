@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { PROJECT_ROLE_LABELS, type User } from "@/lib/types";
 import { UsersIcon } from "@/components/icons";
@@ -28,7 +29,7 @@ export default function MyProfilePage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>My Profile</b>
+          Administration
         </span>
       </div>
       <div className="a-content">
@@ -40,11 +41,9 @@ export default function MyProfilePage() {
         </div>
 
         {loading ? (
-          <p className="page-desc">Loading…</p>
+          <PageState kind="loading" />
         ) : error ? (
-          <p className="login-error" style={{ maxWidth: 420 }}>
-            {error}
-          </p>
+          <PageState kind="error" message={error} />
         ) : user ? (
           <div className="card" style={{ maxWidth: 480 }}>
             <div className="card-head">

@@ -7,6 +7,7 @@
 // network can say "possible", production can say "not at this pace".
 
 import { useCallback, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -54,18 +55,10 @@ export default function ResourcesAnalysisPage() {
   }, [load]);
 
   if (loadingProject || loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Resources Analysis" />;
   }
   if (error || !data) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error ?? "No data."}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Resources Analysis" message={error ?? "No data."} />;
   }
 
   const tot = data.total;
@@ -76,7 +69,7 @@ export default function ResourcesAnalysisPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Resources Analysis</b>
+          Risk
         </span>
       </div>
       <div className="a-content" style={{ opacity: refreshing ? 0.6 : 1 }}>

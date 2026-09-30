@@ -52,7 +52,7 @@ export default function ProjectsPage() {
       setCode("");
       setShowForm(false);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to create project.");
+      showToast(err instanceof ApiError ? err.message : "Failed to create project.", "error");
     } finally {
       setCreating(false);
     }
@@ -68,7 +68,7 @@ export default function ProjectsPage() {
     const nextName = editName.trim();
     const nextCode = editCode.trim();
     if (!nextName || !nextCode) {
-      showToast("Name and code can't be blank");
+      showToast("Name and code can't be blank", "error");
       return;
     }
     if (nextName === p.name && nextCode === p.code) {
@@ -85,7 +85,7 @@ export default function ProjectsPage() {
       setEditingId(null);
       showToast(`Project ${updated.name} updated`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not update this project.");
+      showToast(err instanceof ApiError ? err.message : "Could not update this project.", "error");
     } finally {
       setSavingEdit(false);
     }
@@ -100,7 +100,7 @@ export default function ProjectsPage() {
       showToast(`Project ${deleteTarget.name} deleted`);
       setDeleteTarget(null);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete this project.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete this project.", "error");
     } finally {
       setDeleting(false);
     }
@@ -116,7 +116,7 @@ export default function ProjectsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>Projects</b>
+          Portfolio
         </span>
       </div>
 

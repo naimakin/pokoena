@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -11,6 +12,7 @@ import { StatusDatesMode } from "@/components/progress/StatusDatesMode";
 import { ManhoursMode } from "@/components/progress/ManhoursMode";
 import { UNGROUPED_KEY } from "@/lib/wbs-tree";
 import { MaximizeIcon, MinimizeIcon } from "@/components/icons";
+import { NoProjectIllo } from "@/components/illustrations";
 
 type Mode = "status" | "manhours";
 const MODE_KEY = "poko:progress:mode";
@@ -298,7 +300,7 @@ export default function ProgressPage() {
       setFilterDirty(false);
       showToast("Filter saved.");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save filter.");
+      showToast(err instanceof ApiError ? err.message : "Could not save filter.", "error");
     }
   }
   async function updateActiveFilter() {
@@ -311,7 +313,7 @@ export default function ProgressPage() {
       setFilterDirty(false);
       showToast("Filter updated.");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not update filter.");
+      showToast(err instanceof ApiError ? err.message : "Could not update filter.", "error");
     }
   }
   async function deleteSaved(f: SavedActivityFilter) {
@@ -321,7 +323,7 @@ export default function ProgressPage() {
       if (activeSavedId === f.id) clearSaved();
       await loadFilters();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete filter.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete filter.", "error");
     }
   }
 
@@ -342,26 +344,21 @@ export default function ProgressPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Execution" title="Project Activities" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Execution" title="Project Activities" message={error} />;
   }
   if (!project) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Execution"
+        title="Project Activities"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -374,7 +371,7 @@ export default function ProgressPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Project Activities</b>
+          Execution
         </span>
         <div className="spacer" />
         {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}

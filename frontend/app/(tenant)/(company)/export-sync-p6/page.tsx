@@ -1,10 +1,13 @@
 "use client";
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, ScheduleImport, SyncLogEntry } from "@/lib/types";
 import { DownloadIcon } from "@/components/icons";
+import { EmptyState } from "@/components/EmptyState";
+import { NoProjectIllo } from "@/components/illustrations";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -198,27 +201,17 @@ export default function ExportSyncP6Page() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Planning" title="Export / Sync to P6" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Planning" title="Export / Sync to P6" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Export / Sync to P6</b>
+          Planning
         </span>
       </div>
       <div className="a-content">
@@ -235,7 +228,11 @@ export default function ExportSyncP6Page() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
+            <EmptyState
+              art={<NoProjectIllo />}
+              title="No project selected"
+              body="Create or pick a project from the project switcher in the top bar."
+            />
           </div>
         ) : (
           <>

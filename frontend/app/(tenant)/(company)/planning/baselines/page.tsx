@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError } from "@/lib/api";
+import { PageState } from "@/components/PageShell";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type {
@@ -24,6 +25,8 @@ import type {
 } from "@/lib/types";
 import { ChevronDownIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
 import { ScurveChart } from "@/components/ScurveChart";
+import { EmptyState } from "@/components/EmptyState";
+import { NoProjectIllo } from "@/components/illustrations";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -174,7 +177,7 @@ export default function BaselinesPage() {
   async function upload(file: File, force = false) {
     if (!project) return;
     if (!file.name.toLowerCase().endsWith(".xer")) {
-      showToast("Only .xer files are supported");
+      showToast("Only .xer files are supported", "error");
       return;
     }
     setUploading(true);
@@ -200,7 +203,7 @@ export default function BaselinesPage() {
         if (window.confirm(`${err.message}\n\nImport it anyway?`)) await upload(file, true);
         return;
       }
-      showToast(err instanceof ApiError ? err.message : "Failed to upload the baseline programme.");
+      showToast(err instanceof ApiError ? err.message : "Failed to upload the baseline programme.", "error");
     } finally {
       setUploading(false);
     }
@@ -257,7 +260,7 @@ export default function BaselinesPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Baselines</b>
+          Planning
         </span>
       </div>
       <div className="a-content">
@@ -272,14 +275,16 @@ export default function BaselinesPage() {
         </div>
 
         {loading ? (
-          <p className="page-desc">Loading…</p>
+          <PageState kind="loading" />
         ) : error ? (
-          <p className="login-error" style={{ maxWidth: 420 }}>
-            {error}
-          </p>
+          <PageState kind="error" message={error} />
         ) : !project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher.</p>
+            <EmptyState
+              art={<NoProjectIllo />}
+              title="No project selected"
+              body="Create or pick a project from the project switcher in the top bar."
+            />
           </div>
         ) : (
           <>

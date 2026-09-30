@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { BuildingIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import type { PlatformAdmin } from "@/lib/types";
 
 export default function PlatformLoginPage() {
@@ -30,9 +30,9 @@ export default function PlatformLoginPage() {
   return (
     <div className="login-page">
       <form className="card login-card" onSubmit={handleSubmit}>
-        <div className="login-brand">
+        <div className="login-brand staff">
           <div className="mark">
-            <BuildingIcon className="icon" />
+            <PokoGlyph />
           </div>
           <div>
             <div className="login-title">POKO</div>

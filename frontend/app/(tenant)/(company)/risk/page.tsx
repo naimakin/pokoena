@@ -7,6 +7,7 @@
 // block; this page no longer calls it.
 
 import Link from "next/link";
+import { PageState } from "@/components/PageShell";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -75,7 +76,7 @@ export default function QsraPage() {
       setView("pre");
       setHistory(await api.get<QsraRunSummary[]>(`/projects/${project.id}/risk/qsra/runs`));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "The simulation failed.");
+      showToast(err instanceof ApiError ? err.message : "The simulation failed.", "error");
     } finally {
       setRunning(false);
     }
@@ -87,7 +88,7 @@ export default function QsraPage() {
     try {
       setRun(await api.post<QsraRun>(`/projects/${project.id}/risk/qsra/runs/${run.id}/ranking`));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Ranking failed.");
+      showToast(err instanceof ApiError ? err.message : "Ranking failed.", "error");
     } finally {
       setRanking(false);
     }
@@ -103,7 +104,7 @@ export default function QsraPage() {
       setDraft({});
       showToast("Settings saved — run QSRA again to apply them.");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save the settings.");
+      showToast(err instanceof ApiError ? err.message : "Could not save the settings.", "error");
     }
   }
 
@@ -134,18 +135,10 @@ export default function QsraPage() {
   );
 
   if (loadingProject || loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="QSRA & Forecast" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="QSRA & Forecast" message={error} />;
   }
 
   const s = { ...settings, ...draft } as QsraSettings;
@@ -156,13 +149,13 @@ export default function QsraPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>QSRA &amp; Finish Forecast</b>
+          Risk
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">QSRA &amp; Finish Forecast</div>
+            <div className="page-title">QSRA &amp; Forecast</div>
             <div className="page-desc">
               Monte Carlo on the live logic network with the risks in the register — the credible earliest and
               latest finish, what drives the spread, and where to act.

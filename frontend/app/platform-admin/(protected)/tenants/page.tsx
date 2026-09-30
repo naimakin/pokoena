@@ -54,7 +54,7 @@ export default function PlatformTenantsPage() {
       setAdminFullName("");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to create tenant.");
+      showToast(err instanceof ApiError ? err.message : "Failed to create tenant.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -65,7 +65,7 @@ export default function PlatformTenantsPage() {
       await navigator.clipboard.writeText(url);
       showToast("Link copied");
     } catch {
-      showToast("Couldn't copy — select and copy the link manually.");
+      showToast("Couldn't copy — select and copy the link manually.", "error");
     }
   }
 
@@ -78,6 +78,7 @@ export default function PlatformTenantsPage() {
         err instanceof ApiError
           ? err.message
           : "Failed to generate a reset link.",
+        "error",
       );
     }
   }
@@ -87,7 +88,7 @@ export default function PlatformTenantsPage() {
       const result = await api.post<TenantInviteLink>(`/platform/tenants/${tenant.id}/resend-admin-invite`);
       setLastLink({ heading: `Invite link for ${result.email}`, url: result.invite_url });
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to resend the invite.");
+      showToast(err instanceof ApiError ? err.message : "Failed to resend the invite.", "error");
     }
   }
 
@@ -98,7 +99,7 @@ export default function PlatformTenantsPage() {
       showToast(`${tenant.name} suspended`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to suspend tenant.");
+      showToast(err instanceof ApiError ? err.message : "Failed to suspend tenant.", "error");
     }
   }
 
@@ -108,7 +109,7 @@ export default function PlatformTenantsPage() {
       showToast(`${tenant.name} activated`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to activate tenant.");
+      showToast(err instanceof ApiError ? err.message : "Failed to activate tenant.", "error");
     }
   }
 
@@ -119,7 +120,7 @@ export default function PlatformTenantsPage() {
       showToast(`${tenant.name} deleted`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to delete tenant.");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete tenant.", "error");
     }
   }
 

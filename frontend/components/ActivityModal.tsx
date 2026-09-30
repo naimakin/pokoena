@@ -253,7 +253,7 @@ export function ActivityModal({
   async function save() {
     if (!activity || !draft || saving) return;
     if (validationError) {
-      showToast(validationError);
+      showToast(validationError, "error");
       return;
     }
     setSaving(true);
@@ -272,7 +272,7 @@ export function ActivityModal({
       setHistory(null); // the save just wrote new timeline rows
       showToast("Activity saved");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save this activity.");
+      showToast(err instanceof ApiError ? err.message : "Could not save this activity.", "error");
     } finally {
       setSaving(false);
     }
@@ -288,7 +288,7 @@ export function ActivityModal({
       setHistory(null);
       await loadHistory();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not post the comment.");
+      showToast(err instanceof ApiError ? err.message : "Could not post the comment.", "error");
     } finally {
       setPosting(false);
     }

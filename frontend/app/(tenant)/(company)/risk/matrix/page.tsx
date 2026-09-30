@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -58,18 +59,10 @@ export default function RiskMatrixPage() {
   }, [filtered]);
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Risk Matrix" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Risk Matrix" message={error} />;
   }
 
   const selected = cell ? (byCell.get(`${cell.p}:${cell.i}`) ?? []) : [];
@@ -78,7 +71,7 @@ export default function RiskMatrixPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Risk Matrix</b>
+          Risk
         </span>
       </div>
       <div className="a-content">

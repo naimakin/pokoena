@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -21,6 +22,7 @@ import {
   type WidgetContext,
 } from "@/components/dashboard/DashboardWidgets";
 import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
+import { NoProjectIllo } from "@/components/illustrations";
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
@@ -132,7 +134,7 @@ export default function DashboardPage() {
       const result = await api.post<{ reminded: number }>(`/update-periods/${periodId}/remind`);
       showToast(`Reminder sent to ${result.reminded} non-responding subcontractor(s)`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to send reminders.");
+      showToast(err instanceof ApiError ? err.message : "Failed to send reminders.", "error");
     }
   }
 
@@ -141,11 +143,11 @@ export default function DashboardPage() {
     if (!periodId) return;
     try {
       await api.post(`/update-periods/${periodId}/close`);
-      showToast("Period closed. S-curve, EVM and Monte Carlo analysis ship in Phase 2.");
+      showToast("Period closed.");
       setShowCloseWarning(false);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to close the period.");
+      showToast(err instanceof ApiError ? err.message : "Failed to close the period.", "error");
     }
   }
 
@@ -163,33 +165,28 @@ export default function DashboardPage() {
       showToast("Dashboard saved.");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to save the dashboard.");
+      showToast(err instanceof ApiError ? err.message : "Failed to save the dashboard.", "error");
     } finally {
       setSavingConfig(false);
     }
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section={project?.name ?? "Dashboard"} title="Dashboard" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section={project?.name ?? "Dashboard"} title="Dashboard" message={error} />;
   }
   if (!project) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No projects yet — create one from the project switcher in the top bar.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Dashboard"
+        title="Dashboard"
+        emptyTitle="No project yet"
+        message="Create a project from the project switcher in the top bar, then upload its schedule."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -213,7 +210,7 @@ export default function DashboardPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Dashboard</b>
+          {project.name}
         </span>
         <div className="spacer" />
         {summary?.active_period_status && (

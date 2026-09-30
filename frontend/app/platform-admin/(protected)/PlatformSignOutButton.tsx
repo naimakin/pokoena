@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { XIcon } from "@/components/icons";
+import { LogOutIcon } from "@/components/icons";
 
 export function PlatformSignOutButton() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export function PlatformSignOutButton() {
 
   return (
     <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
-      <XIcon className="icon" />
+      <LogOutIcon className="icon" />
     </button>
   );
 }

@@ -39,7 +39,7 @@ export function ProjectSwitcher() {
       setCreating(false);
       setOpen(false);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to create project.");
+      showToast(err instanceof ApiError ? err.message : "Failed to create project.", "error");
     } finally {
       setSubmitting(false);
     }

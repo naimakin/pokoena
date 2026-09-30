@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -14,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { TrendLine } from "@/components/charts/TrendLine";
 import { selectStyle } from "@/components/ScurveChart";
+import { NoProjectIllo } from "@/components/illustrations";
 
 function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -156,26 +158,21 @@ export default function ProjectStatusPage() {
   const hasFilters = Boolean(wbsId || codeIds.length || q);
 
   if (loading && !status) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Execution" title="Project Status" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Execution" title="Project Status" message={error} />;
   }
   if (!project || !status) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Execution"
+        title="Project Status"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -190,7 +187,7 @@ export default function ProjectStatusPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Project / Program Status</b>
+          Execution
         </span>
         <div className="spacer" />
         {status.latest_revision_label && (
@@ -201,7 +198,7 @@ export default function ProjectStatusPage() {
       <div className="a-content" data-dash-theme="calm">
         <div className="page-head">
           <div>
-            <div className="page-title">Project / Program Status</div>
+            <div className="page-title">Project Status</div>
             <div className="page-desc">
               {noSchedule
                 ? "No schedule imported yet — upload a .xer from Program Library."

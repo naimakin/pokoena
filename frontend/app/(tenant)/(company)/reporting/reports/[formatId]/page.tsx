@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -46,18 +47,10 @@ export default function ReportPage() {
   }, [load]);
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="Report" />;
   }
   if (error || !format || !project) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error ?? "Report not found."}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Reporting" title="Report" message={error ?? "Report not found."} />;
   }
 
   const blocks = format.blocks
@@ -70,7 +63,7 @@ export default function ReportPage() {
     <>
       <div className="a-topbar no-print">
         <span className="crumb">
-          {project.name} / <Link href="/reporting/reports">Reports</Link> / <b>{format.name}</b>
+          Reporting / <Link href="/reporting/reports">Reports</Link>
         </span>
       </div>
       <div className={`a-content report-sheet${landscape ? " is-landscape" : ""}`}>

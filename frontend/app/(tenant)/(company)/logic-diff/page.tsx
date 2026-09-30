@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { LogicDiffChangeType, LogicDiffReport, ScheduleImport } from "@/lib/types";
@@ -74,27 +75,17 @@ export default function LogicDiffPage() {
   const filteredChanges = report ? report.changes.filter((c) => typeFilter === "all" || c.change_type === typeFilter) : [];
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="Logic Diff" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Reporting" title="Logic Diff" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Logic Diff</b>
+          Reporting
         </span>
       </div>
       <div className="a-content">

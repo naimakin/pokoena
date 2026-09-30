@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -69,7 +70,7 @@ export default function ReviewQueuePage() {
       showToast("Change approved and queued for P6 export");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to approve change.");
+      showToast(err instanceof ApiError ? err.message : "Failed to approve change.", "error");
     }
   }
 
@@ -79,7 +80,7 @@ export default function ReviewQueuePage() {
       showToast("Change rejected — subcontractor will be notified");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to reject change.");
+      showToast(err instanceof ApiError ? err.message : "Failed to reject change.", "error");
     }
   }
 
@@ -91,39 +92,29 @@ export default function ReviewQueuePage() {
       setSelected(new Set());
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to bulk approve.");
+      showToast(err instanceof ApiError ? err.message : "Failed to bulk approve.", "error");
     }
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Execution" title="Flag Reviews" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Execution" title="Flag Reviews" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Change Review Queue</b>
+          Execution
         </span>
       </div>
 
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Change Review Queue</div>
+            <div className="page-title">Flag Reviews</div>
             <div className="page-desc">Logic, lag, and dependency changes flagged by scope owners</div>
           </div>
           <button className="btn btn-primary" onClick={bulkApprove} disabled={selected.size === 0}>

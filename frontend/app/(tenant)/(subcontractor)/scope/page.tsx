@@ -7,7 +7,8 @@ import { useToast } from "@/components/Toast";
 import { ActivityCard } from "@/components/ActivityCard";
 import { FlagReviewModal } from "@/components/FlagReviewModal";
 import Link from "next/link";
-import { BuildingIcon, ClockIcon, XIcon } from "@/components/icons";
+import { ClockIcon, LogOutIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import type {
   Activity,
   ActivityRelationship,
@@ -113,7 +114,7 @@ export default function ScopePage() {
       const updated = await api.patch<Activity>(`/activities/${activityId}`, patch);
       setActivities((prev) => prev.map((a) => (a.id === activityId ? updated : a)));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to save that change.");
+      showToast(err instanceof ApiError ? err.message : "Failed to save that change.", "error");
     }
   }
 
@@ -134,7 +135,7 @@ export default function ScopePage() {
       setFlagTarget(null);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to submit the flag.");
+      showToast(err instanceof ApiError ? err.message : "Failed to submit the flag.", "error");
     } finally {
       setFlagSubmitting(false);
     }
@@ -147,7 +148,7 @@ export default function ScopePage() {
       setSubmitted(true);
       showToast("Updates submitted — visible to Project Controls immediately");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to submit updates.");
+      showToast(err instanceof ApiError ? err.message : "Failed to submit updates.", "error");
     }
   }
 
@@ -192,7 +193,7 @@ export default function ScopePage() {
           <div className="sub-header-top">
             <div className="sub-id">
               <div className="mark" style={{ width: 24, height: 24, borderRadius: 6, background: "var(--accent)", color: "var(--accent-contrast)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <BuildingIcon className="icon" style={{ width: 13, height: 13 }} />
+                <PokoGlyph width={13} height={13} />
               </div>
               <div>
                 <div className="sub-company">{user?.full_name}</div>
@@ -200,7 +201,7 @@ export default function ScopePage() {
               </div>
             </div>
             <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
-              <XIcon className="icon" />
+              <LogOutIcon className="icon" />
             </button>
           </div>
 

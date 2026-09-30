@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
 import { AlertTriangleIcon, CompareIcon, DownloadIcon } from "@/components/icons";
 import { FloatBadge, fmtDays, fmtP6Date } from "@/components/reporting/format";
+import { NoProjectIllo } from "@/components/illustrations";
 import type {
   FloatPath,
   FloatPathEndCandidate,
@@ -169,17 +171,18 @@ export default function FloatPathPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="Float Path" />;
   }
   if (!project) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Reporting"
+        title="Float Path"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -189,7 +192,7 @@ export default function FloatPathPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Float Path</b>
+          Reporting
         </span>
       </div>
       <div className="a-content">

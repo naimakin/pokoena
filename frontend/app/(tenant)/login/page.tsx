@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { BuildingIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import type { TenantRole, User } from "@/lib/types";
 
 const ROLE_HOME: Record<TenantRole, string> = {
@@ -38,7 +38,7 @@ export default function TenantLoginPage() {
       <form className="card login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <div className="mark">
-            <BuildingIcon className="icon" />
+            <PokoGlyph />
           </div>
           <div>
             <div className="login-title">POKO</div>

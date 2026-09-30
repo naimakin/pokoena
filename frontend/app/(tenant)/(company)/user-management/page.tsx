@@ -97,7 +97,7 @@ export default function UserManagementPage() {
     api
       .get<ProjectScope[]>(`/projects/${scopeProjectId}/scopes`)
       .then((scopes) => setScopesByProject((prev) => ({ ...prev, [scopeProjectId]: scopes })))
-      .catch(() => showToast("Failed to load scopes for that project."));
+      .catch(() => showToast("Failed to load scopes for that project.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeProjectId]);
 
@@ -174,7 +174,7 @@ export default function UserManagementPage() {
       resetForm();
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to send invite.");
+      showToast(err instanceof ApiError ? err.message : "Failed to send invite.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -185,7 +185,7 @@ export default function UserManagementPage() {
       await navigator.clipboard.writeText(url);
       showToast("Link copied");
     } catch {
-      showToast("Couldn't copy — select and copy the link manually.");
+      showToast("Couldn't copy — select and copy the link manually.", "error");
     }
   }
 
@@ -196,7 +196,7 @@ export default function UserManagementPage() {
       showToast(`Removed ${member.full_name}`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to remove team member.");
+      showToast(err instanceof ApiError ? err.message : "Failed to remove team member.", "error");
     }
   }
 
@@ -205,7 +205,7 @@ export default function UserManagementPage() {
       const result = await api.post<PasswordResetLink>(`/team/${member.user_tenant_role_id}/reset-password-link`);
       setLastLink({ heading: `Password reset link for ${result.email}`, url: result.reset_url });
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to generate a reset link.");
+      showToast(err instanceof ApiError ? err.message : "Failed to generate a reset link.", "error");
     }
   }
 
@@ -229,14 +229,14 @@ export default function UserManagementPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          <b>User Management</b>
+          Administration
         </span>
       </div>
 
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">User Management</div>
+            <div className="page-title">Users</div>
             <div className="page-desc">
               Add employees and subcontractors, assign them to projects, and set what they&rsquo;re allowed to do.
             </div>

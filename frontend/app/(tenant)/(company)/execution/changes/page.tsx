@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
 import { ArrowRightIcon, ChevronDownIcon, CompareIcon, DownloadIcon } from "@/components/icons";
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
+import { NoProjectIllo } from "@/components/illustrations";
 
 type SectionKey = "added" | "removed" | "renamed" | "modified" | "logic";
 
@@ -156,24 +158,21 @@ export default function ScheduleChangesPage() {
   }
 
   if (loading && !report) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Execution" title="Changes" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Execution" title="Changes" message={error} />;
   }
   if (!project || !report) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Execution"
+        title="Changes"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -192,7 +191,7 @@ export default function ScheduleChangesPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Changes</b>
+          Execution
         </span>
       </div>
       <div className="a-content changes-print">

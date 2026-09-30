@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { auth } from "@/lib/auth";
-import { BuildingIcon, GridIcon, BarChartIcon, UsersIcon } from "@/components/icons";
+import { GridIcon, BarChartIcon, UsersIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import { PlatformSignOutButton } from "./PlatformSignOutButton";
 
 const NAV = [
@@ -27,9 +28,9 @@ export default async function PlatformProtectedLayout({ children }: { children: 
   return (
     <div className="app-shell">
       <aside className="a-sidebar">
-        <div className="brand">
+        <div className="brand staff">
           <div className="mark">
-            <BuildingIcon className="icon" />
+            <PokoGlyph />
           </div>
           <div>
             <div className="brand-name">POKO</div>

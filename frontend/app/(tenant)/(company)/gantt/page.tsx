@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError } from "@/lib/api";
+import { PageState } from "@/components/PageShell";
 import { hoursPerDay } from "@/lib/duration";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, ActivityCodes, BaselineVariance, ScheduleImport, WbsNode } from "@/lib/types";
@@ -844,27 +845,17 @@ export default function GanttPage() {
   const contentHeight = HEAD_H + rows.length * ROW_H;
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Planning" title="Schedule" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Planning" title="Schedule" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Schedule</b>
+          Planning
         </span>
       </div>
       <div className="a-content">

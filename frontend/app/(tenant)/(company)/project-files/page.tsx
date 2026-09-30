@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, ScheduleImport, SyncLogEntry } from "@/lib/types";
-import { CheckIcon, LockIcon, PencilIcon, UploadCloudIcon, XIcon } from "@/components/icons";
+import { CheckIcon, LockIcon, PencilIcon, TrashIcon, UploadCloudIcon, XIcon } from "@/components/icons";
+import { EmptyState } from "@/components/EmptyState";
+import { NoProjectIllo } from "@/components/illustrations";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -115,7 +118,7 @@ export default function ProgramLibraryPage() {
   async function upload(file: File, force = false) {
     if (!project) return;
     if (!file.name.toLowerCase().endsWith(".xer")) {
-      showToast("Only .xer files are supported");
+      showToast("Only .xer files are supported", "error");
       return;
     }
     setUploading(true);
@@ -135,7 +138,7 @@ export default function ProgramLibraryPage() {
         if (window.confirm(`${err.message}\n\nImport it anyway?`)) await upload(file, true);
         return;
       }
-      showToast(err instanceof ApiError ? err.message : "Failed to import schedule file.");
+      showToast(err instanceof ApiError ? err.message : "Failed to import schedule file.", "error");
     } finally {
       setUploading(false);
     }
@@ -162,7 +165,7 @@ export default function ProgramLibraryPage() {
       await api.delete(`/projects/${project.id}/schedule-imports/${imp.id}`);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete this import.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete this import.", "error");
     } finally {
       setDeletingId(null);
     }
@@ -182,7 +185,7 @@ export default function ProgramLibraryPage() {
     if (!project || !edit) return;
     const label = edit.label.trim();
     if (!label) {
-      showToast("Revision label can't be blank");
+      showToast("Revision label can't be blank", "error");
       return;
     }
     const wasBaseline = imp.id === baselineStatus?.active_baseline?.schedule_import_id;
@@ -192,7 +195,7 @@ export default function ProgramLibraryPage() {
     if (typedDate && typedDate !== (imp.data_date ? fmtDate(imp.data_date) : "")) {
       newDate = parseDateInput(typedDate);
       if (!newDate) {
-        showToast("Data date must look like 30-Apr-26");
+        showToast("Data date must look like 30-Apr-26", "error");
         return;
       }
     }
@@ -241,7 +244,7 @@ export default function ProgramLibraryPage() {
       }
       setEdit(null);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save this import.");
+      showToast(err instanceof ApiError ? err.message : "Could not save this import.", "error");
     } finally {
       setSavingEdit(false);
       await load();
@@ -249,27 +252,17 @@ export default function ProgramLibraryPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Planning" title="Program Library" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Planning" title="Program Library" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Program Library</b>
+          Planning
         </span>
       </div>
       <div className="a-content">
@@ -286,7 +279,11 @@ export default function ProgramLibraryPage() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
+            <EmptyState
+              art={<NoProjectIllo />}
+              title="No project selected"
+              body="Create or pick a project from the project switcher in the top bar."
+            />
           </div>
         ) : (
           <>
@@ -535,8 +532,9 @@ export default function ProgramLibraryPage() {
                                     }
                                     disabled={imp.is_current || isBaselineLinked || deletingId === imp.id}
                                     onClick={() => deleteImport(imp)}
+                                    aria-label="Delete"
                                   >
-                                    <XIcon className="icon" />
+                                    <TrashIcon className="icon" />
                                   </button>
                                 </>
                               )}

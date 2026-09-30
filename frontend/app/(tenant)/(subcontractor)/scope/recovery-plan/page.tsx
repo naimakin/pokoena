@@ -62,7 +62,7 @@ export default function SubRecoveryPlanPage() {
       setPlans((prev) => ({ ...prev, [p.id]: p }));
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not start the plan.");
+      showToast(err instanceof ApiError ? err.message : "Could not start the plan.", "error");
     }
   }
 
@@ -72,7 +72,7 @@ export default function SubRecoveryPlanPage() {
       await api.post(`/projects/${project.id}/recovery-plan/plans/${id}/submit`);
       await Promise.all([load(), loadPlan(id)]);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not submit.");
+      showToast(err instanceof ApiError ? err.message : "Could not submit.", "error");
     }
   }
 

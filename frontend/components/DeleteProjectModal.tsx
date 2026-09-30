@@ -62,8 +62,7 @@ export function DeleteProjectModal({
             Cancel
           </button>
           <button
-            className="btn btn-primary"
-            style={{ background: "var(--crit)" }}
+            className="btn btn-danger"
             disabled={!matches || deleting}
             onClick={() => onConfirm(typed.trim())}
           >

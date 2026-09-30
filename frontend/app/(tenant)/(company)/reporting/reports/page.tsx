@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { useToast } from "@/components/Toast";
 import { fmtP6Date } from "@/components/reporting/format";
 import { BarChartIcon, CheckIcon, DownloadIcon, SettingsIcon } from "@/components/icons";
+import { NoProjectIllo } from "@/components/illustrations";
 import type {
   ReportBlockCatalogueEntry,
   ReportBlockConfig,
@@ -103,7 +105,7 @@ export default function ReportsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save the format.");
+      showToast(err instanceof ApiError ? err.message : "Could not save the format.", "error");
     } finally {
       setSaving(false);
     }
@@ -122,7 +124,7 @@ export default function ReportsPage() {
       startEdit(created);
       showToast("Format created — pick the blocks it should contain.");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not create the format.");
+      showToast(err instanceof ApiError ? err.message : "Could not create the format.", "error");
     } finally {
       setCreating(false);
     }
@@ -136,29 +138,26 @@ export default function ReportsPage() {
       if (editingId === format.id) setEditingId(null);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete the format.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete the format.", "error");
     }
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="Reports" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Reporting" title="Reports" message={error} />;
   }
   if (!project) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Reporting"
+        title="Reports"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -170,7 +169,7 @@ export default function ReportsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Reports</b>
+          Reporting
         </span>
       </div>
       <div className="a-content">

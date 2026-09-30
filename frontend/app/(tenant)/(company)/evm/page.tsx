@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { BaselineStatus, EvmScurve, EvmSummary, Project } from "@/lib/types";
 import { CheckIcon, DownloadIcon, LockIcon, TrendingUpIcon } from "@/components/icons";
 import { ScurveChart, selectStyle } from "@/components/ScurveChart";
 import { ExpandableChartCard } from "@/components/ExpandableChartCard";
+import { EmptyState } from "@/components/EmptyState";
+import { NoProjectIllo } from "@/components/illustrations";
 
 const GRANULARITIES = ["daily", "weekly", "monthly"] as const;
 type Granularity = (typeof GRANULARITIES)[number];
@@ -131,40 +134,34 @@ export default function EvmPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Reporting" title="S-Curve & EVM" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Reporting" title="S-Curve & EVM" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>EVM / S-Curve</b>
+          Reporting
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">EVM / S-Curve</div>
+            <div className="page-title">S-Curve &amp; EVM</div>
             <div className="page-desc">Earned Value Management against a locked Performance Measurement Baseline</div>
           </div>
         </div>
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
+            <EmptyState
+              art={<NoProjectIllo />}
+              title="No project selected"
+              body="Create or pick a project from the project switcher in the top bar."
+            />
           </div>
         ) : !baselineStatus?.has_active ? (
           <div className="card" style={{ padding: "1.25rem 1.1rem" }}>
@@ -263,7 +260,7 @@ export default function EvmPage() {
                 {scurve && scurve.series.length > 0 ? (
                   <ScurveChart series={scurve.series} />
                 ) : (
-                  <p className="empty-state">No progress entries yet — submit progress from the Progress Input page.</p>
+                  <p className="empty-state">No progress entries yet — submit progress from the Project Activities page.</p>
                 )}
               </ExpandableChartCard>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -100,7 +101,7 @@ export default function RiskRegisterPage() {
       setNewOpen(false);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not create the risk.");
+      showToast(err instanceof ApiError ? err.message : "Could not create the risk.", "error");
     }
   }
 
@@ -110,7 +111,7 @@ export default function RiskRegisterPage() {
       const updated = await api.patch<RiskItem>(`/projects/${project.id}/risks/${id}`, body);
       setRisks((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated } : r)));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Update failed.");
+      showToast(err instanceof ApiError ? err.message : "Update failed.", "error");
     }
   }
 
@@ -120,30 +121,22 @@ export default function RiskRegisterPage() {
       await api.delete(`/projects/${project.id}/risks/${id}`);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete.", "error");
     }
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Risk Register" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Risk Register" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Risk Register</b>
+          Risk
         </span>
       </div>
       <div className="a-content">

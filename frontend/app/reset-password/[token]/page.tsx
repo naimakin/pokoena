@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { BuildingIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import type { PasswordResetPreview } from "@/lib/types";
 
 export default function ResetPasswordPage() {
@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
       <form className="card login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <div className="mark">
-            <BuildingIcon className="icon" />
+            <PokoGlyph />
           </div>
           <div>
             <div className="login-title">Reset your password</div>

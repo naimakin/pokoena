@@ -48,7 +48,7 @@ export function ActionItems({
       await fn();
       onChanged();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Update failed.");
+      showToast(err instanceof ApiError ? err.message : "Update failed.", "error");
     } finally {
       setBusy(false);
     }

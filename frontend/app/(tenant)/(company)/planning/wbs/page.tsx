@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -144,7 +145,7 @@ export default function WbsPage() {
       const rows = await api.get<WbsNode[]>(path);
       setNodes(rows);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to load this program's WBS.");
+      showToast(err instanceof ApiError ? err.message : "Failed to load this program's WBS.", "error");
       setNodes([]);
     } finally {
       setNodesLoading(false);
@@ -219,7 +220,7 @@ export default function WbsPage() {
       setNewOpen(false);
       await loadNodes();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not create the WBS node.");
+      showToast(err instanceof ApiError ? err.message : "Could not create the WBS node.", "error");
     } finally {
       setSaving(false);
     }
@@ -232,7 +233,7 @@ export default function WbsPage() {
       await api.delete(`/projects/${project.id}/wbs-nodes/${node.id}`);
       await loadNodes();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not delete the WBS node.");
+      showToast(err instanceof ApiError ? err.message : "Could not delete the WBS node.", "error");
     }
   }
 
@@ -254,7 +255,7 @@ export default function WbsPage() {
       await api.post(`/projects/${project.id}/wbs-nodes/${node.id}/hide`);
       await Promise.all([loadNodes(), loadHiddenRoots()]);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not hide this WBS node.");
+      showToast(err instanceof ApiError ? err.message : "Could not hide this WBS node.", "error");
     } finally {
       setHidingId(null);
     }
@@ -267,40 +268,30 @@ export default function WbsPage() {
       await api.post(`/projects/${project.id}/wbs-nodes/${node.id}/unhide`);
       await Promise.all([loadNodes(), loadHiddenRoots()]);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not unhide this WBS node.");
+      showToast(err instanceof ApiError ? err.message : "Could not unhide this WBS node.", "error");
     } finally {
       setHidingId(null);
     }
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Planning" title="WBS" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>
-          {error}
-        </p>
-      </div>
-    );
+    return <PageState kind="error" section="Planning" title="WBS" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>WBS</b>
+          Planning
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Work Breakdown Structure</div>
+            <div className="page-title">WBS</div>
             <div className="page-desc">
               {nodesLoading
                 ? "Loading…"

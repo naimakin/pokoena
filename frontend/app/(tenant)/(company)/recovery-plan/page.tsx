@@ -1,12 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { RecoveryPlan, SlipReport, SlipRow, User } from "@/lib/types";
 import { ActionItems } from "@/components/ActionItems";
 import { AlertTriangleIcon, DownloadIcon } from "@/components/icons";
+import { NoProjectIllo } from "@/components/illustrations";
 
 type Grouping = "contractor" | "wbs" | "flat";
 const GROUP_KEY = "poko:recovery:grouping";
@@ -111,7 +113,7 @@ export default function RecoveryPlanPage() {
       setPlans((prev) => ({ ...prev, [p.id]: p }));
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not start the plan.");
+      showToast(err instanceof ApiError ? err.message : "Could not start the plan.", "error");
     }
   }
 
@@ -121,7 +123,7 @@ export default function RecoveryPlanPage() {
       await api.post(`/projects/${project.id}/recovery-plan/plans/${planId}${path}`, body);
       await Promise.all([load(), loadPlan(planId)]);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Action failed.");
+      showToast(err instanceof ApiError ? err.message : "Action failed.", "error");
     }
   }
 
@@ -146,24 +148,21 @@ export default function RecoveryPlanPage() {
   }, [grouping, rows]);
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Execution" title="Recovery Plan" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Execution" title="Recovery Plan" message={error} />;
   }
   if (!project || !report) {
     return (
-      <div className="a-content">
-        <p className="page-desc">No project selected.</p>
-      </div>
+      <PageState
+        kind="empty"
+        section="Execution"
+        title="Recovery Plan"
+        emptyTitle="No project selected"
+        message="Create or pick a project from the project switcher in the top bar."
+        art={<NoProjectIllo />}
+      />
     );
   }
 
@@ -173,7 +172,7 @@ export default function RecoveryPlanPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project.name} / <b>Recovery Plan</b>
+          Execution
         </span>
       </div>
       <div className="a-content recovery-print">

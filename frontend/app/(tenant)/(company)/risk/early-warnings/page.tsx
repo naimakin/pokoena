@@ -6,6 +6,7 @@
 // and the saved QSRA runs.
 
 import { useCallback, useEffect, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { EarlyWarningIndicator, EarlyWarnings, SignalStatus } from "@/lib/types";
@@ -77,18 +78,10 @@ export default function EarlyWarningsPage() {
   }, [load]);
 
   if (loadingProject || loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Early Warnings" />;
   }
   if (error || !data) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error ?? "No data."}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Early Warnings" message={error ?? "No data."} />;
   }
 
   const selected = data.indicators.find((i) => i.id === open) ?? null;
@@ -101,7 +94,7 @@ export default function EarlyWarningsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Early Warnings</b>
+          Risk
         </span>
       </div>
       <div className="a-content">

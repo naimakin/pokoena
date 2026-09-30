@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { BuildingIcon } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 import type { InvitePreview, TenantRole, User } from "@/lib/types";
 
 const ROLE_HOME: Record<TenantRole, string> = {
@@ -76,7 +76,7 @@ export default function InviteAcceptPage() {
       <form className="card login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <div className="mark">
-            <BuildingIcon className="icon" />
+            <PokoGlyph />
           </div>
           <div>
             <div className="login-title">Welcome, {preview.full_name || preview.email}</div>

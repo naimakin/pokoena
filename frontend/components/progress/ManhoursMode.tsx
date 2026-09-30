@@ -66,7 +66,7 @@ export function ManhoursMode({
       );
       setDrafts({});
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to submit progress.");
+      showToast(err instanceof ApiError ? err.message : "Failed to submit progress.", "error");
     } finally {
       setSubmitting(false);
     }

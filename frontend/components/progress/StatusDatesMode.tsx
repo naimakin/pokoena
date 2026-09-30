@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActivityModal } from "@/components/ActivityModal";
 import { FlagIcon } from "@/components/icons";
+import { floatClass } from "@/components/reporting/format";
 import { toDays } from "@/lib/duration";
 import type { Activity, WbsNode } from "@/lib/types";
 import { WbsGrid } from "./WbsGrid";
@@ -117,7 +118,7 @@ export function StatusDatesMode({
                 {fmtDate(a.actual_finish)}
                 {afterDataDate(a.actual_finish) && <div className="pg-warn">after data date</div>}
               </td>
-              <td className="mono">{fmtFloat(a)}</td>
+              <td className="mono"><span className={floatClass(toDays(a.total_float_hours, a))}>{fmtFloat(a)}</span></td>
               <td className="mono">{a.percent_complete}%</td>
               <td>
                 <div className="pg-flags">

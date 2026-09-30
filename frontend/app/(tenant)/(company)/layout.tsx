@@ -25,13 +25,14 @@ import {
   GridIcon,
   LayersIcon,
   LockIcon,
+  LogOutIcon,
   SettingsIcon,
   ShieldCheckIcon,
   SparkleIcon,
   TrendingUpIcon,
   UsersIcon,
-  XIcon,
 } from "@/components/icons";
+import { PokoGlyph } from "@/components/brand";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 type Visible = (user: User | null) => boolean;
@@ -41,6 +42,8 @@ interface NavChild {
   label: string;
   icon: IconComponent;
   visible: Visible;
+  /** Not built yet: the route renders the PlannedFeature page, but the menu hides it. */
+  planned?: boolean;
 }
 
 interface NavSection {
@@ -61,6 +64,11 @@ const canManageTeam: Visible = (user) =>
 
 const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 
+// Planned pages keep their routes (they render <ComingSoon>, the PlannedFeature page) but are
+// hidden from the menu. Owner: set to true to list them again.
+const SHOW_PLANNED = false;
+const inMenu = (child: NavChild, user: User | null) => child.visible(user) && (SHOW_PLANNED || !child.planned);
+
 // Where a destination is reused under more than one top section, TOP_SECTIONS
 // order below decides which section is treated as "active" when that route is
 // open (first match wins).
@@ -74,8 +82,7 @@ const TOP_SECTIONS: NavSection[] = [
     visible: always,
     children: [
       { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
-      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always },
-      { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
+      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always, planned: true },
     ],
   },
   {
@@ -85,11 +92,12 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/planning/wbs",
     visible: always,
     children: [
+      { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/planning/wbs", label: "WBS", icon: LayersIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
-      { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always },
-      { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always },
+      { href: "/planning/milestones", label: "Milestones", icon: FlagIcon, visible: always, planned: true },
+      { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always, planned: true },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
     ],
   },
@@ -97,17 +105,17 @@ const TOP_SECTIONS: NavSection[] = [
     key: "execution",
     label: "Execution",
     icon: FlagIcon,
-    href: "/execution/my-focus",
+    href: "/execution/project-status",
     visible: always,
     children: [
-      { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always },
+      { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always, planned: true },
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/progress", label: "Project Activities", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
-      { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always },
-      { href: "/execution/lookahead", label: "Lookahead", icon: CalendarIcon, visible: always },
-      { href: "/execution/issues", label: "Issues", icon: AlertTriangleIcon, visible: always },
+      { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always, planned: true },
+      { href: "/execution/lookahead", label: "Lookahead", icon: CalendarIcon, visible: always, planned: true },
+      { href: "/execution/issues", label: "Issues", icon: AlertTriangleIcon, visible: always, planned: true },
       { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: isCompanyAdmin },
     ],
   },
@@ -154,12 +162,12 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/ai/assistant",
     visible: always,
     children: [
-      { href: "/ai/assistant", label: "AI Assistant", icon: SparkleIcon, visible: always },
-      { href: "/ai/schedule-generator", label: "Schedule Generator", icon: GanttIcon, visible: always },
-      { href: "/ai/progress-analysis", label: "Progress Analysis", icon: TrendingUpIcon, visible: always },
-      { href: "/ai/delay-analysis", label: "Delay Analysis", icon: ClockIcon, visible: always },
-      { href: "/ai/risk-analysis", label: "Risk Analysis", icon: DiceIcon, visible: always },
-      { href: "/ai/insights", label: "AI Insights", icon: SparkleIcon, visible: always },
+      { href: "/ai/assistant", label: "AI Assistant", icon: SparkleIcon, visible: always, planned: true },
+      { href: "/ai/schedule-generator", label: "Schedule Generator", icon: GanttIcon, visible: always, planned: true },
+      { href: "/ai/progress-analysis", label: "Progress Analysis", icon: TrendingUpIcon, visible: always, planned: true },
+      { href: "/ai/delay-analysis", label: "Delay Analysis", icon: ClockIcon, visible: always, planned: true },
+      { href: "/ai/risk-analysis", label: "Risk Analysis", icon: DiceIcon, visible: always, planned: true },
+      { href: "/ai/insights", label: "AI Insights", icon: SparkleIcon, visible: always, planned: true },
     ],
   },
   {
@@ -171,10 +179,10 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
       { href: "/administration/profile", label: "My Profile", icon: UsersIcon, visible: always },
-      { href: "/administration/roles", label: "Roles", icon: ShieldCheckIcon, visible: canManageTeam },
-      { href: "/administration/contractors", label: "Contractors", icon: BuildingIcon, visible: canManageTeam },
-      { href: "/administration/teams", label: "Teams", icon: UsersIcon, visible: canManageTeam },
-      { href: "/administration/settings", label: "Settings", icon: SettingsIcon, visible: canManageTeam },
+      { href: "/administration/roles", label: "Roles", icon: ShieldCheckIcon, visible: canManageTeam, planned: true },
+      { href: "/administration/contractors", label: "Contractors", icon: BuildingIcon, visible: canManageTeam, planned: true },
+      { href: "/administration/teams", label: "Teams", icon: UsersIcon, visible: canManageTeam, planned: true },
+      { href: "/administration/settings", label: "Settings", icon: SettingsIcon, visible: canManageTeam, planned: true },
     ],
   },
 ];
@@ -197,6 +205,16 @@ function GatedTabLock() {
   const { project, baselineReady } = useProjectContext();
   if (!project || baselineReady !== false) return null;
   return <LockIcon className="icon" style={{ width: 12, height: 12, opacity: 0.7 }} />;
+}
+
+// Browser tab title: "Page · Project · POKO". Rendered inside <ProjectProvider>
+// (same pattern as GatedTabLock) so it can read the selected project.
+function DocumentTitle({ label }: { label: string | null }) {
+  const { project } = useProjectContext();
+  useEffect(() => {
+    document.title = [label, project?.name, "POKO"].filter(Boolean).join(" · ");
+  }, [label, project?.name]);
+  return null;
 }
 
 export default function CompanyLayout({ children }: { children: ReactNode }) {
@@ -239,6 +257,17 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         : isActiveHref(pathname, section.href)
     ) ?? null;
 
+  // What the top bar lists: sections with at least one non-planned page. Kept
+  // separate from visibleSections so a planned route (e.g. the AI pages) still
+  // resolves to its section — and its baseline gate — exactly as before.
+  const menuSections = visibleSections.filter(
+    (section) => section.children.length === 0 || section.children.some((child) => inMenu(child, user))
+  );
+
+  const pageLabel = activeSection
+    ? activeSection.children.find((c) => c.href === pathname)?.label ?? activeSection.label
+    : null;
+
   // Which section's dropdown is open (only one at a time). Every page a section
   // owns lives in its dropdown now — there is no left sidebar — so a route
   // change always closes whatever is open.
@@ -252,11 +281,12 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
 
   return (
     <ProjectProvider>
+      <DocumentTitle label={pageLabel} />
       <div className="tenant-shell">
         <div className="a-topnav">
           <div className="brand">
             <div className="mark">
-              <BuildingIcon className="icon" />
+              <PokoGlyph />
             </div>
             <div>
               <div className="brand-name">POKO</div>
@@ -264,7 +294,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           </div>
 
           <nav className="a-topnav-tabs" aria-label="Main">
-            {visibleSections.map((section) => {
+            {menuSections.map((section) => {
               const active = section.key === activeSection?.key;
               const Icon = section.icon;
               const marker = BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null;
@@ -293,7 +323,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
                   id={section.key}
                   label={section.label}
                   icon={Icon}
-                  items={section.children.filter((child) => child.visible(user))}
+                  items={section.children.filter((child) => inMenu(child, user))}
                   pathname={pathname}
                   active={active}
                   open={openKey === section.key}
@@ -316,7 +346,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
                 <div className="role">{user ? (ROLE_LABEL[user.role] ?? user.role) : ""}</div>
               </div>
               <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
-                <XIcon className="icon" />
+                <LogOutIcon className="icon" />
               </button>
             </div>
           </div>

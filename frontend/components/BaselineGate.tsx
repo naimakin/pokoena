@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useProjectContext } from "@/lib/project-context";
-import { LockIcon } from "@/components/icons";
+import { CheckIcon } from "@/components/icons";
+import { EmptyState } from "@/components/EmptyState";
+import { NoBaselineIllo } from "@/components/illustrations";
 
 // Top-nav section keys that stay locked until the selected project has a
 // baseline programme. Planning / Portfolio / Documents / Administration are
@@ -34,31 +36,43 @@ export function BaselineGate({ gated, children }: { gated: boolean; children: Re
   return (
     <>
       <div className="a-topbar">
-        <span className="crumb">
-          {project.name} / <b>Set up baseline</b>
-        </span>
+        <span className="crumb">Setup</span>
       </div>
       <div className="a-content">
-        <div className="card" style={{ padding: "1.5rem 1.35rem", maxWidth: 560 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: ".55rem" }}>
-              <LockIcon className="icon" />
-              <span style={{ fontFamily: "var(--font-display)", fontSize: "1.125rem", fontWeight: 700 }}>
-                This project has no baseline yet
+        <div className="card" style={{ maxWidth: 560 }}>
+          <EmptyState
+            art={<NoBaselineIllo />}
+            title="This project has no baseline yet"
+            body="Execution, Reporting, EVM and Risk measure the project against a locked baseline programme."
+          />
+          <ol className="setup-steps">
+            <li className="is-done">
+              <span className="setup-num">
+                <CheckIcon className="icon icon-xs" />
               </span>
-            </div>
-            <p style={{ fontSize: ".8125rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-              Execution, Reporting, EVM, Risk and AI all measure the project against a locked baseline
-              programme. Upload the baseline <span className="mono">.xer</span> on{" "}
-              <b>Planning → Baselines</b> first — its resources and dates are frozen there, and every later
-              update programme is compared back to it.
-            </p>
-            <div>
-              <Link className="btn btn-primary" href="/planning/baselines">
-                <LockIcon className="icon" /> Go to Baselines
+              Create the project
+              <span className="setup-note">Done</span>
+            </li>
+            <li>
+              <span className="setup-num">2</span>
+              Upload the schedule (.xer)
+              <Link className="btn btn-secondary btn-sm" href="/project-files">
+                Program Library
               </Link>
-            </div>
-          </div>
+            </li>
+            <li>
+              <span className="setup-num">3</span>
+              Lock the baseline
+              <Link className="btn btn-primary btn-sm" href="/planning/baselines">
+                Go to Baselines
+              </Link>
+            </li>
+            <li className="is-muted">
+              <span className="setup-num">4</span>
+              Open an update period for subcontractors
+              <span className="setup-note">Not yet available</span>
+            </li>
+          </ol>
         </div>
       </div>
     </>

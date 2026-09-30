@@ -56,7 +56,7 @@ export default function PlatformAdminsPage() {
       setPhone("");
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to create admin.");
+      showToast(err instanceof ApiError ? err.message : "Failed to create admin.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +69,7 @@ export default function PlatformAdminsPage() {
       showToast(`${admin.full_name} deactivated`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to deactivate admin.");
+      showToast(err instanceof ApiError ? err.message : "Failed to deactivate admin.", "error");
     }
   }
 
@@ -79,7 +79,7 @@ export default function PlatformAdminsPage() {
       showToast(`${admin.full_name} activated`);
       load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to activate admin.");
+      showToast(err instanceof ApiError ? err.message : "Failed to activate admin.", "error");
     }
   }
 

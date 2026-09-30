@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
@@ -104,7 +105,7 @@ export default function RiskMitigationPlansPage() {
       await api.patch(`/projects/${project.id}/risks/${id}`, body);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Update failed.");
+      showToast(err instanceof ApiError ? err.message : "Update failed.", "error");
     }
   }
   async function mitigationAction(id: string, path: string, body?: unknown) {
@@ -113,7 +114,7 @@ export default function RiskMitigationPlansPage() {
       await api.post(`/projects/${project.id}/risks/${id}/mitigation/${path}`, body);
       await load();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Action failed.");
+      showToast(err instanceof ApiError ? err.message : "Action failed.", "error");
     }
   }
 
@@ -127,25 +128,17 @@ export default function RiskMitigationPlansPage() {
   }
 
   if (loading) {
-    return (
-      <div className="a-content">
-        <p className="page-desc">Loading…</p>
-      </div>
-    );
+    return <PageState kind="loading" section="Risk" title="Mitigation Plans" />;
   }
   if (error) {
-    return (
-      <div className="a-content">
-        <p className="login-error" style={{ maxWidth: 420 }}>{error}</p>
-      </div>
-    );
+    return <PageState kind="error" section="Risk" title="Mitigation Plans" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          {project?.name ?? "—"} / <b>Mitigation Plans</b>
+          Risk
         </span>
       </div>
       <div className="a-content mitigation-print">
