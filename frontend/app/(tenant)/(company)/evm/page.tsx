@@ -164,7 +164,7 @@ export default function EvmPage() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
           </div>
         ) : !baselineStatus?.has_active ? (
           <div className="card" style={{ padding: "1.25rem 1.1rem" }}>

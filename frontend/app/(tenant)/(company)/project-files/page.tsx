@@ -80,10 +80,7 @@ export default function ProgramLibraryPage() {
     current: boolean;
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [baselineLabel, setBaselineLabel] = useState("Baseline");
-  const [baselineBusy, setBaselineBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const currentImport = imports.find((i) => i.is_current) ?? imports[0];
 
   async function load() {
     if (!project) {
@@ -251,55 +248,6 @@ export default function ProgramLibraryPage() {
     }
   }
 
-  async function unlockBaseline() {
-    if (!project || !baselineStatus?.active_baseline) return;
-    const label = baselineStatus.active_baseline.version_label;
-    if (
-      !window.confirm(
-        `Unlock baseline "${label}"? Execution, Reporting, EVM, Risk and AI stay locked until a baseline is set again. ` +
-          "It is kept in Baseline history — tick Baseline on its import (edit the row) to restore it exactly.",
-      )
-    ) {
-      return;
-    }
-    setBaselineBusy(true);
-    try {
-      await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
-      await load();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not unlock the baseline.");
-    } finally {
-      setBaselineBusy(false);
-    }
-  }
-
-  async function lockBaseline() {
-    if (!project || !baselineLabel.trim()) return;
-    setBaselineBusy(true);
-    try {
-      await api.post(`/projects/${project.id}/evm/baseline`, { version_label: baselineLabel.trim() });
-      await load();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not lock the baseline.");
-    } finally {
-      setBaselineBusy(false);
-    }
-  }
-
-  async function relockBaseline() {
-    if (!project || !baselineStatus?.active_baseline || !baselineLabel.trim()) return;
-    setBaselineBusy(true);
-    try {
-      await api.delete(`/projects/${project.id}/evm/baseline/${baselineStatus.active_baseline.id}`);
-      await api.post(`/projects/${project.id}/evm/baseline`, { version_label: baselineLabel.trim() });
-      await load();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not change the baseline.");
-    } finally {
-      setBaselineBusy(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="a-content">
@@ -330,15 +278,15 @@ export default function ProgramLibraryPage() {
             <div className="page-title">Program Library</div>
             <div className="page-desc">
               Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
-              float, and critical path. Lock the current import as the baseline below (or manage it in more detail
-              on <b>Planning → Baselines</b>) — later uploads update the live schedule and are compared back to it.
+              float, and critical path. Set the baseline by editing an import below and ticking <b>Baseline</b> (or on{" "}
+              <b>Planning → Baselines</b>) — later uploads update the live schedule and are compared back to it.
             </div>
           </div>
         </div>
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
           </div>
         ) : (
           <>
@@ -354,65 +302,9 @@ export default function ProgramLibraryPage() {
               <div className="banner warn">
                 <LockIcon className="icon" />
                 <div className="banner-text">
-                  No baseline programme yet — lock the current import as baseline below, or set one on{" "}
+                  No baseline programme yet — edit an import below and tick <b>Baseline</b>, or set one on{" "}
                   <b>Planning → Baselines</b>.
                 </div>
-              </div>
-            )}
-
-            {imports.length > 0 && (
-              <div
-                style={{
-                  marginTop: ".6rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: ".5rem",
-                  flexWrap: "wrap",
-                  fontSize: ".75rem",
-                }}
-              >
-                <label htmlFor="baseline-label" style={{ color: "var(--text-muted)" }}>
-                  {baselineStatus?.has_active ? "New baseline label" : "Baseline label"}
-                </label>
-                <input
-                  id="baseline-label"
-                  type="text"
-                  style={{ width: 160 }}
-                  value={baselineLabel}
-                  onChange={(e) => setBaselineLabel(e.target.value)}
-                  disabled={baselineBusy}
-                />
-                {baselineStatus?.has_active ? (
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    disabled={
-                      baselineBusy ||
-                      !baselineLabel.trim() ||
-                      currentImport?.id === baselineStatus.active_baseline?.schedule_import_id
-                    }
-                    title={
-                      currentImport?.id === baselineStatus.active_baseline?.schedule_import_id
-                        ? "The baseline already reflects the current import"
-                        : undefined
-                    }
-                    onClick={relockBaseline}
-                  >
-                    {baselineBusy ? "Working…" : "Lock current update as baseline"}
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    disabled={baselineBusy || !baselineLabel.trim()}
-                    onClick={lockBaseline}
-                  >
-                    {baselineBusy ? "Locking…" : "Lock current update as baseline"}
-                  </button>
-                )}
-                {baselineStatus?.has_active && (
-                  <button className="btn btn-secondary btn-sm" disabled={baselineBusy} onClick={unlockBaseline}>
-                    Unlock baseline
-                  </button>
-                )}
               </div>
             )}
 

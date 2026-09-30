@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
+import { useCallback, useEffect, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -8,6 +8,7 @@ import type { User } from "@/lib/types";
 import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { BaselineGate, BASELINE_GATED_SECTIONS, isBaselineGated } from "@/components/BaselineGate";
+import { TopNavMenu } from "@/components/TopNavMenu";
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -238,7 +239,16 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         : isActiveHref(pathname, section.href)
     ) ?? null;
 
-  const sidebarItems = activeSection?.children.filter((child) => child.visible(user)) ?? [];
+  // Which section's dropdown is open (only one at a time). Every page a section
+  // owns lives in its dropdown now — there is no left sidebar — so a route
+  // change always closes whatever is open.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  useEffect(() => {
+    setOpenKey(null);
+  }, [pathname]);
+  const handleOpenChange = useCallback((key: string, open: boolean) => {
+    setOpenKey((prev) => (open ? key : prev === key ? null : prev));
+  }, []);
 
   return (
     <ProjectProvider>
@@ -253,20 +263,44 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <nav className="a-topnav-tabs">
+          <nav className="a-topnav-tabs" aria-label="Main">
             {visibleSections.map((section) => {
               const active = section.key === activeSection?.key;
               const Icon = section.icon;
+              const marker = BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null;
+
+              // Sections without pages of their own (Dashboard) stay a plain link.
+              if (section.children.length === 0) {
+                return (
+                  <Link
+                    key={section.key}
+                    href={section.href}
+                    className={`topnav-tab${active ? " active" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <Icon className="icon topnav-tab-icon" />
+                    <span className="topnav-tab-text">
+                      <span className="topnav-tab-label">{section.label}</span>
+                    </span>
+                    {marker}
+                  </Link>
+                );
+              }
+
               return (
-                <Link
+                <TopNavMenu
                   key={section.key}
-                  href={section.href}
-                  className={`topnav-tab${active ? " active" : ""}`}
-                >
-                  <Icon className="icon" />
-                  <span>{section.label}</span>
-                  {BASELINE_GATED_SECTIONS.has(section.key) && <GatedTabLock />}
-                </Link>
+                  id={section.key}
+                  label={section.label}
+                  icon={Icon}
+                  items={section.children.filter((child) => child.visible(user))}
+                  pathname={pathname}
+                  active={active}
+                  open={openKey === section.key}
+                  anotherOpen={openKey !== null && openKey !== section.key}
+                  onOpenChange={handleOpenChange}
+                  marker={marker}
+                />
               );
             })}
           </nav>
@@ -274,7 +308,9 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           <div className="a-topnav-right">
             <ProjectSwitcher />
             <div className="topnav-user">
-              <div className="avatar">{initials}</div>
+              <div className="avatar" title={user?.full_name}>
+                {initials}
+              </div>
               <div>
                 <div className="who">{user?.full_name ?? "…"}</div>
                 <div className="role">{user ? (ROLE_LABEL[user.role] ?? user.role) : ""}</div>
@@ -287,23 +323,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="tenant-body">
-          {sidebarItems.length > 0 && (
-            <aside className="a-sidebar">
-              <nav className="navlist">
-                {sidebarItems.map(({ href, label, icon: Icon }) => (
-                  <Link
-                    key={`${activeSection?.key}-${href}-${label}`}
-                    href={href}
-                    className={`navitem${isActiveHref(pathname, href) ? " active" : ""}`}
-                  >
-                    <Icon className="icon" />
-                    <span>{label}</span>
-                  </Link>
-                ))}
-              </nav>
-            </aside>
-          )}
-
           <main className="a-main">
             <BaselineGate gated={isBaselineGated(activeSection?.key, pathname)}>{children}</BaselineGate>
           </main>

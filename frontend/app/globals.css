@@ -299,28 +299,101 @@ input::placeholder,textarea::placeholder{color:var(--text-tertiary)}
 .app-shell{display:flex;min-height:100vh}
 
 .tenant-shell{display:flex;flex-direction:column;min-height:100vh}
+/* No sidebar in the company shell — every section's pages live in its top-bar
+   dropdown, so .a-main is the only child here and takes the full width. */
 .tenant-body{display:flex;flex:1;min-height:0}
 
-/* top nav bar: brand, section tabs, project switcher, avatar/sign-out */
+/* top nav bar: brand, section menus, project switcher, avatar/sign-out */
 .a-topnav{
   display:flex;align-items:center;gap:1.25rem;padding:0 1.25rem;height:56px;flex:none;
   background:var(--surface);border-bottom:1px solid var(--border);box-shadow:var(--shadow-xs);
 }
-.a-topnav-tabs{display:flex;align-items:stretch;gap:2px;height:100%;overflow-x:auto}
+/* Scrolls sideways when the sections don't fit. overflow-x clips vertically
+   too, which is why the dropdown panels are position:fixed (TopNavMenu.tsx)
+   rather than absolutely positioned inside this strip. */
+.a-topnav-tabs{
+  display:flex;align-items:stretch;gap:2px;height:100%;min-width:0;
+  overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;
+}
+.topnav-menu{display:flex;height:100%;flex:none}
 .topnav-tab{
-  display:flex;align-items:center;gap:.4rem;padding:0 .7rem;height:100%;
-  font-size:.8125rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;
+  position:relative;isolation:isolate;
+  display:flex;align-items:center;gap:.4rem;padding:0 .65rem;height:100%;flex:none;
+  font-size:.8125rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;text-decoration:none;
   border-bottom:2px solid transparent;
   transition:color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease);
 }
-.topnav-tab .icon{color:var(--text-muted);transition:color var(--dur-1) var(--ease)}
-.topnav-tab:hover{color:var(--text-primary)}
+/* Hover / open plate — an inset rounded fill, not a full-height block. */
+.topnav-tab::before{
+  content:"";position:absolute;inset:7px 2px;z-index:-1;border-radius:var(--radius-sm);
+  background:var(--surface-2);opacity:0;transition:opacity var(--dur-1) var(--ease);
+}
+.topnav-tab:hover::before,.topnav-tab.open::before{opacity:1}
+.topnav-tab .icon{color:var(--text-muted);transition:color var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
+.topnav-tab:hover,.topnav-tab.open{color:var(--text-primary)}
 .topnav-tab.active{color:var(--accent-strong);border-bottom-color:var(--accent)}
 .topnav-tab.active .icon{color:var(--accent-strong)}
+/* The strip clips vertically, so pull the focus ring inside the tab. */
+.topnav-tab:focus-visible{outline:2px solid var(--focus);outline-offset:-5px;border-radius:var(--radius-sm);box-shadow:none}
+.topnav-tab .topnav-caret{width:12px;height:12px;margin-left:-.1rem;color:var(--text-tertiary)}
+.topnav-tab:hover .topnav-caret,.topnav-tab.open .topnav-caret{color:var(--text-muted)}
+.topnav-tab.active .topnav-caret{color:var(--accent-strong)}
+.topnav-tab.open .topnav-caret{transform:rotate(180deg)}
+/* Label, plus — on the active section only — the current page on a small
+   second line. The ::before spacer mirrors that line's height above the label,
+   so the label stays on the same baseline as every other tab. */
+.topnav-tab-text{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.25}
+.topnav-tab-text.has-current::before{content:"";display:block;height:calc(.6875rem * 1.25)}
+.topnav-tab-current{
+  max-width:12rem;overflow:hidden;text-overflow:ellipsis;
+  font-size:.6875rem;font-weight:500;color:var(--text-muted);
+}
+
+/* Section dropdown. Fixed position (top/left set inline from the trigger's rect). */
+.topnav-panel{
+  position:fixed;z-index:45;min-width:220px;max-width:calc(100vw - 16px);overflow-y:auto;
+  display:flex;flex-direction:column;gap:2px;padding:.35rem;
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  box-shadow:var(--shadow-md);
+  animation:topnav-panel-in var(--dur-2) var(--ease);
+}
+@keyframes topnav-panel-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.topnav-panel-item{
+  position:relative;display:flex;align-items:center;gap:.55rem;padding:.5rem .65rem;
+  border-radius:var(--radius-sm);white-space:nowrap;text-decoration:none;
+  font-size:.8125rem;font-weight:500;color:var(--text-secondary);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease);
+}
+.topnav-panel-item .icon{color:var(--text-muted);transition:color var(--dur-1) var(--ease)}
+.topnav-panel-item:hover,.topnav-panel-item:focus-visible{background:var(--surface-2);color:var(--text-primary)}
+.topnav-panel-item:hover .icon,.topnav-panel-item:focus-visible .icon{color:var(--text-secondary)}
+.topnav-panel-item.active{background:var(--accent-soft);color:var(--accent-strong);font-weight:600}
+.topnav-panel-item.active .icon{color:var(--accent-strong)}
+/* same signature left-marker as the active .navitem */
+.topnav-panel-item.active::before{
+  content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:3px;height:16px;border-radius:0 var(--radius-xs) var(--radius-xs) 0;background:var(--accent-line);
+}
+
 .a-topnav-right{margin-left:auto;display:flex;align-items:center;gap:.75rem;flex:none}
-/* .project-switcher-trigger is width:100% — it filled the old vertical
-   sidebar via flex stretch; here it needs an explicit width to fill instead. */
+/* .project-switcher-trigger is width:100% — it needs an explicit width here. */
 .a-topnav-right .project-switcher{width:220px}
+
+/* Laptop widths: make room for the sections before anything has to scroll —
+   the name/role text goes first (the avatar keeps a tooltip), then the tab
+   icons. Below 900px the rules in the responsive block further down take over. */
+@media (max-width:1600px){
+  .a-topnav{gap:1rem;padding:0 1rem}
+  .a-topnav-right{gap:.6rem}
+  .a-topnav-right .project-switcher{width:200px}
+  .topnav-user .who,.topnav-user .role{display:none}
+}
+@media (max-width:1440px){
+  .a-topnav{gap:.85rem}
+  .a-topnav-right .project-switcher{width:180px}
+  .topnav-tab{padding:0 .55rem}
+  .topnav-tab .topnav-tab-icon{display:none}
+}
 
 .brand{display:flex;align-items:center;gap:.55rem;padding:0 .35rem}
 .brand .mark{width:26px;height:26px;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-contrast);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:var(--shadow-xs)}
@@ -523,6 +596,49 @@ tbody tr.critical{background:var(--crit-row-bg);box-shadow:inset 3px 0 0 var(--c
 
 /* ---------- review queue ---------- */
 .filter-bar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+
+/* WBS filter: a collapsible tree in a dropdown (components/progress/WbsTreeSelect.tsx) */
+.wbs-select{position:relative}
+.wbs-select-trigger{
+  display:inline-flex;align-items:center;gap:.5rem;height:32px;min-width:220px;max-width:420px;padding:0 .55rem;
+  font-size:.8125rem;color:var(--text-primary);background:var(--surface);
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm);cursor:pointer;
+  transition:border-color var(--dur-1) var(--ease);
+}
+.wbs-select-trigger:hover,.wbs-select-trigger.open{border-color:var(--accent)}
+.wbs-select-trigger:focus-visible{outline:2px solid var(--accent-focus);outline-offset:1px}
+.wbs-select-value{flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wbs-select-trigger .icon{color:var(--text-muted)}
+.wbs-select-panel{
+  position:absolute;top:calc(100% + 4px);left:0;z-index:20;width:min(480px,90vw);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.wbs-select-tools{display:flex;align-items:center;gap:.25rem;padding:.4rem .5rem;border-bottom:1px solid var(--border)}
+.wbs-select-all{
+  font-size:.8125rem;font-weight:600;padding:.3rem .5rem;border:none;background:none;border-radius:var(--radius-sm);
+  color:var(--text-secondary);cursor:pointer;
+}
+.wbs-select-all:hover{background:var(--surface-2)}
+.wbs-select-all.selected{color:var(--accent-strong);background:var(--accent-soft)}
+.wbs-select-list{max-height:min(420px,60vh);overflow-y:auto;padding:.25rem 0}
+.wbs-select-row{display:flex;align-items:center;gap:.15rem;padding-right:.5rem}
+.wbs-select-row:hover{background:var(--surface-2)}
+.wbs-select-row.selected{background:var(--accent-soft)}
+.wbs-select-toggle{
+  flex:none;width:20px;height:24px;display:flex;align-items:center;justify-content:center;
+  border:none;background:none;padding:0;color:var(--text-muted);cursor:pointer;
+}
+span.wbs-select-toggle{cursor:default}
+.wbs-select-toggle .icon{transition:transform var(--dur-1) var(--ease)}
+.wbs-select-label{
+  flex:1;min-width:0;display:flex;align-items:baseline;gap:.45rem;padding:.3rem 0;border:none;background:none;
+  font-size:.8125rem;color:var(--text-primary);text-align:left;cursor:pointer;
+}
+.wbs-select-row.selected .wbs-select-label{color:var(--accent-strong);font-weight:600}
+.wbs-select-code{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);flex:none}
+.wbs-select-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wbs-select-count{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-tertiary);flex:none}
 .diff-line{font-family:var(--font-mono);font-size:.75rem;display:flex;align-items:center;gap:.3rem;white-space:nowrap}
 .diff-before{color:var(--crit);text-decoration:line-through;text-decoration-color:var(--crit);opacity:.8}
 .diff-after{color:var(--good);font-weight:600}
@@ -780,6 +896,21 @@ tr.resolved{opacity:.45}
   position:sticky;top:0;z-index:3;background:var(--surface-2);
   font-size:.6875rem;letter-spacing:0;color:var(--text-muted);
   font-weight:600;text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--border-strong);
+}
+/* Sticky column headers need the grid to scroll inside its own box: the page
+   (.fill-viewport) is pinned to the viewport, the head/filters stay put, and
+   only .progress-card scrolls — both ways, so the inner .table-wrap must not
+   be a scroll container of its own or the sticky thead binds to it instead. */
+@media (min-width:641px){
+  .tenant-shell:has(.fill-viewport){height:100vh;min-height:0;overflow:hidden}
+  .tenant-shell:has(.fill-viewport) .a-main{min-height:0;overflow:hidden}
+  .a-content.fill-viewport{flex:1;min-height:0}
+  .fill-viewport .progress-card{flex:1;min-height:320px;overflow:auto}
+  .fill-viewport .progress-card .table-wrap{overflow:visible}
+}
+@media print{
+  .tenant-shell:has(.fill-viewport),.tenant-shell:has(.fill-viewport) .a-main{height:auto;overflow:visible}
+  .fill-viewport .progress-card{overflow:visible}
 }
 .progress-grid td{padding:.3rem .6rem;border-bottom:1px solid var(--border)}
 .progress-grid tbody tr:hover:not(.wbs-band){background:var(--surface-2)}
@@ -1121,17 +1252,17 @@ tr.resolved{opacity:.45}
   .navitem .count,.navitem .soon{margin-left:0;position:absolute;top:2px;right:2px}
   .field-row{grid-template-columns:1fr}
   .a-topnav{gap:.6rem;padding:0 .75rem}
-  .a-topnav .brand-name,.a-topnav .brand-sub,.topnav-tab span,.topnav-user .who,.topnav-user .role{display:none}
+  .a-topnav .brand-name,.a-topnav .brand-sub,.topnav-tab .topnav-tab-text,.topnav-user .who,.topnav-user .role{display:none}
+  /* icon-only tabs here (the 1440px rule hid the icons in favour of labels) */
+  .topnav-tab .topnav-tab-icon{display:block}
 }
 
-/* Phones. The 900px rules above shrink the sidebar to an icon rail, which still
-   costs ~76px of a 390px-wide screen and leaves the icons unlabelled. Below
-   640px the shell stacks instead: the section's pages become a horizontally
-   scrollable strip under the top nav, where the labels fit again. Everything
+/* Phones. The 900px rules above shrink the sidebar (now only the platform-admin
+   shell has one) to an icon rail, which still costs ~76px of a 390px-wide
+   screen and leaves the icons unlabelled. Below 640px it becomes a
+   horizontally scrollable strip instead, where the labels fit again. Everything
    here is layout-only — no colour, type or component styling changes. */
 @media (max-width:640px){
-  .tenant-body{flex-direction:column}
-
   .a-sidebar{
     width:100%;flex-direction:row;align-items:center;gap:.5rem;
     padding:.4rem .6rem;overflow-x:auto;overflow-y:hidden;
@@ -1158,7 +1289,9 @@ tr.resolved{opacity:.45}
   .a-topnav-right{gap:.4rem}
   .a-topnav-right .project-switcher{width:130px}
   .a-topnav-tabs{order:3;flex:1 0 100%;height:36px;gap:.1rem;border-top:1px solid var(--border)}
-  .a-topnav .topnav-tab span{display:inline}
+  .a-topnav .topnav-tab .topnav-tab-text{display:flex}
+  /* no room for the current-page line in a 36px row — the open menu marks it */
+  .topnav-tab-current,.topnav-tab-text.has-current::before{display:none}
   .topnav-tab{padding:0 .55rem;font-size:.75rem}
 
   /* Action clusters are inline flex rows on nearly every page and none of them

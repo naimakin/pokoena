@@ -379,7 +379,7 @@ export default function ProgressPage() {
         <div className="spacer" />
         {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}
       </div>
-      <div ref={contentRef} className={`a-content${isFullscreen ? " is-fullscreen" : ""}`}>
+      <div ref={contentRef} className={`a-content fill-viewport${isFullscreen ? " is-fullscreen" : ""}`}>
         <div className="page-head">
           <div>
             <div className="page-title">Project Activities</div>
@@ -517,7 +517,7 @@ export default function ProgressPage() {
               onDeleteSaved={deleteSaved}
             />
 
-            <div className="card" style={{ padding: 0 }}>
+            <div className="card progress-card" style={{ padding: 0 }}>
               <StatusDatesMode
                 hidden={mode !== "status"}
                 nodes={wbsNodes}

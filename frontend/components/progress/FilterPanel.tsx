@@ -12,6 +12,7 @@ import {
   type FilterOp,
   type FilterPredicate,
 } from "./filter";
+import { WbsTreeSelect } from "./WbsTreeSelect";
 
 const STATUS_CHIPS: { value: ActivityStatus; label: string }[] = [
   { value: "not_started", label: "Not Started" },
@@ -144,19 +145,7 @@ export function FilterPanel({
           style={{ ...selectStyle, width: 190 }}
         />
 
-        <select
-          value={criteria.wbsId ?? ""}
-          onChange={(e) => set({ wbsId: e.target.value || null })}
-          style={selectStyle}
-        >
-          <option value="">All WBS</option>
-          {nodes.map((n) => (
-            <option key={n.wbs_id} value={n.wbs_id}>
-              {"— ".repeat(n.depth)}
-              {n.outline_code} {n.wbs_name}
-            </option>
-          ))}
-        </select>
+        <WbsTreeSelect nodes={nodes} value={criteria.wbsId} onChange={(wbsId) => set({ wbsId })} />
 
         <button
           className={`btn btn-secondary btn-sm${criteria.predicates.length ? " " : ""}`}

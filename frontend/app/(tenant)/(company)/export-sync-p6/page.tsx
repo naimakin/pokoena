@@ -235,7 +235,7 @@ export default function ExportSyncP6Page() {
 
         {!project ? (
           <div className="card">
-            <p className="empty-state">No project yet — create one from the project switcher in the sidebar.</p>
+            <p className="empty-state">No project yet — create one from the project switcher in the top bar.</p>
           </div>
         ) : (
           <>
