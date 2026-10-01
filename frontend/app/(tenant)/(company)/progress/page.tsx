@@ -15,7 +15,6 @@ import { MaximizeIcon, MinimizeIcon } from "@/components/icons";
 import { NoProjectIllo } from "@/components/illustrations";
 
 type Mode = "status" | "manhours";
-const MODE_KEY = "poko:progress:mode";
 const VIEW = "progress";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -84,14 +83,9 @@ export default function ProgressPage() {
   const [manhoursDirty, setManhoursDirty] = useState(0);
   const totalDirty = manhoursDirty;
 
-  useEffect(() => {
-    try {
-      const m = localStorage.getItem(MODE_KEY);
-      if (m === "status" || m === "manhours") setMode(m);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // Always opens on Status & Dates. The last mode used to be remembered, so a
+  // visit after a Burned MH session opened on that four-column grid and read
+  // as "the activity columns are gone".
 
   // Deep links from the dashboard's Project Health card: /progress?filter=critical|overdue
   // (used to point at Planning > Activities before that view folded in here).
@@ -265,11 +259,6 @@ export default function ProgressPage() {
 
   function switchMode(m: Mode) {
     setMode(m);
-    try {
-      localStorage.setItem(MODE_KEY, m);
-    } catch {
-      /* ignore */
-    }
   }
 
   const onActivitiesUpdated = useCallback((rows: Activity[]) => {
