@@ -4,7 +4,9 @@ import { useState } from "react";
 import { ActivityModal } from "@/components/ActivityModal";
 import { FlagIcon } from "@/components/icons";
 import { floatClass } from "@/components/reporting/format";
+import { criticalityChip } from "@/lib/criticality";
 import { toDays } from "@/lib/duration";
+import { displayFinish, displayStart } from "@/lib/schedule-dates";
 import type { Activity, WbsNode } from "@/lib/types";
 import { WbsGrid } from "./WbsGrid";
 
@@ -87,17 +89,20 @@ export function StatusDatesMode({
                 (toDays(b.total_float_hours, b) ?? Number.POSITIVE_INFINITY)
             : undefined
         }
-        colCount={8}
+        colCount={9}
         header={
           <>
             <th>Activity</th>
             <th>Status</th>
-            <th style={{ width: 110 }}>Early Start</th>
-            <th style={{ width: 110 }}>Early Finish</th>
+            <th style={{ width: 110 }}>Start</th>
+            <th style={{ width: 110 }}>Finish</th>
             <th style={{ width: 130 }}>Actual Start</th>
             <th style={{ width: 130 }}>Actual Finish</th>
             <th style={{ width: 90 }}>Total Float</th>
             <th style={{ width: 70 }}>%</th>
+            <th style={{ width: 90 }} title="Criticality Score (0-100): total float, duration, free float and site risk">
+              Criticality
+            </th>
             <th style={{ width: 120 }}>Flags</th>
           </>
         }
@@ -108,8 +113,8 @@ export function StatusDatesMode({
               <td>
                 <span className={`chip ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
               </td>
-              <td className="mono">{fmtDate(a.early_start)}</td>
-              <td className="mono">{fmtDate(a.early_finish)}</td>
+              <td className="mono">{fmtDate(displayStart(a))}</td>
+              <td className="mono">{fmtDate(displayFinish(a))}</td>
               <td className="mono">
                 {fmtDate(a.actual_start)}
                 {afterDataDate(a.actual_start) && <div className="pg-warn">after data date</div>}
@@ -120,6 +125,13 @@ export function StatusDatesMode({
               </td>
               <td className="mono"><span className={floatClass(toDays(a.total_float_hours, a))}>{fmtFloat(a)}</span></td>
               <td className="mono">{a.percent_complete}%</td>
+              <td className="mono">
+                {a.criticality_score != null ? (
+                  <span className={`chip ${criticalityChip(a)}`}>{a.criticality_score}</span>
+                ) : (
+                  "—"
+                )}
+              </td>
               <td>
                 <div className="pg-flags">
                   {a.is_important && (

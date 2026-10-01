@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
+# P6 RSRC.rsrc_type of a labor resource — the only kind whose units follow an
+# activity's % (services/activity_progress.py).
+LABOR = "RT_Labor"
+
 
 class Resource(Base):
     """A P6 resource (labor/material/equipment) imported from an .xer file's

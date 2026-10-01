@@ -19,6 +19,21 @@ class ActivityStatus(str, enum.Enum):
     complete = "complete"
 
 
+# P6's TASK.status_code for each of our statuses.
+P6_STATUS_CODE = {
+    ActivityStatus.not_started: "TK_NotStart",
+    ActivityStatus.in_progress: "TK_Active",
+    ActivityStatus.complete: "TK_Complete",
+}
+
+# P6 milestone task types: TT_Mile is a start milestone (one date, its Start),
+# TT_FinMile a finish milestone (one date, its Finish). A milestone is never in
+# progress — recording its one actual date completes it.
+START_MILESTONE = "TT_Mile"
+FINISH_MILESTONE = "TT_FinMile"
+MILESTONE_TYPES = frozenset({START_MILESTONE, FINISH_MILESTONE})
+
+
 class Activity(Base):
     __tablename__ = "activities"
 
@@ -51,6 +66,10 @@ class Activity(Base):
     is_important: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     tags: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Site / supply risk ("high" | "standard" | "low"; None = not assessed, scored
+    # as standard) — the Criticality Score input P6 doesn't carry
+    # (services/criticality.py).
+    site_risk: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # --- P6/CPM fields, populated by .xer import (backend/app/services/xer_import.py). ---
     # `remaining_duration_days` above stays the field the subcontractor scope page
@@ -60,6 +79,10 @@ class Activity(Base):
     wbs_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     task_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     status_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # P6's TASK.phys_complete_pct. Not necessarily what Poko shows as % —
+    # `percent_complete` is the displayed % (services/activity_progress.py::
+    # display_percent); this is the physical % that round-trips to P6.
+    phys_complete_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_duration_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     remaining_duration_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     early_start: Mapped[date | None] = mapped_column(Date, nullable=True)

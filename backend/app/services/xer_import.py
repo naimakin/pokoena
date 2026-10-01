@@ -8,8 +8,9 @@ external_id/task_code within the project):
   - P6-native fields (target/remaining duration, calendar, task/status code,
     dates, float, criticality, constraints) are overwritten wholesale — the
     .xer file is the source of truth for the schedule logic.
-  - Progress fields (`percent_complete`, `actual_start`, `actual_finish`,
-    `status`, `remaining_duration_days`) are also edited in Poko (PATCH
+  - Progress fields (`percent_complete`, `phys_complete_pct`, `actual_start`,
+    `actual_finish`, `status`, `remaining_duration_days` / `_hours`) are also
+    edited in Poko (PATCH
     /activities, see api/routes/activities.py). They take P6's values whenever
     the file is at least as far along as Poko — the normal case, since the
     round-trip carries Poko's progress into P6 and back — and keep Poko's only
@@ -49,7 +50,7 @@ from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskAc
 from app.models.activity_relationship import ActivityRelationship, LinkType
 from app.models.calendar import Calendar as CalendarModel
 from app.models.project import Project
-from app.models.resource import Resource as ResourceModel
+from app.models.resource import LABOR, Resource as ResourceModel
 from app.models.resource_assignment import ResourceAssignment as ResourceAssignmentModel
 from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_import import ScheduleImport
@@ -65,7 +66,7 @@ from app.services.baseline import (
     overwrite_active_baseline_from_parsed,
     unique_baseline_label,
 )
-from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished
+from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished, display_percent
 from app.services.project_status import compute_status_rollup
 from app.services.schedule_current import get_current_import, mark_current, to_naive
 
@@ -112,15 +113,33 @@ def _is_critical(total_float_hr_cnt: float | None, status_code: str, act_end_dat
     return total_float_hr_cnt is not None and total_float_hr_cnt <= _TOL
 
 
-def _derive_status(status_code: str, phys_complete_pct: float) -> tuple[ActivityStatus, int]:
-    """Map P6's status_code/phys_complete_pct onto our simplified ActivityStatus +
-    percent_complete (0-100 int) — used only when CREATING a new activity row."""
-    pct = max(0, min(100, round(phys_complete_pct)))
-    if status_code == "TK_Complete":
-        return ActivityStatus.complete, 100
-    if status_code == "TK_Active" or pct > 0:
-        return ActivityStatus.in_progress, pct
-    return ActivityStatus.not_started, pct
+def _labor_units_by_task(parsed: ParsedSchedule) -> dict[str, tuple[float, float]]:
+    """(budget, actual) TASKRSRC units per task_id, RT_Labor assignments only —
+    the units % Poko shows for a resourced activity."""
+    labor_rsrc_ids = {r.rsrc_id for r in parsed.resources if r.rsrc_type == LABOR}
+    units: dict[str, tuple[float, float]] = {}
+    for assign in parsed.assignments:
+        if assign.rsrc_id not in labor_rsrc_ids:
+            continue
+        budget, actual = units.get(assign.task_id, (0.0, 0.0))
+        units[assign.task_id] = (budget + (assign.target_qty or 0.0), actual + (assign.act_reg_qty or 0.0))
+    return units
+
+
+def _file_progress(act, labor_units: dict[str, tuple[float, float]]) -> tuple[ActivityStatus, int]:
+    """The file's status (from P6's status_code/phys_complete_pct) and the %
+    Poko shows for it (services/activity_progress.py::display_percent)."""
+    if act.status_code == "TK_Complete":
+        status = ActivityStatus.complete
+    elif act.status_code == "TK_Active" or act.phys_complete_pct > 0:
+        status = ActivityStatus.in_progress
+    else:
+        status = ActivityStatus.not_started
+    budget, actual = labor_units.get(act.task_id, (0.0, 0.0))
+    pct = display_percent(
+        status, act.target_drtn_hr_cnt, act.remain_drtn_hr_cnt, budget, actual, act.phys_complete_pct
+    )
+    return status, pct
 
 
 def _assignments_snapshot(parsed: ParsedSchedule) -> list[dict]:
@@ -147,6 +166,39 @@ def _assignments_snapshot(parsed: ParsedSchedule) -> list[dict]:
             }
         )
     return out
+
+
+# The TASK columns P6's own scheduler wrote into the file.
+_P6_SCHEDULE_FIELDS = (
+    "early_start_date",
+    "early_end_date",
+    "late_start_date",
+    "late_end_date",
+    "total_float_hr_cnt",
+    "free_float_hr_cnt",
+)
+
+
+def _schedule_keeping_p6_values(parsed: ParsedSchedule) -> None:
+    """Run Poko's CPM, then put back the dates and float P6 itself wrote.
+
+    What Poko shows has to be what P6 shows — Total Float is
+    TASK.total_float_hr_cnt / CALENDAR.day_hr_cnt, Start/Finish come from
+    TASK.early_start_date/early_end_date — and our CPM port, however close,
+    doesn't reproduce P6's figures to the hour (scheduling options, calendars,
+    out-of-sequence handling all differ at the edges). So CPM still runs, for
+    the network check (cycles) and the longest path, but its dates/float only
+    stand for an activity the file left unscheduled (no early dates at all).
+    A blank float on a scheduled row stays blank — P6 leaves it empty on
+    finished work."""
+    file_values = {a.task_id: {f: getattr(a, f) for f in _P6_SCHEDULE_FIELDS} for a in parsed.activities}
+    schedule(parsed)
+    for act in parsed.activities:
+        values = file_values[act.task_id]
+        if values["early_start_date"] is None and values["early_end_date"] is None:
+            continue
+        for field_name, value in values.items():
+            setattr(act, field_name, value)
 
 
 _STATUS_RANK = {ActivityStatus.not_started: 0, ActivityStatus.in_progress: 1, ActivityStatus.complete: 2}
@@ -192,7 +244,9 @@ def import_xer(
     snapshot — that import keeps the metadata and frozen snapshots it already has;
     it just becomes the current one again."""
     parsed: ParsedSchedule = parse_xer(file_bytes)
-    schedule(parsed)
+    _schedule_keeping_p6_values(parsed)
+    labor_units = _labor_units_by_task(parsed)
+    labor_rsrc_ids = {r.rsrc_id for r in parsed.resources if r.rsrc_type == LABOR}
 
     # Each activity's hours→days divisor is its OWN calendar's day_hr_cnt
     # (engine/durations.py) — falling back to the project calendar, the same
@@ -373,7 +427,6 @@ def import_xer(
             row.task_type = act.task_type
             row.status_code = act.status_code
             row.target_duration_hours = act.target_drtn_hr_cnt
-            row.remaining_duration_hours = act.remain_drtn_hr_cnt
             row.planned_start = _to_date(act.target_start_date)
             row.planned_finish = _to_date(act.target_end_date)
             row.early_start = _to_date(act.early_start_date)
@@ -395,12 +448,17 @@ def import_xer(
             if is_critical:
                 critical_count += 1
 
-            status, pct = _derive_status(act.status_code, act.phys_complete_pct)
+            status, pct = _file_progress(act, labor_units)
             if is_new or _p6_progress_wins(row, status, pct):
                 row.status = status
                 row.percent_complete = pct
+                row.phys_complete_pct = act.phys_complete_pct
                 row.actual_start = _to_date(act.act_start_date)
                 row.actual_finish = _to_date(act.act_end_date)
+                # Progress, not schedule logic: Poko moves it with a % entry
+                # (services/activity_progress.py), so it stays Poko's below
+                # when Poko is ahead.
+                row.remaining_duration_hours = act.remain_drtn_hr_cnt
                 row.remaining_duration_days = round(act.remain_drtn_hr_cnt / _act_hpd(act))
             else:
                 # Poko is ahead of the file — keep its progress (module docstring),
@@ -541,7 +599,7 @@ def import_xer(
                 remain_cost=assign.remain_cost,
                 unit_id=assign.unit_id,
             )
-            if activity_row_id in poko_ahead:
+            if activity_row_id in poko_ahead and assign.rsrc_id in labor_rsrc_ids:
                 apply_units_from_progress(poko_ahead[activity_row_id], [assignment_row])
             db.add(assignment_row)
 
@@ -618,7 +676,7 @@ def import_xer(
             is_critical = _is_critical(act.total_float_hr_cnt, act.status_code, act.act_end_date)
             if is_critical:
                 critical_count += 1
-            status, pct = _derive_status(act.status_code, act.phys_complete_pct)
+            status, pct = _file_progress(act, labor_units)
             activities_snapshot.append(
                 {
                     "external_id": act.task_code,

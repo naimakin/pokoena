@@ -144,6 +144,10 @@ export interface Activity {
   wbs_path?: string | null;
   task_type?: string | null;
   status_code?: string | null;
+  // P6's TASK.phys_complete_pct. `percent_complete` is the % Poko shows:
+  // labor units % when labor is assigned, else 100 / 0 / duration %
+  // (backend/app/services/activity_progress.py).
+  phys_complete_pct?: number | null;
   target_duration_hours?: number | null;
   remaining_duration_hours?: number | null;
   early_start?: string | null;
@@ -167,7 +171,16 @@ export interface Activity {
   is_important?: boolean;
   tags?: string[];
   notes?: string | null;
+  // Site / supply risk for the Criticality Score; null = not assessed
+  // (scored as standard).
+  site_risk?: SiteRisk | null;
+
+  // Criticality Score (lib/criticality.ts) — null for completed work.
+  criticality_score?: number | null;
+  criticality_breakdown?: Record<string, number> | null;
 }
+
+export type SiteRisk = "high" | "standard" | "low";
 
 /** One entry in the Activity modal's History tab. "change"/"comment" come from
  *  activity_events; "version" is derived from two consecutive import snapshots. */

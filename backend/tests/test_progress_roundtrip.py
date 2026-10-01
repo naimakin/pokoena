@@ -4,8 +4,8 @@
   programme (the baselines share its task_codes).
 - An update import brings P6's progress in unless Poko is already ahead.
 - Progress entered in Poko zeroes a finished activity's float and splits its
-  resource units by %, and the .xer export writes the same into TASK and
-  TASKRSRC.
+  LABOR resource units by % (material / equipment units don't follow it), and
+  the .xer export writes the same into TASK and TASKRSRC.
 """
 
 from pathlib import Path
@@ -164,7 +164,8 @@ def test_update_import_keeps_poko_progress_that_is_ahead_of_the_file(client, db_
 
 
 def _assignments(db_session, activity_id) -> dict[float, ResourceAssignment]:
-    """By budgeted units — A200 carries two assignments (40 and 100)."""
+    """By budgeted units — A200 carries two assignments: 40 (RT_Labor) and
+    100 (RT_Material)."""
     db_session.expire_all()
     rows = db_session.query(ResourceAssignment).filter(ResourceAssignment.activity_id == activity_id).all()
     return {a.target_qty: a for a in rows}
@@ -180,7 +181,7 @@ def test_percent_complete_splits_resource_units(client, db_session):
 
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (10, 30)
-    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (25, 75)
+    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (0, 100)  # material
     assert by_budget[40].act_reg_cost == 0  # costs stay the AC side of EVM
 
 
@@ -199,8 +200,9 @@ def test_actual_finish_zeroes_float_and_burns_all_units(client, db_session):
     assert body["total_float_hours"] == 0
     assert body["free_float_hours"] == 0
     assert body["is_critical"] is False
-    for budget, assignment in _assignments(db_session, a200.id).items():
-        assert (assignment.act_reg_qty, assignment.remain_qty) == (budget, 0)
+    by_budget = _assignments(db_session, a200.id)
+    assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (40, 0)
+    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (0, 100)  # material
 
 
 def test_batch_progress_edit_splits_units_too(client, db_session):
@@ -249,9 +251,9 @@ def test_export_writes_units_dates_and_zero_float_into_task_and_taskrsrc(client,
     assert task["act_end_date"].startswith("2026-01-12")
     assert task["total_float_hr_cnt"] == "0"
     assert task["free_float_hr_cnt"] == "0"
-    for assignment in (r for r in _table(text, "TASKRSRC") if r["task_id"] == task["task_id"]):
-        assert assignment["act_reg_qty"] == assignment["target_qty"]
-        assert assignment["remain_qty"] == "0"
+    a200_assignments = {r["rsrc_id"]: r for r in _table(text, "TASKRSRC") if r["task_id"] == task["task_id"]}
+    assert (a200_assignments["R1"]["act_reg_qty"], a200_assignments["R1"]["remain_qty"]) == ("40", "0")
+    assert a200_assignments["R3"]["act_reg_qty"] == "0"  # RT_Material: units don't follow the %
     # An untouched activity's assignment passes through as P6 wrote it.
     untouched = next(r for r in _table(text, "TASKRSRC") if r["task_id"] != task["task_id"])
     assert untouched["act_reg_qty"] == "0"
@@ -269,11 +271,14 @@ def test_export_moves_the_assignment_dates_with_the_activity():
             "\tremain_drtn_hr_cnt\ttotal_float_hr_cnt\tfree_float_hr_cnt\ttarget_work_qty\tact_work_qty\tremain_work_qty",
             "%R\t1\tP1\tK1\tTK_Active\t50\t2026-05-12 08:00\t\t8\t352\t0\t16\t8\t8",
             "%R\t2\tB1\tK1\tTK_NotStart\t0\t\t\t16\t0\t0\t16\t0\t16",
+            "%T\tRSRC",
+            "%F\trsrc_id\trsrc_type",
+            "%R\tL1\tRT_Labor",
             "%T\tTASKRSRC",
-            "%F\ttaskrsrc_id\ttask_id\ttarget_qty\tact_reg_qty\tremain_qty\tact_start_date\tact_end_date"
+            "%F\ttaskrsrc_id\ttask_id\trsrc_id\ttarget_qty\tact_reg_qty\tremain_qty\tact_start_date\tact_end_date"
             "\trestart_date\treend_date",
-            "%R\t10\t1\t16\t8\t8\t2026-05-12 08:00\t\t2026-05-13 08:00\t2026-05-13 17:00",
-            "%R\t20\t2\t16\t0\t16\t\t\t\t",
+            "%R\t10\t1\tL1\t16\t8\t8\t2026-05-12 08:00\t\t2026-05-13 08:00\t2026-05-13 17:00",
+            "%R\t20\t2\tL1\t16\t0\t16\t\t\t\t",
             "%E",
             "",
         ]

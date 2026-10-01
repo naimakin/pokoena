@@ -444,3 +444,49 @@ def test_upload_data_date_regression_can_be_forced(client, db_session):
 
     assert response.status_code == 201
     assert response.json()["activity_count"] == 1
+
+
+def _with_p6_schedule(task_code: str, **cells: str) -> bytes:
+    """The fixture with one TASK row carrying values P6's own scheduler wrote."""
+    lines = FIXTURE.read_text().split("\n")
+    columns: list[str] = []
+    for i, line in enumerate(lines):
+        if line.startswith("%F\t") and "task_code" in line:
+            columns = line.rstrip("\r").split("\t")[1:]
+        elif line.startswith("%R\t") and columns and f"\t{task_code}\t" in line:
+            row = line.rstrip("\r").split("\t")[1:]
+            row += [""] * (len(columns) - len(row))
+            for name, value in cells.items():
+                row[columns.index(name)] = value
+            lines[i] = "%R\t" + "\t".join(row)
+            break
+    return "\n".join(lines).encode()
+
+
+def test_import_keeps_p6_float_and_early_dates(client, db_session):
+    """Total Float is TASK.total_float_hr_cnt / day_hr_cnt and Start/Finish are
+    TASK.early_*_date — what P6 wrote, not Poko's own CPM re-run of the file."""
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "xer-admin@example.com", "password": "secret123"})
+    xer = _with_p6_schedule(
+        "A400",
+        early_start_date="2026-01-20 08:00",
+        early_end_date="2026-01-20 17:00",
+        total_float_hr_cnt="72",
+        free_float_hr_cnt="16",
+    )
+    r = client.post(
+        f"/projects/{project.id}/schedule-imports",
+        files={"file": ("p6.xer", xer, "application/octet-stream")},
+    )
+    assert r.status_code == 201
+
+    by_code = {a["external_id"]: a for a in client.get(f"/activities?project_id={project.id}").json()}
+    a400 = by_code["A400"]
+    assert a400["total_float_hours"] == 72
+    assert a400["free_float_hours"] == 16
+    assert a400["early_start"] == "2026-01-20"
+    assert a400["early_finish"] == "2026-01-20"
+    # A row P6 never scheduled (no early dates) still gets Poko's CPM values.
+    assert by_code["A100"]["early_start"] == "2026-01-05"
+    assert by_code["A100"]["total_float_hours"] == 0

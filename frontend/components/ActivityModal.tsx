@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { hoursPerDay } from "@/lib/duration";
+import { FINISH_MILESTONE, isMilestone, START_MILESTONE } from "@/lib/schedule-dates";
+import { BREAKDOWN_LABELS, criticalityChip, criticalityLabel, SITE_RISK_OPTIONS } from "@/lib/criticality";
 import { useToast } from "@/components/Toast";
 import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, XIcon } from "@/components/icons";
 import type {
@@ -10,6 +12,7 @@ import type {
   ActivityHistoryItem,
   ActivityRelationship,
   ActivityStatus,
+  SiteRisk,
   WbsNode,
 } from "@/lib/types";
 
@@ -49,6 +52,7 @@ const FIELD_LABELS: Record<string, string> = {
   is_important: "Important",
   tags: "Tags",
   notes: "Notes",
+  site_risk: "Site / supply risk",
   planned_start: "Planned Start",
   planned_finish: "Planned Finish",
   early_start: "Early Start",
@@ -87,6 +91,7 @@ function historyValue(field: string | null, raw: string | null, hpd: number): st
   if (field.endsWith("_start") || field.endsWith("_finish")) return fmtDate(raw);
   if (field === "total_float_hours") return days(Number(raw), hpd);
   if (field === "status") return STATUS_OPTIONS.find((s) => s.value === raw)?.label ?? raw;
+  if (field === "site_risk") return SITE_RISK_OPTIONS.find((s) => s.value === raw)?.label ?? raw;
   if (raw === "true") return "Yes";
   if (raw === "false") return "No";
   return raw;
@@ -101,6 +106,7 @@ type Draft = {
   is_important: boolean;
   tags: string[];
   notes: string;
+  site_risk: SiteRisk | null;
 };
 
 function draftFrom(a: Activity): Draft {
@@ -113,6 +119,7 @@ function draftFrom(a: Activity): Draft {
     is_important: Boolean(a.is_important),
     tags: a.tags ?? [],
     notes: a.notes ?? "",
+    site_risk: a.site_risk ?? null,
   };
 }
 
@@ -194,6 +201,11 @@ export function ActivityModal({
 
   const wbsName = wbsNodes?.find((n) => n.wbs_id === activity.wbs_path);
   const isFinished = draft.status === "complete";
+  // A milestone has one date (Start for TT_Mile, Finish for TT_FinMile) and is
+  // never in progress: recording that one actual date completes it — the
+  // server derives the same (routes/activities.py::_derive_milestone_status).
+  const milestone = isMilestone(activity);
+  const statusOptions = milestone ? STATUS_OPTIONS.filter((s) => s.value !== "in_progress") : STATUS_OPTIONS;
   const dirty =
     draft.status !== activity.status ||
     (draft.actual_start || null) !== (activity.actual_start || null) ||
@@ -202,10 +214,13 @@ export function ActivityModal({
     draft.remaining_duration_days !== activity.remaining_duration_days ||
     draft.is_important !== Boolean(activity.is_important) ||
     draft.tags.join("\u0000") !== (activity.tags ?? []).join("\u0000") ||
-    draft.notes !== (activity.notes ?? "");
+    draft.notes !== (activity.notes ?? "") ||
+    draft.site_risk !== (activity.site_risk ?? null);
 
   const validationError =
-    draft.actual_finish && !draft.actual_start
+    milestone
+      ? null
+      : draft.actual_finish && !draft.actual_start
       ? "Actual Finish needs an Actual Start"
       : draft.actual_start && draft.actual_finish && draft.actual_start > draft.actual_finish
         ? "Actual Finish is before Actual Start"
@@ -217,6 +232,11 @@ export function ActivityModal({
   function pickStatus(next: ActivityStatus) {
     setDraft((d) => {
       if (!d) return d;
+      if (milestone && next === "complete") {
+        return activity!.task_type === FINISH_MILESTONE
+          ? { ...d, status: next, actual_finish: d.actual_finish ?? d.actual_start ?? todayIso(), percent_complete: 100 }
+          : { ...d, status: next, actual_start: d.actual_start ?? d.actual_finish ?? todayIso(), percent_complete: 100 };
+      }
       if (next === "not_started") {
         return { ...d, status: next, actual_start: null, actual_finish: null, percent_complete: 0 };
       }
@@ -266,6 +286,7 @@ export function ActivityModal({
         is_important: draft.is_important,
         tags: draft.tags,
         notes: draft.notes.trim() ? draft.notes.trim() : null,
+        site_risk: draft.site_risk,
       });
       onSaved(updated);
       setDraft(draftFrom(updated));
@@ -322,6 +343,11 @@ export function ActivityModal({
                   <FlagIcon className="icon" style={{ width: 11, height: 11 }} /> Important
                 </span>
               )}
+              {activity.criticality_score != null && (
+                <span className={`chip ${criticalityChip(activity)}`} title="Criticality Score (0-100)">
+                  Criticality {activity.criticality_score}
+                </span>
+              )}
               <span className="act-modal-float">Total float {days(activity.total_float_hours, hoursPerDay(activity))}</span>
             </div>
           </div>
@@ -363,7 +389,7 @@ export function ActivityModal({
                     value={draft.status}
                     onChange={(e) => pickStatus(e.target.value as ActivityStatus)}
                   >
-                    {STATUS_OPTIONS.map((s) => (
+                    {statusOptions.map((s) => (
                       <option key={s.value} value={s.value}>
                         {s.label}
                       </option>
@@ -376,7 +402,7 @@ export function ActivityModal({
                     type="number"
                     min={0}
                     max={100}
-                    disabled={!canEdit}
+                    disabled={!canEdit || milestone}
                     value={draft.percent_complete}
                     onChange={(e) =>
                       setDraft((d) =>
@@ -387,6 +413,7 @@ export function ActivityModal({
                     }
                   />
                 </label>
+                {activity.task_type !== FINISH_MILESTONE && (
                 <label className="field">
                   <span>Actual Start</span>
                   <input
@@ -398,6 +425,8 @@ export function ActivityModal({
                     }
                   />
                 </label>
+                )}
+                {activity.task_type !== START_MILESTONE && (
                 <label className="field">
                   <span>Actual Finish</span>
                   <input
@@ -409,6 +438,7 @@ export function ActivityModal({
                     }
                   />
                 </label>
+                )}
                 <label className="field">
                   <span>Remaining Duration (days)</span>
                   <input
@@ -440,6 +470,24 @@ export function ActivityModal({
                     Flag for attention
                   </button>
                 </div>
+                <label className="field">
+                  <span>Site / supply risk</span>
+                  <select
+                    disabled={!canEdit}
+                    value={draft.site_risk ?? ""}
+                    title={SITE_RISK_OPTIONS.find((o) => o.value === draft.site_risk)?.hint}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? { ...d, site_risk: (e.target.value || null) as SiteRisk | null } : d))
+                    }
+                  >
+                    <option value="">Not assessed (scored as standard)</option>
+                    {SITE_RISK_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value} title={o.hint}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="field">
@@ -550,6 +598,20 @@ export function ActivityModal({
               <Detail label="Critical" value={activity.is_critical ? "Yes" : "No"} />
               <Detail label="On Longest Path" value={activity.is_longest_path ? "Yes" : "No"} />
               <Detail label="% Complete" value={`${activity.percent_complete}%`} />
+              <Detail
+                label="Physical % Complete"
+                value={activity.phys_complete_pct == null ? "—" : `${Math.round(activity.phys_complete_pct)}%`}
+              />
+              <Detail label="Criticality Score" value={criticalityLabel(activity)} />
+              {activity.criticality_breakdown &&
+                BREAKDOWN_LABELS.map((b) => (
+                  <Detail
+                    key={b.key}
+                    label={`${b.label} (${b.weight})`}
+                    value={String(activity.criticality_breakdown?.[b.key] ?? "—")}
+                    mono
+                  />
+                ))}
               <Detail label="Planned Start" value={fmtDate(activity.planned_start)} mono />
               <Detail label="Planned Finish" value={fmtDate(activity.planned_finish)} mono />
               <Detail label="Early Start" value={fmtDate(activity.early_start)} mono />

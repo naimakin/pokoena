@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,10 +13,11 @@ from app.deps import (
     require_scope_access,
 )
 from app.engine.durations import activity_hours_per_day
-from app.models.activity import Activity, ActivityStatus
+from app.models.activity import FINISH_MILESTONE, MILESTONE_TYPES, P6_STATUS_CODE, Activity, ActivityStatus
 from app.models.activity_event import ActivityEvent
 from app.models.activity_relationship import ActivityRelationship
 from app.models.project import Project
+from app.models.resource import LABOR, Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
@@ -31,7 +33,8 @@ from app.schemas.activity import (
     ActivityRelationshipOut,
     ActivityUpdate,
 )
-from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished
+from app.services.activity_progress import apply_progress_entry, clear_float_if_finished
+from app.services.criticality import annotate_criticality
 from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -39,7 +42,7 @@ router = APIRouter(prefix="/activities", tags=["activities"])
 # actual_start / actual_finish are nullable (a null clears them); percent_complete
 # and remaining_duration_days are NOT NULL, so an explicit null there means
 # "field omitted" and must be skipped rather than written.
-_NULLABLE_EDIT_FIELDS = {"actual_start", "actual_finish", "notes"}
+_NULLABLE_EDIT_FIELDS = {"actual_start", "actual_finish", "notes", "site_risk"}
 
 # What the Activity modal's History tab reports on a user edit. `status` is in
 # here even though it isn't directly settable: it's derived from the actual
@@ -54,6 +57,7 @@ _TRACKED_EDIT_FIELDS = (
     "is_important",
     "tags",
     "notes",
+    "site_risk",
 )
 
 # Fields whose movement between two consecutive imports is worth showing in the
@@ -116,10 +120,20 @@ def _record_edit_events(
         )
 
 
+def _effective_changes(activity: Activity, changes: dict) -> dict:
+    """The submitted fields that actually change something. The Activity modal
+    sends every field on each save, and "the user typed a %" has to mean the %
+    moved — not that it rode along with an actual-date edit — because a % entry
+    rewrites units / remaining duration (services/activity_progress.py)."""
+    return {
+        field: value
+        for field, value in changes.items()
+        if (value is not None or field in _NULLABLE_EDIT_FIELDS) and getattr(activity, field) != value
+    }
+
+
 def _apply_changes(activity: Activity, changes: dict) -> None:
     for field, value in changes.items():
-        if value is None and field not in _NULLABLE_EDIT_FIELDS:
-            continue
         setattr(activity, field, value)
 
 
@@ -146,10 +160,21 @@ def _authorize_progress_edit(db: Session, project_id: uuid.UUID, ctx: AuthContex
 
 
 def _apply_progress_derivation(activity: Activity, changes: dict) -> None:
-    """Keep status / % / remaining consistent after an edit. Precedence follows
-    P6: actual_finish > actual_start > percent_complete. Raises HTTPException(422)
-    on an inconsistent actual-date pair — callers turn that into a per-row error
+    """Keep status / % / remaining consistent after an edit, then mirror the
+    status into P6's TASK.status_code. Precedence follows P6: actual_finish >
+    actual_start > percent_complete. Raises HTTPException(422) on an
+    inconsistent actual-date pair — callers turn that into a per-row error
     (batch) or a 422 response (single)."""
+    _derive_status(activity, changes)
+    if _PROGRESS_FIELDS & changes.keys():
+        activity.status_code = P6_STATUS_CODE[activity.status]
+
+
+def _derive_status(activity: Activity, changes: dict) -> None:
+    if activity.task_type in MILESTONE_TYPES:
+        if _PROGRESS_FIELDS & changes.keys():
+            _derive_milestone_status(activity)
+        return
     touched_dates = {"actual_start", "actual_finish"} & changes.keys()
     if not touched_dates:
         # A percent_complete-only edit uses the legacy 3-way rule, but only
@@ -178,28 +203,73 @@ def _apply_progress_derivation(activity: Activity, changes: dict) -> None:
         if activity.percent_complete >= 100:
             activity.percent_complete = 99
     else:  # both actual dates cleared
-        activity.status = ActivityStatus.not_started
-        activity.percent_complete = 0
-        if activity.target_duration_hours:
-            activity.remaining_duration_days = round(activity.target_duration_hours / activity_hours_per_day(activity))
+        _reset_to_not_started(activity)
+
+
+def _derive_milestone_status(activity: Activity) -> None:
+    """A milestone has one date — Start for TT_Mile, Finish for TT_FinMile — so
+    recording either actual date completes it; there is no in-progress
+    milestone. Whichever date was entered lands on the milestone's own one, so
+    it shows in the right Start/Finish column and exports to the column P6
+    reads for that milestone type."""
+    entered = activity.actual_start or activity.actual_finish
+    if entered is None:
+        _reset_to_not_started(activity)
+        return
+    if activity.task_type == FINISH_MILESTONE:
+        activity.actual_finish = activity.actual_finish or entered
+    else:
+        activity.actual_start = activity.actual_start or entered
+    activity.status = ActivityStatus.complete
+    activity.percent_complete = 100
+    activity.remaining_duration_days = 0
+
+
+def _reset_to_not_started(activity: Activity) -> None:
+    activity.status = ActivityStatus.not_started
+    activity.percent_complete = 0
+    if activity.target_duration_hours:
+        activity.remaining_duration_days = round(activity.target_duration_hours / activity_hours_per_day(activity))
 
 
 _PROGRESS_FIELDS = {"percent_complete", "actual_start", "actual_finish"}
+# Edits that move % / units / remaining duration (services/activity_progress.py).
+_SIDE_EFFECT_FIELDS = _PROGRESS_FIELDS | {"remaining_duration_days"}
 
 
-def _apply_progress_side_effects(db: Session, activities: list[Activity]) -> None:
-    """Float and resource units follow a progress edit — see
-    services/activity_progress.py. One query for the whole batch."""
-    if not activities:
+@dataclass
+class _ProgressEdit:
+    activity: Activity
+    changed: set[str]
+    status_before: ActivityStatus
+
+
+def _apply_progress_side_effects(db: Session, edits: list[_ProgressEdit]) -> None:
+    """Float, labor units, physical % and remaining duration follow a progress
+    edit, and the displayed % is re-derived — see services/activity_progress.py.
+    One query for the whole batch."""
+    if not edits:
         return
-    by_activity: dict[uuid.UUID, list[ResourceAssignment]] = {}
-    for assignment in db.query(ResourceAssignment).filter(
-        ResourceAssignment.activity_id.in_([a.id for a in activities])
+    labor_by_activity: dict[uuid.UUID, list[ResourceAssignment]] = {}
+    for assignment in (
+        db.query(ResourceAssignment)
+        .join(Resource, Resource.id == ResourceAssignment.resource_id)
+        .filter(
+            ResourceAssignment.activity_id.in_([e.activity.id for e in edits]),
+            Resource.rsrc_type == LABOR,
+        )
     ):
-        by_activity.setdefault(assignment.activity_id, []).append(assignment)
-    for activity in activities:
+        labor_by_activity.setdefault(assignment.activity_id, []).append(assignment)
+    for edit in edits:
+        activity = edit.activity
         clear_float_if_finished(activity)
-        apply_units_from_progress(activity, by_activity.get(activity.id, []))
+        apply_progress_entry(
+            activity,
+            labor_by_activity.get(activity.id, []),
+            pct_entered="percent_complete" in edit.changed,
+            remaining_entered="remaining_duration_days" in edit.changed,
+            status_changed=activity.status != edit.status_before,
+        )
 
 
 @router.get("", response_model=list[ActivityOut])
@@ -236,7 +306,9 @@ def list_activities(
         query = query.filter(
             (Activity.last_import_id.is_(None)) | (Activity.last_import_id == current_import.id)
         )
-    return query.order_by(Activity.external_id).all()
+    activities = query.order_by(Activity.external_id).all()
+    annotate_criticality(db, ctx.tenant_id, project_id, activities)
+    return activities
 
 
 @router.get("/{activity_id}/relationships", response_model=list[ActivityRelationshipOut])
@@ -301,7 +373,8 @@ def batch_update_activities(
     }
 
     saved: list[Activity] = []
-    progressed: list[Activity] = []
+    progressed: list[_ProgressEdit] = []
+    before_by_id: dict[uuid.UUID, dict[str, str | None]] = {}
     failed: list[ActivityBatchRowError] = []
     for item in payload.updates:
         activity = rows.get(item.id)
@@ -311,22 +384,27 @@ def batch_update_activities(
         try:
             if ctx.role == TenantRole.subcontractor:
                 require_scope_access(activity.project_scope_id, ctx)
-            changes = item.model_dump(exclude_unset=True, exclude={"id"})
-            before = _edit_snapshot(activity)
+            changes = _effective_changes(activity, item.model_dump(exclude_unset=True, exclude={"id"}))
+            before_by_id[activity.id] = _edit_snapshot(activity)
+            status_before = activity.status
             _apply_changes(activity, changes)
             _apply_progress_derivation(activity, changes)
-            _record_edit_events(db, ctx, activity, before)
             saved.append(activity)
-            if _PROGRESS_FIELDS & changes.keys():
-                progressed.append(activity)
+            if _SIDE_EFFECT_FIELDS & changes.keys():
+                progressed.append(_ProgressEdit(activity, set(changes), status_before))
         except HTTPException as exc:
             db.expire(activity)  # discard the in-memory mutation (nothing flushed yet)
             failed.append(ActivityBatchRowError(id=item.id, error=str(exc.detail)))
 
+    # Events after the side effects, so the History tab records the % that was
+    # actually stored (it is re-derived — services/activity_progress.py).
     _apply_progress_side_effects(db, progressed)
+    for activity in saved:
+        _record_edit_events(db, ctx, activity, before_by_id[activity.id])
     db.commit()
     for activity in saved:
         db.refresh(activity)
+    annotate_criticality(db, ctx.tenant_id, project_id, saved)
     return ActivityBatchResultOut(saved=saved, failed=failed)
 
 
@@ -343,16 +421,18 @@ def update_activity(
         require_scope_access(activity.project_scope_id, ctx)
     _authorize_progress_edit(db, activity.project_id, ctx)
 
-    changes = payload.model_dump(exclude_unset=True)
+    changes = _effective_changes(activity, payload.model_dump(exclude_unset=True))
     before = _edit_snapshot(activity)
+    status_before = activity.status
     _apply_changes(activity, changes)
     _apply_progress_derivation(activity, changes)
+    if _SIDE_EFFECT_FIELDS & changes.keys():
+        _apply_progress_side_effects(db, [_ProgressEdit(activity, set(changes), status_before)])
     _record_edit_events(db, ctx, activity, before)
-    if _PROGRESS_FIELDS & changes.keys():
-        _apply_progress_side_effects(db, [activity])
 
     db.commit()
     db.refresh(activity)
+    annotate_criticality(db, ctx.tenant_id, activity.project_id, [activity])
     return activity
 
 

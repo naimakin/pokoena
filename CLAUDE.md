@@ -73,6 +73,13 @@ DESIGN.md                 ← full design system spec
   calendar day length (P6 `CALENDAR.day_hr_cnt`, stored as `Calendar.hours_per_day`, exposed as
   `Activity.hours_per_day`) — never a flat `/ 8`. Use `backend/app/engine/durations.py` and
   `frontend/lib/duration.ts`.
+- Early/late dates and total/free float shown are P6's own TASK values from the .xer; Poko's CPM
+  only fills rows the file left unscheduled (`_schedule_keeping_p6_values` in
+  `services/xer_import.py`). Start/Finish columns pick actual vs early by status and milestone
+  type (`frontend/lib/schedule-dates.ts`).
+- `percent_complete` is the DISPLAYED % (labor units % if RT_Labor is assigned, else 100 / 0 /
+  duration %); P6's physical % is `phys_complete_pct`. Entry rules and the remaining-duration link
+  live in `services/activity_progress.py`. Criticality Score: `services/criticality.py`.
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

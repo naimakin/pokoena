@@ -116,3 +116,67 @@ def test_percent_only_edit_keeps_legacy_three_way(client, db_session):
     r = client.patch(f"/activities/{a.id}", json={"percent_complete": 55})
     assert r.status_code == 200
     assert r.json()["status"] == "in_progress"
+
+
+def test_status_code_follows_actual_dates(client, db_session):
+    tenant, project = _setup(db_session)
+    a = _activity(db_session, tenant, project, status_code="TK_NotStart")
+    _login(client)
+
+    client.patch(f"/activities/{a.id}", json={"actual_start": "2026-02-01"})
+    db_session.refresh(a)
+    assert a.status_code == "TK_Active"
+
+    client.patch(f"/activities/{a.id}", json={"actual_finish": "2026-02-10"})
+    db_session.refresh(a)
+    assert a.status == ActivityStatus.complete
+    assert a.status_code == "TK_Complete"
+
+
+def test_finish_milestone_completes_on_finish_date_alone(client, db_session):
+    tenant, project = _setup(db_session)
+    a = _activity(
+        db_session, tenant, project, task_type="TT_FinMile", status_code="TK_NotStart",
+        target_duration_hours=0.0, remaining_duration_days=0,
+    )
+    _login(client)
+
+    r = client.patch(f"/activities/{a.id}", json={"actual_finish": "2026-02-10"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "complete"
+    assert body["percent_complete"] == 100
+    assert body["actual_finish"] == "2026-02-10"
+    assert body["status_code"] == "TK_Complete"
+
+
+def test_finish_milestone_start_date_lands_on_finish(client, db_session):
+    tenant, project = _setup(db_session)
+    a = _activity(db_session, tenant, project, task_type="TT_FinMile", target_duration_hours=0.0)
+    _login(client)
+
+    body = client.patch(f"/activities/{a.id}", json={"actual_start": "2026-02-10"}).json()
+    assert body["status"] == "complete"
+    assert body["actual_finish"] == "2026-02-10"
+
+
+def test_start_milestone_completes_on_start_date(client, db_session):
+    tenant, project = _setup(db_session)
+    a = _activity(db_session, tenant, project, task_type="TT_Mile", target_duration_hours=0.0)
+    _login(client)
+
+    body = client.patch(f"/activities/{a.id}", json={"actual_start": "2026-02-01"}).json()
+    assert body["status"] == "complete"
+    assert body["actual_start"] == "2026-02-01"
+    assert body["actual_finish"] is None
+    assert body["status_code"] == "TK_Complete"
+
+
+def test_milestone_is_never_in_progress(client, db_session):
+    tenant, project = _setup(db_session)
+    a = _activity(db_session, tenant, project, task_type="TT_Mile", target_duration_hours=0.0)
+    _login(client)
+
+    body = client.patch(f"/activities/{a.id}", json={"percent_complete": 50}).json()
+    assert body["status"] == "not_started"
+    assert body["percent_complete"] == 0

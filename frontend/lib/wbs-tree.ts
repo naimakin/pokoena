@@ -2,6 +2,7 @@
 // nodes in preorder with `depth`, `path_ids` and a dotted `outline_code`, so the
 // frontend only needs to interleave activities, apply collapse, and roll up.
 
+import { displayFinish, displayStart } from "@/lib/schedule-dates";
 import type { Activity, WbsNode } from "@/lib/types";
 
 export const UNGROUPED_KEY = "__ungrouped__";
@@ -62,8 +63,10 @@ function rollup(activities: Activity[]) {
     if (a.status === "in_progress") inProgress += 1;
     else if (a.status === "complete") completed += 1;
     pctSum += a.percent_complete ?? 0;
-    const s = a.early_start ?? a.actual_start ?? a.planned_start ?? null;
-    const f = a.early_finish ?? a.actual_finish ?? a.planned_finish ?? null;
+    // The same Start/Finish the activity rows show (lib/schedule-dates.ts); a
+    // milestone's one date bounds the span on both sides.
+    const s = displayStart(a) ?? displayFinish(a);
+    const f = displayFinish(a) ?? displayStart(a);
     if (s && (spanStart === null || s < spanStart)) spanStart = s;
     if (f && (spanFinish === null || f > spanFinish)) spanFinish = f;
   }

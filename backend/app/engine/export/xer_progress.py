@@ -26,19 +26,14 @@ from datetime import date
 from typing import Iterable, Optional
 
 from app.engine.durations import activity_hours_per_day
-from app.models.activity import Activity, ActivityStatus
+from app.models.activity import P6_STATUS_CODE, Activity, ActivityStatus
+from app.models.resource import LABOR
 from app.parser.xer_parser import main_project_id
 
 # P6 writes an ANSI file in the exporting client's locale, not UTF-8 (a real
 # Turkish-locale export decodes as cp1254 and fails as utf-8). Round-trip
 # whatever the source used so characters survive untouched.
 _ENCODINGS = ("utf-8", "cp1254", "cp1252")
-
-_STATUS_CODE = {
-    ActivityStatus.not_started: "TK_NotStart",
-    ActivityStatus.in_progress: "TK_Active",
-    ActivityStatus.complete: "TK_Complete",
-}
 
 # P6 stores a datetime; our columns are dates. Keep the time the source row
 # already had for that field, and otherwise use P6's own working-day convention.
@@ -112,10 +107,15 @@ def rewrite_progress(source: bytes, activities: Iterable[Activity]) -> tuple[byt
     main_proj = _main_proj_id(lines)
 
     # Pass 1: which P6 task_ids get Poko's progress. TASKRSRC references
-    # task_id, not task_code, so this must be known before it's rewritten.
+    # task_id, not task_code, so this must be known before it's rewritten —
+    # as must which resources are labor (RSRC), the only ones whose units
+    # follow the % (services/activity_progress.py).
     progressed: dict[str, Activity] = {}
+    labor_rsrc_ids: set[str] = set()
     task_rows = 0
     for table, index, cells in _rows(lines):
+        if table == "RSRC" and _cell(cells, index, "rsrc_type") == LABOR:
+            labor_rsrc_ids.add(_cell(cells, index, "rsrc_id"))
         if table != "TASK":
             continue
         if main_proj and _cell(cells, index, "proj_id") not in ("", main_proj):
@@ -148,7 +148,8 @@ def rewrite_progress(source: bytes, activities: Iterable[Activity]) -> tuple[byt
                 if table == "TASK":
                     _patch_task_row(cells, index, activity)
                 else:
-                    _patch_assignment_row(cells, index, activity)
+                    is_labor = _cell(cells, index, "rsrc_id") in labor_rsrc_ids
+                    _patch_assignment_row(cells, index, activity, is_labor)
                 patched = "%R\t" + "\t".join(cells)
 
         out.append(patched + "\r" if crlf else patched)
@@ -217,10 +218,12 @@ def _split_units(
     _put(cells, index, remain_col, f"{round(max(0.0, budget - actual), 4):g}")
 
 
-def _patch_assignment_row(cells: list[str], index: dict[str, int], activity: Activity) -> None:
-    """One TASKRSRC row of a progressed activity: units follow the physical %,
-    actual dates follow the activity's (see rewrite_progress)."""
-    _split_units(cells, index, "target_qty", "act_reg_qty", "remain_qty", _fraction(activity))
+def _patch_assignment_row(cells: list[str], index: dict[str, int], activity: Activity, is_labor: bool) -> None:
+    """One TASKRSRC row of a progressed activity: a labor assignment's units
+    follow the activity's %, every assignment's actual dates follow the
+    activity's (see rewrite_progress)."""
+    if is_labor:
+        _split_units(cells, index, "target_qty", "act_reg_qty", "remain_qty", _fraction(activity))
     _put(
         cells, index, "act_start_date",
         _p6_datetime(activity.actual_start, _cell(cells, index, "act_start_date"), _DEFAULT_START_TIME),
@@ -244,15 +247,18 @@ def _patch_task_row(cells: list[str], index: dict[str, int], activity: Activity)
     def current(column: str) -> str:
         return _cell(cells, index, column)
 
-    put("phys_complete_pct", str(int(activity.percent_complete or 0)))
-    put("status_code", _STATUS_CODE.get(activity.status, "TK_NotStart"))
+    phys = getattr(activity, "phys_complete_pct", None)
+    if phys is None:
+        phys = activity.percent_complete
+    put("phys_complete_pct", f"{round(float(phys or 0), 2):g}")
+    put("status_code", P6_STATUS_CODE.get(activity.status, "TK_NotStart"))
     put("act_start_date", _p6_datetime(activity.actual_start, current("act_start_date"), _DEFAULT_START_TIME))
     put("act_end_date", _p6_datetime(activity.actual_finish, current("act_end_date"), _DEFAULT_FINISH_TIME))
     put("remain_drtn_hr_cnt", f"{_remaining_hours(activity):g}")
-    # Rolled-up units on the activity itself, same split as its assignments.
-    fraction = _fraction(activity)
-    _split_units(cells, index, "target_work_qty", "act_work_qty", "remain_work_qty", fraction)
-    _split_units(cells, index, "target_equip_qty", "act_equip_qty", "remain_equip_qty", fraction)
+    # Rolled-up labor units on the activity itself (TASK.act_work_qty = the sum
+    # of its labor assignments' act_reg_qty), same split as those assignments.
+    # Nonlabor units (act_equip_qty) don't follow the % — see TASKRSRC above.
+    _split_units(cells, index, "target_work_qty", "act_work_qty", "remain_work_qty", _fraction(activity))
     if activity.status == ActivityStatus.complete:
         # A finished activity has no float and no remaining dates. Left alone,
         # the file carried the float it had while still open, and P6 showed it

@@ -1,11 +1,15 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.engine.durations import DEFAULT_HOURS_PER_DAY, valid_hours_per_day
 from app.models.activity import ActivityStatus
 from app.models.activity_relationship import LinkType
+
+
+SiteRisk = Literal["high", "standard", "low"]
 
 
 class ActivityOut(BaseModel):
@@ -31,6 +35,9 @@ class ActivityOut(BaseModel):
     wbs_path: str | None = None
     task_type: str | None = None
     status_code: str | None = None
+    # P6's TASK.phys_complete_pct; `percent_complete` above is the % shown
+    # (services/activity_progress.py::display_percent).
+    phys_complete_pct: float | None = None
     target_duration_hours: float | None = None
     remaining_duration_hours: float | None = None
     early_start: date | None = None
@@ -59,6 +66,12 @@ class ActivityOut(BaseModel):
     is_important: bool = False
     tags: list[str] = []
     notes: str | None = None
+    site_risk: SiteRisk | None = None
+
+    # --- Criticality Score (services/criticality.py), computed on read; None
+    # for completed work and on rows that don't carry it (import snapshots). ---
+    criticality_score: int | None = None
+    criticality_breakdown: dict[str, int] | None = None
 
 
 class ActivityUpdate(BaseModel):
@@ -73,6 +86,9 @@ class ActivityUpdate(BaseModel):
     is_important: bool | None = None
     tags: list[str] | None = Field(default=None, max_length=20)
     notes: str | None = Field(default=None, max_length=4000)
+    # Site / supply risk for the Criticality Score; null clears it (scored as
+    # standard).
+    site_risk: SiteRisk | None = None
 
 
 class ActivityBatchItemIn(ActivityUpdate):
