@@ -89,15 +89,13 @@ export function StatusDatesMode({
                 (toDays(b.total_float_hours, b) ?? Number.POSITIVE_INFINITY)
             : undefined
         }
-        colCount={9}
+        colCount={7}
         header={
           <>
             <th>Activity</th>
             <th>Status</th>
             <th style={{ width: 110 }}>Start</th>
             <th style={{ width: 110 }}>Finish</th>
-            <th style={{ width: 130 }}>Actual Start</th>
-            <th style={{ width: 130 }}>Actual Finish</th>
             <th style={{ width: 90 }}>Total Float</th>
             <th style={{ width: 70 }}>%</th>
             <th style={{ width: 90 }} title="Criticality Score (0-100): total float, duration, free float and site risk">
@@ -113,15 +111,17 @@ export function StatusDatesMode({
               <td>
                 <span className={`chip ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
               </td>
-              <td className="mono">{fmtDate(displayStart(a))}</td>
-              <td className="mono">{fmtDate(displayFinish(a))}</td>
               <td className="mono">
-                {fmtDate(a.actual_start)}
-                {afterDataDate(a.actual_start) && <div className="pg-warn">after data date</div>}
+                {fmtDate(displayStart(a))}
+                {a.status !== "not_started" && afterDataDate(a.actual_start) && (
+                  <div className="pg-warn">after data date</div>
+                )}
               </td>
               <td className="mono">
-                {fmtDate(a.actual_finish)}
-                {afterDataDate(a.actual_finish) && <div className="pg-warn">after data date</div>}
+                {fmtDate(displayFinish(a))}
+                {a.status === "complete" && afterDataDate(a.actual_finish) && (
+                  <div className="pg-warn">after data date</div>
+                )}
               </td>
               <td className="mono"><span className={floatClass(toDays(a.total_float_hours, a))}>{fmtFloat(a)}</span></td>
               <td className="mono">{a.percent_complete}%</td>
