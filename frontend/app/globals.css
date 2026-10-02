@@ -1573,3 +1573,74 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .brand-name{letter-spacing:.03em;font-weight:800}
 /* staff console: graphite tile, so it never reads as a customer workspace */
 .brand.staff .mark,.login-brand.staff .mark{background:var(--text-primary);color:var(--bg)}
+
+/* ---- DCMA 14-Point (Reporting) ----------------------------------------------
+   One ring per check (components/dcma/DcmaRing.tsx): status-colored arc on a
+   surface-3 track, ink tick at the limit. Status tokens only; text stays ink. */
+.dcma-summary{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(220px,300px);gap:1.75rem;align-items:center;padding:1.25rem 1.4rem}
+.dcma-summary-title{display:flex;align-items:center;gap:.55rem;margin-bottom:.3rem;flex-wrap:wrap}
+.dcma-summary-title .card-title{font-size:1.0625rem}
+.dcma-summary-meta{font-size:.75rem;color:var(--text-muted)}
+.dcma-tallies{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1rem}
+.dcma-tally{display:flex;flex-direction:column;gap:.2rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);text-align:left;cursor:pointer;transition:border-color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.dcma-tally:hover{background:var(--surface-2)}
+.dcma-tally.is-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.dcma-tally-static{cursor:default}
+.dcma-tally-static:hover{background:var(--surface)}
+.dcma-tally-label{font-size:.75rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.4rem}
+.dcma-tally-value{font-family:var(--font-display);font-size:1.5rem;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1.1}
+.dcma-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.dcma-cats{display:flex;flex-direction:column;gap:.5rem;border-left:1px solid var(--border);padding-left:1.4rem}
+.dcma-cats-title{font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:.1rem}
+.dcma-cat-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem .75rem;font-size:.75rem;color:var(--text-secondary);text-align:left;padding:.2rem .35rem;margin:0 -.35rem;border-radius:var(--radius-sm);cursor:pointer;transition:background var(--dur-1) var(--ease)}
+.dcma-cat-row:hover{background:var(--surface-2)}
+.dcma-cat-row.is-on{background:var(--accent-soft);color:var(--text-primary)}
+.dcma-cat-row .mono{color:var(--text-primary);font-size:.6875rem}
+.dcma-cat-row .progress{grid-column:1 / -1;height:5px;display:block}
+.dcma-ring{position:relative;flex:none}
+.dcma-ring svg{display:block;overflow:visible}
+.dcma-ring-arc{transition:stroke-dasharray 400ms var(--ease)}
+.dcma-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}
+.dcma-ring-value{font-family:var(--font-mono);font-size:1.0625rem;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1.1}
+.dcma-ring-sub{font-size:.625rem;color:var(--text-muted);margin-top:.2rem}
+.dcma-score-value{font-family:var(--font-display);font-size:2.25rem;font-weight:800;letter-spacing:-.03em;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1}
+.dcma-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.7rem .9rem;margin-top:1rem}
+.dcma-spacer{flex:1}
+.dcma-count{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);margin-left:.15rem}
+.segmented button.active .dcma-count{color:var(--text-secondary)}
+.dcma-section{margin-top:1.5rem}
+.dcma-section-head{display:flex;align-items:baseline;gap:.65rem;margin:0 0 .7rem;padding:0 .1rem}
+.dcma-section-title{font-family:var(--font-display);font-size:1rem;font-weight:700;letter-spacing:-.01em;color:var(--text-primary)}
+.dcma-section-sub{font-size:.75rem;color:var(--text-muted)}
+.dcma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem}
+.dcma-card{padding:1rem 1.1rem 1.05rem;display:flex;flex-direction:column;gap:.85rem;transition:box-shadow var(--dur-2) var(--ease)}
+.dcma-card:hover{box-shadow:var(--shadow-sm)}
+.dcma-card-head{display:flex;align-items:flex-start;gap:.55rem}
+.dcma-card-no{font-size:.6875rem;color:var(--text-tertiary);padding-top:.12rem}
+.dcma-card-title{font-size:.875rem;font-weight:700;flex:1;min-width:0;color:var(--text-primary)}
+.dcma-card-body{display:flex;align-items:center;gap:1.15rem}
+.dcma-facts{display:grid;gap:.5rem;margin:0;flex:1;min-width:0}
+.dcma-facts div{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;font-size:.75rem;padding-bottom:.45rem;border-bottom:1px dashed var(--border)}
+.dcma-facts div:last-child{border-bottom:0;padding-bottom:0}
+.dcma-facts dt{color:var(--text-muted)}
+.dcma-facts dt{white-space:nowrap}
+.dcma-facts dd{margin:0;color:var(--text-primary);text-align:right;font-size:.71875rem;white-space:nowrap}
+.dcma-card-measures{margin:0;font-size:.75rem;color:var(--text-secondary);line-height:1.45}
+.dcma-more{align-self:flex-start;display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;font-weight:600;color:var(--accent);margin-top:-.25rem}
+.dcma-more:hover{color:var(--accent-strong)}
+.dcma-ids{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.dcma-ids-more{font-size:.6875rem;color:var(--text-muted);margin-left:.2rem}
+.dcma-table-sub{font-size:.6875rem;color:var(--text-muted);margin-top:.1rem}
+@media (max-width:1100px){
+  .dcma-summary{grid-template-columns:auto minmax(0,1fr)}
+  .dcma-cats{grid-column:1 / -1;border-left:0;padding-left:0;border-top:1px solid var(--border);padding-top:1rem}
+}
+@media (max-width:640px){
+  .dcma-summary{grid-template-columns:1fr;justify-items:start}
+  .dcma-tallies{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dcma-grid{grid-template-columns:1fr}
+}
+@media print{
+  .dcma-toolbar,.dcma-more{display:none!important}
+  .dcma-card{break-inside:avoid}
+}

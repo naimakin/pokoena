@@ -65,6 +65,11 @@ class DcmaCheckResult:
     pct: float
     unit: str  # "count" | "%" | "index"
     details: list[str]  # affected activity external_ids, capped at 20
+    # What `pct` is a share of: in-scope activities for most checks,
+    # relationships for #3/#4, activities planned to finish by the data date
+    # for #14 (BEI). The page draws each check as a part of this whole.
+    denominator: int = 0
+    basis: str = "activities"  # "activities" | "relationships" | "planned"
 
 
 @dataclass
@@ -96,7 +101,7 @@ def _check(
         status = "pass"
     return DcmaCheckResult(
         id=id, name=name, status=status, value=float(count), threshold=threshold_pct,
-        pct=pct, unit=unit, details=details[:20],
+        pct=pct, unit=unit, details=details[:20], denominator=total,
     )
 
 
@@ -118,9 +123,13 @@ def _check1_logic(acts: list[Activity], rels: list[ActivityRelationship], total:
 
 
 def _check2_leads(rels: list[ActivityRelationship], id_to_code: dict, total: int) -> DcmaCheckResult:
+    # A share of relationships, like #3/#4 (the target is none at all, so the
+    # denominator only changes how the share reads, never pass/fail).
     leads = [r for r in rels if (r.lag_hours or 0) < 0]
     codes = [id_to_code.get(r.predecessor_id, "") for r in leads]
-    return _check(2, "Leads (Negative Lag)", len(leads), total, 0.0, codes)
+    result = _check(2, "Leads (Negative Lag)", len(leads), len(rels), 0.0, codes)
+    result.basis = "relationships"
+    return result
 
 
 def _check3_lags(rels: list[ActivityRelationship], id_to_code: dict, total: int) -> DcmaCheckResult:
@@ -130,7 +139,7 @@ def _check3_lags(rels: list[ActivityRelationship], id_to_code: dict, total: int)
     codes = [id_to_code.get(r.predecessor_id, "") for r in lags[:20]]
     return DcmaCheckResult(
         id=3, name="Lags (Positive Lag)", status=status, value=float(len(lags)), threshold=5.0,
-        pct=pct, unit="%", details=codes,
+        pct=pct, unit="%", details=codes, denominator=len(rels), basis="relationships",
     )
 
 
@@ -141,7 +150,7 @@ def _check4_rel_types(rels: list[ActivityRelationship], id_to_code: dict, total:
     codes = [id_to_code.get(r.predecessor_id, "") for r in ff_sf[:20]]
     return DcmaCheckResult(
         id=4, name="Relationship Types (FF+SF)", status=status, value=float(len(ff_sf)), threshold=10.0,
-        pct=pct, unit="%", details=codes,
+        pct=pct, unit="%", details=codes, denominator=len(rels), basis="relationships",
     )
 
 
@@ -194,7 +203,7 @@ def _check10_resources(
     if assigned_activity_ids is None:
         return DcmaCheckResult(
             id=10, name="Resources (Unassigned)", status="not_tracked", value=0.0, threshold=20.0,
-            pct=0.0, unit="%", details=[],
+            pct=0.0, unit="%", details=[], denominator=total,
         )
     no_rsrc = [
         a for a in acts
@@ -205,7 +214,7 @@ def _check10_resources(
     status = "warn" if pct > 20.0 else "pass"
     return DcmaCheckResult(
         id=10, name="Resources (Unassigned)", status=status, value=float(len(no_rsrc)), threshold=20.0,
-        pct=pct, unit="%", details=codes[:20],
+        pct=pct, unit="%", details=codes[:20], denominator=total,
     )
 
 
@@ -232,7 +241,7 @@ def _check12_critical_path_length(acts: list[Activity], total: int) -> DcmaCheck
     status = "warn" if (pct < 5.0 or pct > 20.0) else "pass"
     return DcmaCheckResult(
         id=12, name="Critical Path Length", status=status, value=float(len(critical)), threshold=20.0,
-        pct=pct, unit="%", details=[a.external_id for a in critical[:20]],
+        pct=pct, unit="%", details=[a.external_id for a in critical[:20]], denominator=total,
     )
 
 
@@ -247,7 +256,7 @@ def _check13_total_float_zero(acts: list[Activity], total: int) -> DcmaCheckResu
     status = "warn" if pct > 10.0 else "pass"
     return DcmaCheckResult(
         id=13, name="Total Float = 0 (Artificial)", status=status, value=float(len(zero_float)), threshold=10.0,
-        pct=pct, unit="%", details=[a.external_id for a in zero_float[:20]],
+        pct=pct, unit="%", details=[a.external_id for a in zero_float[:20]], denominator=total,
     )
 
 
@@ -275,7 +284,7 @@ def _check14_bei(acts: list[Activity], data_date: date) -> DcmaCheckResult:
     missed_codes = [a.external_id for a in planned_done if a.status_code != "TK_Complete"][:20]
     return DcmaCheckResult(
         id=14, name="BEI (Baseline Execution Index)", status=status, value=bei, threshold=0.95,
-        pct=round(bei * 100, 2), unit="index", details=missed_codes,
+        pct=round(bei * 100, 2), unit="index", details=missed_codes, denominator=expected, basis="planned",
     )
 
 

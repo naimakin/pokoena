@@ -12,6 +12,8 @@ class DcmaCheckResultOut(BaseModel):
     pct: float
     unit: str
     details: list[str]
+    denominator: int = 0
+    basis: str = "activities"
 
 
 class DcmaReportOut(BaseModel):

@@ -204,6 +204,11 @@ export interface DcmaCheckResult {
   pct: number;
   unit: string;
   details: string[];
+  // What `pct` is a share of (backend/app/engine/quality/dcma.py): in-scope
+  // activities, relationships (#3, #4) or activities planned to finish by the
+  // data date (#14, BEI).
+  denominator: number;
+  basis: "activities" | "relationships" | "planned";
 }
 
 export interface DcmaReport {
