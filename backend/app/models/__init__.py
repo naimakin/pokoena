@@ -34,6 +34,7 @@ from app.models.recovery_plan import (
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
+from app.models.schedule_simulation import ScheduleSimulation
 from app.models.risk_item import (
     MitigationStatus,
     MitigationStrategy,
@@ -105,6 +106,7 @@ __all__ = [
     "ResourceAssignment",
     "RiskAnalysisSettings",
     "RiskSimulationRun",
+    "ScheduleSimulation",
     "RiskItem",
     "RiskActionItem",
     "RiskStatus",

@@ -94,9 +94,15 @@ def _parse_hhmm(s: str) -> time:
 
 
 def build_calendar_engine(calendar_row: CalendarModel) -> CalendarEngine:
+    """A CalendarEngine over a stored calendar, so we can reuse
+    CalendarEngine.work_hours_between without duplicating its logic."""
+    return CalendarEngine(calendar_row_to_parsed(calendar_row))
+
+
+def calendar_row_to_parsed(calendar_row: CalendarModel, clndr_id: str | None = None) -> ParsedCalendar:
     """Reconstructs the parser's in-memory Calendar dataclass from our stored
-    JSON (inverse of the shape `services/xer_import.py` writes) so we can
-    reuse CalendarEngine.work_hours_between without duplicating its logic."""
+    JSON (inverse of the shape `services/xer_import.py` writes). `clndr_id`
+    overrides the P6 id it's keyed by."""
     week = [
         CalendarDay(
             day_of_week=d["day_of_week"],
@@ -111,14 +117,13 @@ def build_calendar_engine(calendar_row: CalendarModel) -> CalendarEngine:
         )
         for e in calendar_row.exceptions
     ]
-    parsed_cal = ParsedCalendar(
-        clndr_id=calendar_row.clndr_id,
+    return ParsedCalendar(
+        clndr_id=clndr_id or calendar_row.clndr_id,
         clndr_name=calendar_row.name,
         default_work_week=week,
         exceptions=exceptions,
         hours_per_day=calendar_row.hours_per_day,
     )
-    return CalendarEngine(parsed_cal)
 
 
 def _planned_pct_calendar_aware(

@@ -1724,3 +1724,197 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .pf-custom-range{display:flex;align-items:center;gap:.5rem}
 .pf-custom-range label{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--text-muted)}
 .pf-custom-range input{height:30px;padding:0 .5rem;font-size:.75rem}
+
+/* ---- Schedule Simulation (Planning > Schedule Simulation) -------------------
+   What-if runs on a copy of the current programme. Direction of a move reads
+   through --warn (later) / --good (earlier), never the accent; red stays for
+   genuinely critical states (a slipping project finish, newly critical rows,
+   blocking validation). The accent appears only on controls and the
+   simulation data-date marker (a data-date use, DESIGN.md). */
+.sim-page{display:flex;flex-direction:column;gap:1rem}
+.sim-page > .page-head{margin-bottom:0}
+.sim-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.sim-title{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+.sim-title .chip{font-size:.6875rem;padding:.12rem .5rem}
+.sim-scenario{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.sim-scenario select{min-width:240px;max-width:340px}
+
+/* setup */
+.sim-dates{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:start;gap:1.25rem;padding:1rem 1.1rem;border-bottom:1px solid var(--border)}
+.sim-date{display:flex;flex-direction:column;gap:.3rem;min-width:0}
+.sim-date-label{font-size:.75rem;font-weight:600;color:var(--text-muted)}
+.sim-date-value{height:var(--control-h);display:flex;align-items:center;font-family:var(--font-mono);font-size:.9375rem;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-primary)}
+.sim-date-arrow{height:var(--control-h);margin-top:1.3rem;display:flex;align-items:center;color:var(--text-tertiary)}
+.sim-date-controls{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.sim-date-controls input[type="date"]{width:auto;height:var(--control-h);padding-block:0}
+.sim-date-note{font-size:.75rem;color:var(--text-muted);max-width:640px}
+.sim-date-note b{font-family:var(--font-mono);font-weight:600;color:var(--text-secondary)}
+
+.sim-changes-head{padding:.85rem 1.1rem .35rem;font-size:.8125rem;font-weight:700;color:var(--text-primary)}
+.sim-changes-empty{padding:1rem 1.1rem 1.25rem;text-align:left}
+.sim-changes td{vertical-align:top;padding:.65rem 1.1rem}
+.sim-ms-chip{margin-left:.4rem;vertical-align:1px}
+.sim-now{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem}
+.sim-now-dates{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;font-family:var(--font-mono);font-size:.71875rem;color:var(--text-secondary)}
+.sim-now-dates .icon{width:11px;height:11px;color:var(--text-tertiary)}
+.sim-edit{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.sim-edit select,.sim-edit input{height:var(--control-h-sm);padding-block:0;font-size:.75rem}
+.sim-edit select{min-width:170px;width:auto}
+.sim-edit input[type="number"]{width:76px;font-family:var(--font-mono)}
+.sim-edit input[type="date"]{width:auto}
+.sim-edit-label{font-size:.6875rem;font-weight:600;color:var(--text-secondary)}
+.sim-edit-unit{font-size:.75rem;color:var(--text-muted)}
+.sim-edit-quick{display:inline-flex;gap:.15rem}
+.sim-edit-hint{flex-basis:100%;font-size:.6875rem;color:var(--text-muted)}
+.sim-edit-hint b{font-family:var(--font-mono);font-weight:600;color:var(--text-secondary)}
+.sim-row-error{flex-basis:100%;font-size:.6875rem;font-weight:600;color:var(--crit)}
+.sim-changes tbody tr.has-error{box-shadow:inset 3px 0 0 var(--crit-line)}
+.sim-remove{color:var(--text-muted)}
+.sim-remove:hover:not(:disabled){background:var(--surface-2);border-color:transparent;color:var(--text-primary)}
+
+/* activity picker (combobox) */
+.sim-add{padding:.75rem 1.1rem;border-top:1px solid var(--border)}
+.sim-picker{position:relative;max-width:560px}
+.sim-picker input{height:var(--control-h)}
+.sim-picker-list{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;max-height:min(360px,50vh);overflow-y:auto;
+  padding:.3rem;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-md);
+}
+.sim-picker-opt{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:.6rem;
+  padding:.4rem .5rem;border-radius:var(--radius-sm);font-size:.8125rem;cursor:pointer;
+  transition:background var(--dur-1) var(--ease);
+}
+.sim-picker-opt:hover{background:var(--surface-2)}
+.sim-picker-opt[aria-selected="true"]{background:var(--accent-soft)}
+.sim-picker-opt[aria-disabled="true"]{cursor:default;opacity:.5}
+.sim-picker-id{font-family:var(--font-mono);font-size:.71875rem;color:var(--text-muted)}
+.sim-picker-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sim-picker-date{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted)}
+.sim-picker-empty{padding:.6rem .5rem;font-size:.75rem;color:var(--text-muted)}
+
+/* run bar: sticks to the bottom of the viewport while the setup card is in view */
+.sim-runbar{
+  position:sticky;bottom:0;z-index:6;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
+  padding:.75rem 1.1rem;background:var(--surface);border-top:1px solid var(--border);
+  border-radius:0 0 var(--radius-lg) var(--radius-lg);
+}
+.sim-runbar-summary{flex:1;min-width:0;font-size:.75rem;color:var(--text-secondary)}
+.sim-runbar-summary b{font-weight:600;color:var(--text-primary)}
+.sim-kbd{font-family:var(--font-mono);font-size:.625rem;font-weight:500;padding:0 .3rem;border-radius:var(--radius-xs);border:1px solid currentColor;opacity:.7}
+
+/* results */
+.sim-results{display:flex;flex-direction:column;gap:1rem;scroll-margin-top:1rem;transition:opacity var(--dur-1) var(--ease)}
+.sim-results[aria-busy="true"]{opacity:.6}
+.sim-results-head{display:flex;align-items:baseline;gap:.65rem;flex-wrap:wrap;margin-top:.5rem}
+.sim-results-title{font-family:var(--font-display);font-size:1rem;font-weight:700;letter-spacing:-.01em;color:var(--text-primary)}
+.sim-results-title:focus{outline:none}
+.sim-results-meta{flex:1;font-size:.75rem;color:var(--text-muted)}
+.sim-warnings{margin:0;padding-left:1rem;display:flex;flex-direction:column;gap:.2rem}
+.kpi-value.sim-kpi-date{font-family:var(--font-mono);font-size:1.35rem;font-weight:600;letter-spacing:0}
+.sim-kpi-of{font-size:.875rem;font-weight:500;color:var(--text-muted)}
+
+.sim-delta{font-family:var(--font-mono);font-size:.75rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sim-delta.is-later{color:var(--warn)}
+.sim-delta.is-earlier{color:var(--good)}
+.sim-delta.is-zero{color:var(--text-muted);font-weight:400}
+.sim-ba{display:flex;flex-direction:column;gap:.1rem;font-family:var(--font-mono);font-size:.75rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sim-ba-now{font-weight:600;color:var(--text-primary)}
+.sim-ba-was{font-size:.6875rem;color:var(--text-muted)}
+.sim-ba.is-same .sim-ba-now{font-weight:400;color:var(--text-secondary)}
+.sim-float-pair{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}
+.sim-float-pair .icon{width:11px;height:11px;color:var(--text-tertiary)}
+.sim-driver{display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap}
+.sim-driver-id{font-family:var(--font-mono);font-size:.75rem;font-weight:600;color:var(--accent)}
+.sim-driver-id:hover{color:var(--accent-strong);text-decoration:underline}
+.sim-sort-up{transform:rotate(180deg)}
+
+.sim-toolbar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.7rem 1.1rem;border-bottom:1px solid var(--border)}
+.sim-toolbar-count{margin-left:auto;font-size:.75rem;color:var(--text-muted)}
+.sim-count{margin-left:.3rem;font-family:var(--font-mono);font-size:.6875rem;font-weight:500;color:var(--text-muted)}
+.segmented button.active .sim-count{color:var(--text-secondary)}
+.sim-search{
+  width:220px;max-width:100%;height:var(--control-h-sm);padding:0 .6rem;font-size:.75rem;font-family:var(--font-ui);
+  background:var(--surface);color:var(--text-primary);border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  transition:border-color var(--dur-1) var(--ease);
+}
+.sim-search:hover{border-color:var(--text-muted)}
+.sim-search::placeholder{color:var(--text-tertiary)}
+
+.sim-moved td{vertical-align:middle}
+.sim-moved td.sim-cell-expand,.sim-moved th.sim-cell-expand{width:36px;padding-right:0}
+.sim-moved .subname .chip{margin-left:.4rem;vertical-align:1px}
+.sim-expand{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-xs);color:var(--text-muted);transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+.sim-expand:hover{background:var(--surface-3);color:var(--text-primary)}
+.sim-expand .icon{width:14px;height:14px;transform:rotate(-90deg);transition:transform var(--dur-1) var(--ease)}
+.sim-expand[aria-expanded="true"] .icon{transform:none}
+tbody tr.sim-chain-row,tbody tr.sim-chain-row:hover{background:var(--surface-2)}
+.sim-chain-row td{padding:.75rem 1.1rem .9rem 3rem}
+.sim-chain-title{font-size:.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem}
+.sim-chain-none{font-size:.75rem;color:var(--text-muted)}
+.sim-more{display:flex;justify-content:center;padding:.6rem;border-top:1px solid var(--border)}
+
+/* driving chain: hairline rail with nodes, the change (origin) filled */
+.sim-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.sim-chain li{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.15rem 1rem;align-items:baseline;padding:.3rem 0 .3rem 1.4rem;font-size:.8125rem}
+.sim-chain li::before{content:"";position:absolute;left:4px;top:0;bottom:0;width:1px;background:var(--border-strong)}
+.sim-chain li:first-child::before{top:.85rem}
+.sim-chain li:last-child::before{bottom:calc(100% - .85rem)}
+.sim-chain li::after{content:"";position:absolute;left:1px;top:.6rem;width:7px;height:7px;border-radius:50%;background:var(--surface);border:1.5px solid var(--text-muted)}
+.sim-chain li.is-origin::after{background:var(--text-primary);border-color:var(--text-primary)}
+.sim-chain li.sim-chain-gap::after{display:none}
+.sim-chain-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sim-chain-name .actid{margin-right:.4rem}
+.sim-chain-date{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary)}
+.sim-chain-link{grid-column:1 / -1;font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted)}
+
+/* milestone slip chart: hollow diamond = without the changes, filled = with */
+.sim-ms{display:flex;flex-direction:column;padding:.25rem 1.1rem .9rem}
+.sim-ms-axis,.sim-ms-row{display:grid;grid-template-columns:minmax(200px,1.3fr) 3fr 84px;gap:1rem;align-items:center}
+.sim-ms-axis{padding:.4rem 0;border-bottom:1px solid var(--border)}
+.sim-ms-ticks{position:relative;height:16px}
+.sim-ms-ticks span{position:absolute;top:0;transform:translateX(-50%);font-size:.625rem;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sim-ms-row{padding:.45rem 0;border-bottom:1px dashed var(--border)}
+.sim-ms-row:last-of-type{border-bottom:0}
+.sim-ms-label{min-width:0}
+.sim-ms-name{font-size:.8125rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sim-ms-row.is-finish .sim-ms-name{font-weight:800}
+.sim-ms-sub{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sim-ms-track{position:relative;height:18px}
+.sim-ms-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--border)}
+.sim-ms-span{position:absolute;top:calc(50% - 1px);height:2px;border-radius:1px;background:var(--text-tertiary)}
+.sim-ms-span.is-later{background:var(--warn)}
+.sim-ms-span.is-earlier{background:var(--good)}
+.sim-ms-was,.sim-ms-now{position:absolute;top:50%;width:9px;height:9px;transform:translate(-50%,-50%) rotate(45deg)}
+.sim-ms-was{background:var(--surface);border:1.5px solid var(--text-muted)}
+.sim-ms-now{background:var(--text-primary)}
+.sim-ms-now.is-later{background:var(--warn)}
+.sim-ms-now.is-earlier{background:var(--good)}
+.sim-ms-dd{position:absolute;top:-4px;bottom:-4px;width:0;border-left:1px dashed var(--accent);pointer-events:none}
+.sim-ms-delta{text-align:right}
+
+@media (max-width:900px){
+  .sim-dates{grid-template-columns:1fr;gap:.85rem}
+  .sim-date-arrow{display:none}
+  .sim-moved .sim-col-start{display:none}
+}
+@media (max-width:720px){
+  /* the changes table becomes stacked rows */
+  .sim-changes thead{display:none}
+  .sim-changes tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;padding:.75rem .85rem;border-bottom:1px solid var(--border)}
+  .sim-changes tbody td{padding:0;border:0}
+  .sim-changes td.sim-cell-act{grid-column:1;grid-row:1}
+  .sim-changes td.sim-cell-remove{grid-column:2;grid-row:1}
+  .sim-changes td.sim-cell-now,.sim-changes td.sim-cell-edit{grid-column:1 / -1}
+  .sim-runbar .btn{flex:1;justify-content:center}
+  .sim-search{width:100%}
+  .sim-toolbar-count{margin-left:0}
+  .sim-ms-axis{display:none}
+  .sim-ms-row{grid-template-columns:minmax(0,1fr) 72px}
+  .sim-ms-track{grid-column:1 / -1;order:3}
+  .sim-chain-row td{padding-left:1.1rem}
+  .sim-scenario select{min-width:0;flex:1}
+}
+@media print{
+  .sim-setup,.sim-runbar,.sim-toolbar,.sim-scenario,.sim-expand,.sim-more{display:none!important}
+}

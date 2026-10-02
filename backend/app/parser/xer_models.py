@@ -129,12 +129,22 @@ class Activity:
 
     seq_num: Optional[int] = None
 
+    # P6's Expected Finish (TASK.expect_end_date): when set, the scheduler sizes
+    # the remaining work so the activity finishes then. Not read from the .xer
+    # yet — Schedule Simulation sets it for a "finishes on <date>" change.
+    expect_end_date: Optional[datetime] = None
+
     # Set by the scheduler after the float-calculation pass; not part of the raw
     # XER shape. Kept as plain attributes (not a dataclass field) exactly like the
     # reference engine, since callers only ever read them after schedule() runs.
     tf_days: Optional[float] = field(default=None, init=False, repr=False)
     ff_days: Optional[float] = field(default=None, init=False, repr=False)
     lp_critical: bool = field(default=False, init=False, repr=False)
+    # Why the forward pass put the activity where it did: "logic" (then
+    # `driving_rels` lists the binding (pred_task_id, pred_type, lag_hr_cnt)
+    # relationships), "data_date", "constraint" or "actual" (finished work).
+    driven_by: Optional[str] = field(default=None, init=False, repr=False)
+    driving_rels: list[tuple[str, str, float]] = field(default_factory=list, init=False, repr=False)
 
 
 @dataclass

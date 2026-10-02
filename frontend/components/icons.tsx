@@ -194,6 +194,19 @@ export function ArrowRightIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+// Schedule Simulation: one path branching off into an alternative.
+export function SimulationIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="18" cy="7" r="2" />
+      <path d="M6 7v10" />
+      <path d="M18 9c0 4.5-4 6-12 8" />
+    </svg>
+  );
+}
+
 export function ChevronDownIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

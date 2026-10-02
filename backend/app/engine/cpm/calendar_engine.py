@@ -5,7 +5,7 @@ unchanged except the import path (`app.parser.xer_models` instead of
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from app.parser.xer_models import Calendar, CalendarDay, CalendarException
@@ -26,26 +26,72 @@ class CalendarEngine:
     def __init__(self, calendar: Calendar):
         self._cal = calendar
         self._week: dict[int, CalendarDay] = {d.day_of_week: d for d in calendar.default_work_week}
-        self._exc: dict[str, CalendarException] = {
-            ex.exc_date.strftime("%Y-%m-%d"): ex for ex in calendar.exceptions
-        }
+        self._exc: dict[date, CalendarException] = {ex.exc_date.date(): ex for ex in calendar.exceptions}
+        # Per-date memo of the effective day, and a running total of work hours
+        # before each day (keyed by date ordinal, relative to whichever day was
+        # asked first). Together they make work_hours_between O(1) across days
+        # instead of a walk over every day in between — the walk was most of
+        # a schedule() run on a multi-year programme.
+        self._day_memo: dict[date, CalendarDay] = {}
+        self._cum: dict[int, float] = {}
+        self._cum_lo = 0
+        self._cum_hi = -1
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _day_key(self, dt: datetime) -> str:
-        return dt.strftime("%Y-%m-%d")
-
-    def _get_day_def(self, dt: datetime) -> CalendarDay:
+    def _get_day_def(self, dt: datetime | date) -> CalendarDay:
         """Return the effective CalendarDay for a given date (exception overrides week)."""
-        key = self._day_key(dt)
-        if key in self._exc:
-            exc = self._exc[key]
-            return CalendarDay(day_of_week=dt.weekday(), shifts=exc.shifts)
-        # P6 weekday: 0=Sun...6=Sat; Python weekday: 0=Mon...6=Sun.
-        p6_dow = (dt.weekday() + 1) % 7
-        return self._week.get(p6_dow, CalendarDay(day_of_week=p6_dow, shifts=[]))
+        day = dt.date() if isinstance(dt, datetime) else dt
+        found = self._day_memo.get(day)
+        if found is not None:
+            return found
+        exc = self._exc.get(day)
+        if exc is not None:
+            found = CalendarDay(day_of_week=day.weekday(), shifts=exc.shifts)
+        else:
+            # P6 weekday: 0=Sun...6=Sat; Python weekday: 0=Mon...6=Sun.
+            p6_dow = (day.weekday() + 1) % 7
+            found = self._week.get(p6_dow, CalendarDay(day_of_week=p6_dow, shifts=[]))
+        self._day_memo[day] = found
+        return found
+
+    def _hours_before_day(self, day: date) -> float:
+        """Work hours in every day before `day`, counted from a fixed anchor —
+        only differences between two of these mean anything."""
+        o = day.toordinal()
+        if self._cum_hi < self._cum_lo:  # first call: anchor here
+            self._cum[o] = 0.0
+            self._cum_lo = self._cum_hi = o
+            return 0.0
+        while o > self._cum_hi:
+            self._cum[self._cum_hi + 1] = self._cum[self._cum_hi] + self._whole_day_hours(date.fromordinal(self._cum_hi))
+            self._cum_hi += 1
+        while o < self._cum_lo:
+            self._cum[self._cum_lo - 1] = self._cum[self._cum_lo] - self._whole_day_hours(
+                date.fromordinal(self._cum_lo - 1)
+            )
+            self._cum_lo -= 1
+        return self._cum[o]
+
+    def _whole_day_hours(self, day: date) -> float:
+        """A whole day's work hours, counted the way _hours_in_day_between
+        counts them (a shift ending at 00:00 adds nothing, not a negative)."""
+        midnight = datetime.combine(day, datetime.min.time())
+        return self._hours_in_day_between(midnight, midnight.replace(hour=23, minute=59, second=59, microsecond=999999))
+
+    def _hours_in_day_between(self, start: datetime, end: datetime) -> float:
+        """Work hours between two moments on the same day."""
+        total = 0.0
+        for shift in self._get_day_def(start).shifts:
+            s_start = start.replace(hour=shift.start.hour, minute=shift.start.minute, second=0, microsecond=0)
+            s_end = start.replace(hour=shift.end.hour, minute=shift.end.minute, second=0, microsecond=0)
+            overlap_start = max(start, s_start)
+            overlap_end = min(end, s_end)
+            if overlap_end > overlap_start:
+                total += (overlap_end - overlap_start).total_seconds() / 3600
+        return total
 
     def _is_working_day(self, dt: datetime) -> bool:
         return self._get_day_def(dt).is_working
@@ -190,23 +236,16 @@ class CalendarEngine:
         """Count net work hours between two datetimes. Negative if end < start."""
         if end < start:
             return -self.work_hours_between(end, start)
+        if start.date() == end.date():
+            return round(self._hours_in_day_between(start, end), 6)
 
-        total = 0.0
-        current = start
-        end_date = end.date()
-
-        while current.date() <= end_date:
-            day_def = self._get_day_def(current)
-            for shift in day_def.shifts:
-                s_start = current.replace(hour=shift.start.hour, minute=shift.start.minute, second=0, microsecond=0)
-                s_end = current.replace(hour=shift.end.hour, minute=shift.end.minute, second=0, microsecond=0)
-                overlap_start = max(current, s_start)
-                overlap_end = min(end, s_end)
-                if overlap_end > overlap_start:
-                    total += (overlap_end - overlap_start).total_seconds() / 3600
-            current = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        return round(total, 6)
+        # The rest of start's day + every whole day in between + end's day up to end.
+        start_day, end_day = start.date(), end.date()
+        day_start = datetime.combine(start_day, datetime.min.time())
+        day_end = datetime.combine(end_day, datetime.min.time())
+        rest_of_start_day = self._whole_day_hours(start_day) - self._hours_in_day_between(day_start, start)
+        whole_days = self._hours_before_day(end_day) - self._hours_before_day(start_day + timedelta(days=1))
+        return round(rest_of_start_day + whole_days + self._hours_in_day_between(day_end, end), 6)
 
     # ------------------------------------------------------------------
     # Private helpers

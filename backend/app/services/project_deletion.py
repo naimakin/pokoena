@@ -50,6 +50,7 @@ from app.models.report_format import ReportFormat
 from app.models.resource import Resource
 from app.models.resource_assignment import ResourceAssignment
 from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
+from app.models.schedule_simulation import ScheduleSimulation
 from app.models.risk_item import RiskItem
 from app.models.saved_activity_filter import SavedActivityFilter
 from app.models.schedule_export import ScheduleExport
@@ -151,6 +152,7 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
     gone(ReportFormat, project_id=project_id)
     gone(RiskAnalysisSettings, project_id=project_id)
     gone(RiskSimulationRun, project_id=project_id)
+    gone(ScheduleSimulation, project_id=project_id)
     gone(ProjectMembership, project_id=project_id)
     gone(ScheduleExport, project_id=project_id)  # after schedule_imports, step 4
 

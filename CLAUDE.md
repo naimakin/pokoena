@@ -80,6 +80,10 @@ DESIGN.md                 ← full design system spec
 - `percent_complete` is the DISPLAYED % (labor units % if RT_Labor is assigned, else 100 / 0 /
   duration %); P6's physical % is `phys_complete_pct`. Entry rules and the remaining-duration link
   live in `services/activity_progress.py`. Criticality Score: `services/criticality.py`.
+- CPM has two modes (`engine/cpm/scheduler.py`): the default (import; in-progress work ignores its
+  predecessors) and `retained_logic=True` (P6's default option; Schedule Simulation,
+  `services/schedule_simulation.py`). Simulation diffs engine against engine at the same data
+  date — never against P6's stored dates, which our CPM doesn't reproduce on every file.
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

@@ -8,9 +8,19 @@ const SESSION_ENDPOINTS = ["/auth/login", "/auth/refresh", "/platform-auth/login
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  /** The response's `detail` as sent — a string, or a structured object
+   *  ({code, message, errors}) for routes that return one. */
+  detail: unknown;
+  constructor(status: number, detail: unknown) {
+    super(
+      typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail
+          ? String((detail as { message: unknown }).message)
+          : "Request failed",
+    );
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -54,7 +64,7 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
   }
 
   if (!response.ok) {
-    let detail = response.statusText;
+    let detail: unknown = response.statusText;
     try {
       const body = await response.json();
       detail = body.detail ?? detail;
@@ -90,7 +100,7 @@ async function requestFile<T>(path: string, formData: FormData, isRetry = false)
   }
 
   if (!response.ok) {
-    let detail = response.statusText;
+    let detail: unknown = response.statusText;
     try {
       const body = await response.json();
       detail = body.detail ?? detail;
@@ -120,7 +130,7 @@ async function requestBlob(path: string, isRetry = false): Promise<{ blob: Blob;
   }
 
   if (!response.ok) {
-    let detail = response.statusText;
+    let detail: unknown = response.statusText;
     try {
       const body = await response.json();
       detail = body.detail ?? detail;

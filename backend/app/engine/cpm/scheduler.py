@@ -125,9 +125,27 @@ def _parse_constraints(act: Activity) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
+def _bound(cal: CalendarEngine, base: datetime, lag_h: float) -> datetime:
+    return cal.add_work_hours(base, lag_h) if lag_h >= 0 else cal.sub_work_hours(base, -lag_h)
+
+
+def schedule(parsed: ParsedSchedule, *, retained_logic: bool = False) -> ParsedSchedule:
     """Run CPM on the parsed schedule. Modifies Activity.early_*/late_*/float
-    fields (and tf_days/ff_days/lp_critical) in-place. Returns the same object."""
+    fields (and tf_days/ff_days/lp_critical/driven_by/driving_rels) in-place.
+    Returns the same object.
+
+    `retained_logic=False` is the engine as ported: an in-progress activity's
+    remaining work runs from the data date whatever its predecessors are doing
+    (in effect P6's Progress Override), and a finished predecessor binds at its
+    actual dates even when they fall after the data date. Import uses it - its
+    output only stands where P6 left a file unscheduled (services/xer_import.py),
+    and it feeds the stored longest path.
+
+    `retained_logic=True` is P6's default scheduling option, the one every real
+    export we have was scheduled with: remaining work waits for unfinished
+    predecessors (Activity.restart_date is where it resumes), finished work
+    never pushes anything past the data date, and an in-progress activity's
+    total float is late finish - early finish. Schedule Simulation uses it."""
     acts: dict[str, Activity] = {a.task_id: a for a in parsed.activities}
     rels: list[Relationship] = parsed.relationships
 
@@ -162,6 +180,17 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
 
     must_finish_by: Optional[datetime] = parsed.meta.last_fin_date
 
+    # Remaining hours each activity is scheduled with - its remaining duration,
+    # unless an Expected Finish resized it. The backward pass reuses them.
+    drtn_of: dict[str, float] = {}
+
+    def remaining_start(a: Activity) -> Optional[datetime]:
+        """Where the activity's remaining work starts: its early start, or for
+        in-progress work under Retained Logic, where that work resumes."""
+        if retained_logic and a.status_code == "TK_Active" and a.restart_date:
+            return a.restart_date
+        return a.early_start_date
+
     # -------------------------------------------------------------------------
     # FORWARD PASS
     # -------------------------------------------------------------------------
@@ -170,61 +199,109 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
         c = get_cal(act.clndr_id)
         cstr = _parse_constraints(act)
         is_milestone = act.task_type in _MILESTONE_TYPES
-
-        if act.status_code == "TK_Active":
-            drtn = act.remain_drtn_hr_cnt
-        else:
-            drtn = act.remain_drtn_hr_cnt if act.status_code == "TK_NotStart" else 0.0
+        act.driving_rels = []
 
         if act.status_code == "TK_Complete":
             act.early_start_date = act.act_start_date
             act.early_end_date = act.act_end_date
+            act.driven_by = "actual"
+            drtn_of[tid] = 0.0
             continue
+
+        drtn = act.remain_drtn_hr_cnt or 0.0
 
         if act.status_code == "TK_Active":
-            es = act.act_start_date or dd
-            ef = c.add_work_hours(dd, drtn) if drtn > 0 else dd
+            act.early_start_date = act.act_start_date or dd
+            start_ties: list[tuple[str, str, float]] = []
+            finish_ties: list[tuple[str, str, float]] = []
+            finish_floor: Optional[datetime] = None
+            if not retained_logic:
+                rs = dd
+            else:
+                # Retained Logic: the remaining work waits for every
+                # predecessor that hasn't finished.
+                start_bounds: list[tuple[datetime, str, str, float]] = []
+                finish_bounds: list[tuple[datetime, str, str, float]] = []
+                for pred_id, rel_type, lag_h in pred_adj[tid]:
+                    pred = acts[pred_id]
+                    if pred.status_code == "TK_Complete":
+                        continue
+                    pES = pred.early_start_date or dd
+                    pEF = pred.early_end_date or pES
+                    t = _bound(get_cal(pred.clndr_id), pEF if rel_type in ("PR_FS", "PR_FF") else pES, lag_h)
+                    (start_bounds if rel_type in ("PR_FS", "PR_SS") else finish_bounds).append(
+                        (t, pred_id, rel_type, lag_h)
+                    )
+                rs = c.snap_to_work_start(max([dd] + [b[0] for b in start_bounds]))
+                start_ties = [b[1:] for b in start_bounds if c.work_hours_between(b[0], rs) <= _TOL]
+                finish_floor = max((b[0] for b in finish_bounds), default=None)
+                finish_ties = [b[1:] for b in finish_bounds if b[0] == finish_floor]
+                act.restart_date = rs
+
+            if act.expect_end_date is not None:
+                drtn = max(0.0, c.work_hours_between(rs, act.expect_end_date))
+            ef = c.add_work_hours(rs, drtn) if drtn > 0 else rs
+            if finish_floor is not None and ef < finish_floor:
+                ef = finish_floor
+                act.driven_by, act.driving_rels = "logic", finish_ties
+            elif start_ties:
+                act.driven_by, act.driving_rels = "logic", start_ties
+            else:
+                act.driven_by = "data_date"
             if cstr["fnet"] and ef < cstr["fnet"]:
                 ef = cstr["fnet"]
-            act.early_start_date = es
+                act.driven_by, act.driving_rels = "constraint", []
             act.early_end_date = ef
+            drtn_of[tid] = drtn
             continue
 
-        # TK_NotStart — initialise ES at data_date.
+        # TK_NotStart - initialise ES at data_date.
         es = c.snap_to_work_start(dd)
+        driven_by = "data_date"
+        bounds: list[tuple[datetime, str, str, float]] = []
 
         for pred_id, rel_type, lag_h in pred_adj[tid]:
             pred = acts[pred_id]
             p_c = get_cal(pred.clndr_id)  # lag uses predecessor calendar
             pES = pred.early_start_date or dd
             pEF = pred.early_end_date or pES
+            if retained_logic and pred.status_code == "TK_Complete":
+                # Finished work can't push anything past the data date.
+                pES, pEF = min(pES, dd), min(pEF, dd)
 
             if rel_type == "PR_FS":
-                c_date = p_c.add_work_hours(pEF, lag_h) if lag_h >= 0 else p_c.sub_work_hours(pEF, -lag_h)
+                c_date = _bound(p_c, pEF, lag_h)
             elif rel_type == "PR_SS":
-                c_date = p_c.add_work_hours(pES, lag_h) if lag_h >= 0 else p_c.sub_work_hours(pES, -lag_h)
+                c_date = _bound(p_c, pES, lag_h)
             elif rel_type == "PR_FF":
-                c_ef = p_c.add_work_hours(pEF, lag_h) if lag_h >= 0 else p_c.sub_work_hours(pEF, -lag_h)
+                c_ef = _bound(p_c, pEF, lag_h)
                 c_date = c.sub_work_hours(c_ef, drtn) if drtn > 0 else c_ef
             else:  # PR_SF
-                c_ef = p_c.add_work_hours(pES, lag_h) if lag_h >= 0 else p_c.sub_work_hours(pES, -lag_h)
+                c_ef = _bound(p_c, pES, lag_h)
                 c_date = c.sub_work_hours(c_ef, drtn) if drtn > 0 else c_ef
 
+            bounds.append((c_date, pred_id, rel_type, lag_h))
             if c_date > es:
                 es = c_date
+                driven_by = "logic"
 
         if cstr["snet"] and cstr["snet"] > es:
             es = cstr["snet"]
+            driven_by = "constraint"
 
         if es < dd:
             es = c.snap_to_work_start(dd)
+            driven_by = "data_date"
 
         es = c.snap_to_work_start(es)
 
         if cstr["mand_start"]:
             es = c.snap_to_work_start(cstr["mand_start"])
+            driven_by = "constraint"
 
         act.early_start_date = es
+        if act.expect_end_date is not None:
+            drtn = max(0.0, c.work_hours_between(es, act.expect_end_date))
 
         if is_milestone or drtn <= 0:
             ef = es
@@ -239,12 +316,22 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
                 ef = c.add_work_hours(act.early_start_date, drtn)
             if ef < cstr["fnet"]:
                 ef = cstr["fnet"]
+            driven_by = "constraint"
 
         if cstr["mand_finish"]:
             ef = cstr["mand_finish"]
             act.early_start_date = c.sub_work_hours(ef, drtn) if drtn > 0 else ef
+            driven_by = "constraint"
 
         act.early_end_date = ef
+        drtn_of[tid] = drtn
+        if driven_by == "logic":
+            ties = [b for b in bounds if c.work_hours_between(b[0], act.early_start_date) <= _TOL]
+            if retained_logic and ties and all(acts[b[1]].status_code == "TK_Complete" for b in ties):
+                driven_by = "data_date"  # a finished predecessor, held at the data date
+            else:
+                act.driving_rels = [b[1:] for b in ties]
+        act.driven_by = driven_by
 
     # -------------------------------------------------------------------------
     # Project finish date
@@ -265,11 +352,7 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
             act.late_end_date = act.early_end_date
             continue
 
-        if act.status_code == "TK_Active":
-            drtn = act.remain_drtn_hr_cnt
-        else:
-            drtn = act.remain_drtn_hr_cnt if act.status_code == "TK_NotStart" else 0.0
-
+        drtn = drtn_of[tid]
         is_milestone = act.task_type in _MILESTONE_TYPES
         lf = proj_end
 
@@ -340,7 +423,11 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
         c = get_cal(act.clndr_id)
         hpd = c._cal.hours_per_day if c._cal.hours_per_day > 0 else 8.0
 
-        if act.early_start_date and act.late_start_date:
+        if retained_logic and act.status_code == "TK_Active" and act.early_end_date and act.late_end_date:
+            tf_hr = round(c.work_hours_between(act.early_end_date, act.late_end_date), 4)
+            act.total_float_hr_cnt = 0.0 if abs(tf_hr) < 0.01 else tf_hr
+            act.tf_days = round(act.total_float_hr_cnt / hpd, 4)
+        elif act.early_start_date and act.late_start_date:
             tf_hr = round(c.work_hours_between(act.early_start_date, act.late_start_date), 4)
             if abs(tf_hr) < 0.01:  # guard against -0.001 rounding noise
                 tf_hr = 0.0
@@ -354,8 +441,9 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
         ff = None
         for succ_id, rel_type, lag_h in succ_adj[act.task_id]:
             succ = acts[succ_id]
-            if succ.early_start_date and act.early_end_date:
-                gap = c.work_hours_between(act.early_end_date, succ.early_start_date) - lag_h
+            succ_start = remaining_start(succ)
+            if succ_start and act.early_end_date:
+                gap = c.work_hours_between(act.early_end_date, succ_start) - lag_h
                 ff = gap if ff is None else min(ff, gap)
 
         ff_hr = round(ff, 4) if ff is not None else 0.0
@@ -387,7 +475,7 @@ def schedule(parsed: ParsedSchedule) -> ParsedSchedule:
                 continue
             pES = pred.early_start_date
             pEF = pred.early_end_date
-            aES = act.early_start_date
+            aES = remaining_start(act)
             aEF = act.early_end_date
 
             if rel_type == "PR_FS" and pEF and aES:

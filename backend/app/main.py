@@ -30,6 +30,7 @@ from app.api.routes import (
     saved_activity_filters,
     schedule_changes,
     schedule_imports,
+    simulations,
     subcontractor_organizations,
     sync,
     team,
@@ -109,6 +110,7 @@ app.include_router(schedule_changes.router)
 app.include_router(float_path.router)
 app.include_router(reports.router)
 app.include_router(portfolio.router)
+app.include_router(simulations.router)
 
 
 @app.get("/healthz")
