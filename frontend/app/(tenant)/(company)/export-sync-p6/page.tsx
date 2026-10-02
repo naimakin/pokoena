@@ -187,7 +187,7 @@ export default function ExportSyncP6Page() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = filename ?? `${project.code}.xer`;
+      link.download = filename ?? nextFilename;
       document.body.appendChild(link);
       link.click();
       link.remove();

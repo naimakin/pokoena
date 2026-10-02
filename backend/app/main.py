@@ -71,6 +71,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The API is cross-origin from the app, and a browser hides every response
+    # header outside the CORS-safelisted set from scripts. The export's
+    # Content-Disposition carries the file name (HER01-EXP-7.xer); unexposed,
+    # the page never saw it and every download fell back to the same name.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth.router)
