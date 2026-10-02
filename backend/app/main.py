@@ -20,6 +20,7 @@ from app.api.routes import (
     password_reset,
     platform,
     platform_auth,
+    portfolio,
     project_status,
     projects,
     recovery_plans,
@@ -107,6 +108,7 @@ app.include_router(saved_activity_filters.router)
 app.include_router(schedule_changes.router)
 app.include_router(float_path.router)
 app.include_router(reports.router)
+app.include_router(portfolio.router)
 
 
 @app.get("/healthz")

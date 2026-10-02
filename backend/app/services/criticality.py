@@ -92,7 +92,7 @@ class Criticality:
     breakdown: dict[str, int]
 
 
-def _shown_dates(a: Activity) -> tuple[Optional[date], Optional[date]]:
+def shown_dates(a: Activity) -> tuple[Optional[date], Optional[date]]:
     """The Start/Finish P6 shows (frontend lib/schedule-dates.ts): actual
     once it exists, early (scheduled) before that."""
     planned_start = a.early_start or a.planned_start
@@ -111,7 +111,7 @@ def _span_days(start: Optional[date], finish: Optional[date]) -> Optional[int]:
 def activity_span_days(a: Activity) -> float:
     if a.task_type in MILESTONE_TYPES:
         return 0.0
-    span = _span_days(*_shown_dates(a))
+    span = _span_days(*shown_dates(a))
     if span is not None:
         return float(span)
     return (a.target_duration_hours or 0.0) / activity_hours_per_day(a)

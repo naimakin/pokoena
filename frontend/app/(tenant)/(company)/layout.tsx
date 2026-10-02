@@ -82,7 +82,7 @@ const TOP_SECTIONS: NavSection[] = [
     visible: always,
     children: [
       { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
-      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always, planned: true },
+      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always },
     ],
   },
   {
