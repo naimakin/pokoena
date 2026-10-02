@@ -1757,51 +1757,48 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .sim-now{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem}
 .sim-now-dates{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;font-family:var(--font-mono);font-size:.71875rem;color:var(--text-secondary)}
 .sim-now-dates .icon{width:11px;height:11px;color:var(--text-tertiary)}
-.sim-edit{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
-.sim-edit select,.sim-edit input{height:var(--control-h-sm);padding-block:0;font-size:.75rem}
-.sim-edit select{min-width:170px;width:auto}
-.sim-edit input[type="number"]{width:76px;font-family:var(--font-mono)}
-.sim-edit input[type="date"]{width:auto}
-.sim-edit-label{font-size:.6875rem;font-weight:600;color:var(--text-secondary)}
-.sim-edit-unit{font-size:.75rem;color:var(--text-muted)}
-.sim-edit-quick{display:inline-flex;gap:.15rem}
-.sim-edit-hint{flex-basis:100%;font-size:.6875rem;color:var(--text-muted)}
-.sim-edit-hint b{font-family:var(--font-mono);font-weight:600;color:var(--text-secondary)}
 .sim-row-error{flex-basis:100%;font-size:.6875rem;font-weight:600;color:var(--crit)}
 .sim-changes tbody tr.has-error{box-shadow:inset 3px 0 0 var(--crit-line)}
+.sim-cell-id{font-size:.75rem;color:var(--text-secondary);white-space:nowrap}
+.sim-cell-change{font-size:.75rem;color:var(--text-secondary);min-width:180px}
+.sim-row-actions{display:flex;gap:.3rem;justify-content:flex-end}
+.sim-link{font:inherit;font-weight:600;color:var(--accent);text-align:left}
+.sim-link:hover{color:var(--accent-strong);text-decoration:underline}
 .sim-remove{color:var(--text-muted)}
 .sim-remove:hover:not(:disabled){background:var(--surface-2);border-color:transparent;color:var(--text-primary)}
 
-/* activity picker (combobox) */
-.sim-add{padding:.75rem 1.1rem;border-top:1px solid var(--border)}
-.sim-picker{position:relative;max-width:560px}
-.sim-picker input{height:var(--control-h)}
-.sim-picker-list{
-  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;max-height:min(360px,50vh);overflow-y:auto;
-  padding:.3rem;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-md);
-}
-.sim-picker-opt{
-  display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:.6rem;
-  padding:.4rem .5rem;border-radius:var(--radius-sm);font-size:.8125rem;cursor:pointer;
-  transition:background var(--dur-1) var(--ease);
-}
-.sim-picker-opt:hover{background:var(--surface-2)}
-.sim-picker-opt[aria-selected="true"]{background:var(--accent-soft)}
-.sim-picker-opt[aria-disabled="true"]{cursor:default;opacity:.5}
-.sim-picker-id{font-family:var(--font-mono);font-size:.71875rem;color:var(--text-muted)}
-.sim-picker-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sim-picker-date{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted)}
-.sim-picker-empty{padding:.6rem .5rem;font-size:.75rem;color:var(--text-muted)}
-
-/* run bar: sticks to the bottom of the viewport while the setup card is in view */
+/* run bar: the last thing on the page, so it sticks to the bottom of the
+   screen while the programme grid above it is being edited */
 .sim-runbar{
-  position:sticky;bottom:0;z-index:6;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
-  padding:.75rem 1.1rem;background:var(--surface);border-top:1px solid var(--border);
-  border-radius:0 0 var(--radius-lg) var(--radius-lg);
+  position:sticky;bottom:.75rem;z-index:6;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
+  padding:.7rem 1.1rem;background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-md);
 }
 .sim-runbar-summary{flex:1;min-width:0;font-size:.75rem;color:var(--text-secondary)}
 .sim-runbar-summary b{font-weight:600;color:var(--text-primary)}
 .sim-kbd{font-family:var(--font-mono);font-size:.625rem;font-weight:500;padding:0 .3rem;border-radius:var(--radius-xs);border:1px solid currentColor;opacity:.7}
+
+/* programme grid (Project Activities' WBS grid) */
+.sim-programme .table-wrap{max-height:min(640px,70vh);overflow:auto}
+.sim-level{width:auto}
+.progress-grid tbody tr.sim-row-changed{background:var(--info-soft);box-shadow:inset 3px 0 0 var(--info)}
+.sim-changed-chip{margin-left:.35rem}
+.sim-muted{color:var(--text-tertiary)}
+.sim-simfin{display:inline-flex;align-items:baseline;gap:.4rem;white-space:nowrap}
+.sim-col-stale{opacity:.5}
+
+/* activity editor (scenario only) */
+.sim-modal{max-width:640px}
+.sim-modal-head{align-items:flex-start}
+.sim-modal-now{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin-top:.45rem;font-size:.75rem;color:var(--text-muted)}
+.sim-modal-now .mono{font-size:.75rem;color:var(--text-secondary)}
+.sim-modal-note{font-size:.75rem;color:var(--text-muted)}
+.sim-modal-later{display:flex;flex-direction:column;gap:.55rem;padding-top:.85rem;border-top:1px solid var(--border)}
+.sim-modal-later-title{font-size:.75rem;font-weight:700;color:var(--text-primary)}
+.sim-modal-inline{display:flex;align-items:center;gap:.25rem}
+.sim-modal-inline input{width:84px}
+.sim-field-hint{font-size:.6875rem;font-weight:400;color:var(--text-muted)}
+.sim-modal-remove{margin-right:auto}
 
 /* results */
 .sim-results{display:flex;flex-direction:column;gap:1rem;scroll-margin-top:1rem;transition:opacity var(--dur-1) var(--ease)}
@@ -1899,14 +1896,8 @@ tbody tr.sim-chain-row,tbody tr.sim-chain-row:hover{background:var(--surface-2)}
   .sim-moved .sim-col-start{display:none}
 }
 @media (max-width:720px){
-  /* the changes table becomes stacked rows */
-  .sim-changes thead{display:none}
-  .sim-changes tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;padding:.75rem .85rem;border-bottom:1px solid var(--border)}
-  .sim-changes tbody td{padding:0;border:0}
-  .sim-changes td.sim-cell-act{grid-column:1;grid-row:1}
-  .sim-changes td.sim-cell-remove{grid-column:2;grid-row:1}
-  .sim-changes td.sim-cell-now,.sim-changes td.sim-cell-edit{grid-column:1 / -1}
   .sim-runbar .btn{flex:1;justify-content:center}
+  .sim-modal-inline{flex-wrap:wrap}
   .sim-search{width:100%}
   .sim-toolbar-count{margin-left:0}
   .sim-ms-axis{display:none}

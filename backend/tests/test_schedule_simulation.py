@@ -289,3 +289,44 @@ def test_another_tenant_cannot_reach_a_scenario(client, db_session):
 
     assert client.get(f"/projects/{project.id}/simulations/scenarios").status_code in (403, 404)
     assert client.delete(f"/projects/{project.id}/simulations/scenarios/{sid}").status_code in (403, 404)
+
+
+# --- "progress": an activity edited the way Project Activities edits it -------
+
+
+def test_progress_edit_matches_the_single_field_changes(client, db_session):
+    _, project = _setup(client, db_session)
+
+    done = _run(client, project, [{"external_id": "A100", "kind": "progress", "status": "complete"}], data_date="2026-01-06")
+    assert _by_id(done)["A100"]["finish_after"] == "2026-01-06"
+    assert _by_id(done)["A100"]["driver"]["summary"] == "Completed on 06-Jan-2026"
+
+    half = _run(
+        client,
+        project,
+        [{"external_id": "A200", "kind": "progress", "status": "in_progress", "percent_complete": 50, "remaining_days": 20 / 9}],
+        data_date="2026-01-06",
+    )
+    assert _by_id(half)["A200"]["finish_after"] == "2026-01-09"
+    assert any(w["code"] == "out_of_sequence" for w in half["warnings"])
+
+    later = _run(client, project, [{"external_id": "A200", "kind": "progress", "status": "not_started", "finish_delay_days": 2}])
+    assert _by_id(later)["A600"]["finish_after"] == "2026-01-16"
+
+    expected = _run(client, project, [{"external_id": "A300", "kind": "progress", "status": "not_started", "expected_finish": "2026-01-20"}])
+    assert _by_id(expected)["A600"]["finish_after"] == "2026-01-20"
+
+
+def test_progress_edit_on_a_milestone_and_its_checks(client, db_session):
+    _, project = _setup(client, db_session)
+
+    achieved = _run(client, project, [{"external_id": "A600", "kind": "progress", "status": "complete", "actual_finish": "2026-01-05"}])
+    assert _by_id(achieved)["A600"]["status_after"] == "complete"
+
+    for edit in (
+        {"external_id": "A600", "kind": "progress", "status": "in_progress"},
+        {"external_id": "A200", "kind": "progress", "status": "in_progress", "percent_complete": 100},
+        {"external_id": "A200", "kind": "progress", "status": "complete", "actual_finish": "2026-02-01"},
+    ):
+        body = _run(client, project, [edit], status=422)
+        assert body["detail"]["code"] == "invalid_edits", edit

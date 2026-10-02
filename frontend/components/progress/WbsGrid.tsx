@@ -22,6 +22,7 @@ export function WbsGrid({
   renderActivityCells,
   onActivityClick,
   sortWithinBand,
+  rowClassName,
   emptyLabel = "No activities match the current filter.",
 }: {
   nodes: WbsNode[];
@@ -38,6 +39,9 @@ export function WbsGrid({
   // external-id order (e.g. "sort by float" in Status & Dates). Left unset,
   // ordering is unchanged.
   sortWithinBand?: (a: Activity, b: Activity) => number;
+  // Extra class on an activity row (e.g. Schedule Simulation marks the ones
+  // changed in the scenario).
+  rowClassName?: (activity: Activity) => string | undefined;
   emptyLabel?: string;
 }) {
   const knownWbsIds = new Set(nodes.map((n) => n.wbs_id));
@@ -103,6 +107,7 @@ export function WbsGrid({
             const classes = [
               !isFinished && a.is_critical ? "critical" : "",
               onActivityClick ? "pg-row-open" : "",
+              rowClassName?.(a) ?? "",
             ]
               .filter(Boolean)
               .join(" ");

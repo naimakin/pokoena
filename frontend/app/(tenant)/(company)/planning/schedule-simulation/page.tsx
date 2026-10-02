@@ -1,9 +1,9 @@
 "use client";
 
-// Planning > Schedule Simulation: try hypothetical changes (mark an activity
-// complete, push its finish out three weeks, change what's left of it) against
-// a copy of the current programme at a chosen data date, and see what moves,
-// by how much, and why. Runs are read-only on the server
+// Planning > Schedule Simulation: edit activities the way Project Activities
+// does (mark one complete, change its %, push its finish out three weeks) on a
+// copy of the current programme at a chosen data date, and see what moves, by
+// how much, and why. Runs are read-only on the server
 // (backend/app/services/schedule_simulation.py); scenarios can be saved.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,15 +13,24 @@ import { PageState } from "@/components/PageShell";
 import { useToast } from "@/components/Toast";
 import { AlertTriangleIcon, PencilIcon, TrashIcon } from "@/components/icons";
 import { NoProjectIllo, UploadScheduleIllo } from "@/components/illustrations";
-import { ScenarioSetup } from "@/components/simulation/ScenarioSetup";
+import { ProgrammeGrid } from "@/components/simulation/ProgrammeGrid";
+import { RunBar, ScenarioSetup, type Change } from "@/components/simulation/ScenarioSetup";
+import { SimActivityModal } from "@/components/simulation/SimActivityModal";
 import { SimResults } from "@/components/simulation/SimResults";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
+import type { Activity, WbsNode } from "@/lib/types";
 import {
+  daysBetween,
   isSimErrorDetail,
+  liveDraft,
   runKey,
   signedDays,
-  validateEdit,
+  SUMMARY_TYPES,
+  toDraft,
+  toEdit,
+  validateDraft,
+  type Draft,
   type SimContext,
   type SimEdit,
   type SimResult,
@@ -39,6 +48,9 @@ export default function ScheduleSimulationPage() {
   const router = useRouter();
 
   const [ctx, setCtx] = useState<SimContext | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [nodes, setNodes] = useState<WbsNode[]>([]);
+  const [editing, setEditing] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [scenarios, setScenarios] = useState<SimScenario[]>([]);
@@ -73,12 +85,17 @@ export default function ScheduleSimulationPage() {
     setEdits([]);
     loadedFromUrl.current = false;
     Promise.all([
-      api.get<SimContext>(`/projects/${project.id}/simulations/context`),
+      api.get<SimContext>(`/projects/${project.id}/simulations/context?include_activities=false`),
       api.get<SimScenario[]>(`/projects/${project.id}/simulations/scenarios`),
+      api.get<Activity[]>(`/activities?project_id=${project.id}`),
+      api.get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`),
     ])
-      .then(([c, s]) => {
+      .then(([c, s, acts, wbs]) => {
         setCtx(c);
         setScenarios(s);
+        // Summary / level-of-effort activities follow the others; they aren't edited here.
+        setActivities(acts.filter((a) => !SUMMARY_TYPES.has(a.task_type ?? "")));
+        setNodes(wbs);
         setSimDate(c.current_data_date ?? "");
         setSavedKey(runKey(c.current_data_date ?? "", []));
       })
@@ -86,16 +103,28 @@ export default function ScheduleSimulationPage() {
       .finally(() => setLoading(false));
   }, [project]);
 
-  const activitiesById = useMemo(() => new Map((ctx?.activities ?? []).map((a) => [a.external_id, a])), [ctx]);
+  const activitiesById = useMemo(() => new Map(activities.map((a) => [a.external_id, a])), [activities]);
   const currentDD = ctx?.current_data_date ?? "";
   const key = runKey(simDate, edits);
   const dirty = savedKey !== null && key !== savedKey;
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
 
+  // The scenario as drafts: what each changed activity looks like in it.
+  const drafts = useMemo(() => {
+    const m = new Map<string, Draft>();
+    for (const e of edits) {
+      const a = activitiesById.get(e.external_id);
+      if (a) m.set(e.external_id, toDraft(e, a, simDate));
+    }
+    return m;
+  }, [edits, activitiesById, simDate]);
+
   const errors = useMemo(() => {
     const m = new Map<string, string>();
     for (const e of edits) {
-      const msg = validateEdit(e, activitiesById.get(e.external_id), simDate);
+      const a = activitiesById.get(e.external_id);
+      const d = drafts.get(e.external_id);
+      const msg = !a || !d ? "This activity isn't in the current programme any more." : validateDraft(a, d, simDate);
       if (msg) m.set(e.external_id, msg);
     }
     // A server-side rejection stands until that row is edited.
@@ -103,7 +132,29 @@ export default function ScheduleSimulationPage() {
       if (!m.has(id) && ranKey === key) m.set(id, msg);
     });
     return m;
-  }, [edits, activitiesById, simDate, serverErrors, ranKey, key]);
+  }, [edits, activitiesById, drafts, simDate, serverErrors, ranKey, key]);
+
+  const changes: Change[] = edits.map((e) => ({
+    external_id: e.external_id,
+    activity: activitiesById.get(e.external_id),
+    draft: drafts.get(e.external_id) ?? null,
+    error: errors.get(e.external_id) ?? null,
+  }));
+
+  function applyDraft(a: Activity, d: Draft) {
+    const edit = toEdit(a, d);
+    setEdits((prev) =>
+      prev.some((e) => e.external_id === a.external_id)
+        ? prev.map((e) => (e.external_id === a.external_id ? edit : e))
+        : [...prev, edit],
+    );
+    setEditing(null);
+  }
+
+  function removeEdit(externalId: string) {
+    setEdits((prev) => prev.filter((e) => e.external_id !== externalId));
+    setEditing(null);
+  }
 
   const canRun = Boolean(ctx?.has_schedule && currentDD) && errors.size === 0 && (edits.length > 0 || simDate !== currentDD);
 
@@ -111,7 +162,7 @@ export default function ScheduleSimulationPage() {
   const loadScenario = useCallback(
     (s: SimScenario | null) => {
       const dd = s?.simulation_data_date && s.simulation_data_date >= currentDD ? s.simulation_data_date : currentDD;
-      const nextEdits = (s?.edits ?? []).map((e) => ({ ...e, actual_start: e.actual_start ?? null }));
+      const nextEdits = s?.edits ?? [];
       setScenarioId(s?.id ?? null);
       setSimDate(dd);
       setEdits(nextEdits);
@@ -384,16 +435,10 @@ export default function ScheduleSimulationPage() {
           revisionLabel={ctx.revision_label}
           simDate={simDate}
           onSimDate={setSimDate}
-          edits={edits}
-          activitiesById={activitiesById}
-          activities={ctx.activities}
-          errors={errors}
+          changes={changes}
           dirty={dirty && (scenario !== null || edits.length > 0)}
-          running={running}
-          canRun={canRun}
-          onEdits={setEdits}
-          onRun={run}
-          onReset={reset}
+          onEdit={setEditing}
+          onRemove={removeEdit}
         />
 
         {runError && (
@@ -430,7 +475,38 @@ export default function ScheduleSimulationPage() {
         {result && (
           <SimResults result={result} stale={stale} running={running} projectCode={project.code} onRerun={run} />
         )}
+
+        <ProgrammeGrid
+          activities={activities}
+          nodes={nodes}
+          drafts={drafts}
+          result={result}
+          stale={stale}
+          onOpen={setEditing}
+        />
+
+        <RunBar
+          changes={edits.length}
+          shift={currentDD && simDate ? daysBetween(currentDD, simDate) : 0}
+          running={running}
+          canRun={canRun}
+          onRun={run}
+          onReset={reset}
+        />
       </div>
+
+      {editing && (
+        <SimActivityModal
+          key={editing.external_id}
+          activity={editing}
+          draft={drafts.get(editing.external_id) ?? liveDraft(editing)}
+          simDate={simDate}
+          inScenario={drafts.has(editing.external_id)}
+          onApply={(d) => applyDraft(editing, d)}
+          onRemove={() => removeEdit(editing.external_id)}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       {modal && (
         <div className="modal-overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && setModal(null)}>

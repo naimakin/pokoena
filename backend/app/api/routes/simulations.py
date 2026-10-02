@@ -24,7 +24,9 @@ from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/simulations", tags=["simulations"])
 
-EditKind = Literal["complete", "actual_start", "percent_complete", "remaining_duration", "finish_delay", "finish_on"]
+EditKind = Literal[
+    "progress", "complete", "actual_start", "percent_complete", "remaining_duration", "finish_delay", "finish_on"
+]
 _DATE_KINDS = {"complete", "actual_start", "finish_on"}
 
 
@@ -35,6 +37,13 @@ class SimEditIn(BaseModel):
     # otherwise: percent 0-100, or days in the activity's own calendar days.
     value: Optional[Union[float, str]] = None
     actual_start: Optional[date] = None
+    # kind="progress": the activity edited as in Project Activities.
+    status: Optional[Literal["not_started", "in_progress", "complete"]] = None
+    actual_finish: Optional[date] = None
+    percent_complete: Optional[float] = None
+    remaining_days: Optional[float] = None
+    expected_finish: Optional[date] = None
+    finish_delay_days: Optional[float] = None
 
 
 class SimRunIn(BaseModel):
@@ -70,7 +79,9 @@ def _company_edit(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
 
 def _to_edit(e: SimEditIn) -> sim.SimEdit:
     value: float | date | None
-    if e.kind in _DATE_KINDS:
+    if e.kind == "progress":
+        value = None
+    elif e.kind in _DATE_KINDS:
         if e.value in (None, ""):
             value = None
         else:
@@ -90,7 +101,18 @@ def _to_edit(e: SimEditIn) -> sim.SimEdit:
             value = None if e.value in (None, "") else float(e.value)
         except (TypeError, ValueError):
             value = None
-    return sim.SimEdit(external_id=e.external_id, kind=e.kind, value=value, actual_start=e.actual_start)
+    return sim.SimEdit(
+        external_id=e.external_id,
+        kind=e.kind,
+        value=value,
+        actual_start=e.actual_start,
+        status=e.status,
+        actual_finish=e.actual_finish,
+        percent_complete=e.percent_complete,
+        remaining_days=e.remaining_days,
+        expected_finish=e.expected_finish,
+        finish_delay_days=e.finish_delay_days,
+    )
 
 
 def _can_change(row: ScheduleSimulation, ctx: AuthContext) -> bool:
@@ -132,7 +154,10 @@ def _names(db: Session, rows: list[ScheduleSimulation]) -> dict:
 
 @router.get("/context")
 def simulation_context(
-    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+    project_id: uuid.UUID,
+    include_activities: bool = True,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> dict:
     """What the page builds a scenario from: the current data date and the
     current programme's activities as the live schedule shows them."""
@@ -145,7 +170,9 @@ def simulation_context(
         "revision_label": current.revision_label if current is not None else None,
         "imported_at": current.imported_at.isoformat() if current is not None and current.imported_at else None,
         "current_data_date": dd.date().isoformat() if dd else None,
-        "activities": sim.picker_activities(db, ctx.tenant_id, project_id) if current is not None else [],
+        "activities": (
+            sim.picker_activities(db, ctx.tenant_id, project_id) if current is not None and include_activities else []
+        ),
     }
 
 
@@ -205,7 +232,7 @@ def create_scenario(
         project_id=project_id,
         name=body.name.strip(),
         simulation_data_date=body.simulation_data_date,
-        edits=[e.model_dump(mode="json") for e in body.edits],
+        edits=[e.model_dump(mode="json", exclude_none=True) for e in body.edits],
         schedule_import_id=current.id if current else None,
         revision_label=current.revision_label if current else None,
         created_by_user_id=ctx.user.id,
@@ -234,7 +261,7 @@ def update_scenario(
     if "simulation_data_date" in fields:
         row.simulation_data_date = body.simulation_data_date
     if body.edits is not None:
-        row.edits = [e.model_dump(mode="json") for e in body.edits]
+        row.edits = [e.model_dump(mode="json", exclude_none=True) for e in body.edits]
     db.commit()
     db.refresh(row)
     current = get_current_import(db, ctx.tenant_id, project_id)

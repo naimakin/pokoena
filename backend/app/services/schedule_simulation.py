@@ -63,8 +63,10 @@ from app.parser.xer_models import ParsedSchedule, ProjectMeta, Relationship
 from app.services.risk_network import current_programme_activities
 from app.services.schedule_current import get_current_import, to_naive
 
-EDIT_KINDS = ("complete", "actual_start", "percent_complete", "remaining_duration", "finish_delay", "finish_on")
-MILESTONE_EDIT_KINDS = ("complete", "finish_delay", "finish_on")
+EDIT_KINDS = (
+    "progress", "complete", "actual_start", "percent_complete", "remaining_duration", "finish_delay", "finish_on",
+)
+MILESTONE_EDIT_KINDS = ("progress", "complete", "finish_delay", "finish_on")
 MAX_EDITS = 200
 MAX_ROWS = 2000
 
@@ -119,14 +121,28 @@ class SimulationError(ValueError):
 
 @dataclass
 class SimEdit:
-    """One hypothetical change. `value` is a date for complete / actual_start /
-    finish_on, a number for the rest: percent 0-100, or days in the activity's
-    OWN calendar days (remaining_duration, finish_delay — working days)."""
+    """One hypothetical change.
+
+    kind="progress" is the activity edited the way Project Activities edits it
+    — any of status, actual start / finish, % complete, remaining duration —
+    plus P6's Expected Finish or "finishes N working days later". Days are the
+    activity's OWN calendar days.
+
+    The single-field kinds (complete, actual_start, percent_complete,
+    remaining_duration, finish_delay, finish_on) carry their one input in
+    `value`: a date for complete / actual_start / finish_on, a number for the
+    rest."""
 
     external_id: str
     kind: str
     value: float | date | None = None
     actual_start: Optional[date] = None
+    status: Optional[str] = None  # not_started / in_progress / complete
+    actual_finish: Optional[date] = None
+    percent_complete: Optional[float] = None
+    remaining_days: Optional[float] = None
+    expected_finish: Optional[date] = None
+    finish_delay_days: Optional[float] = None
 
 
 @dataclass
@@ -350,7 +366,33 @@ def simulation_datetime(src: SimSource, sim_date: Optional[date]) -> datetime:
     return datetime.combine(sim_date, src.data_date.time())
 
 
-def _edit_summary(edit: SimEdit, is_milestone: bool, sim_dd: datetime) -> str:
+def _progress_summary(edit: SimEdit, act: EngineActivity, is_milestone: bool, sim_dd: datetime) -> str:
+    parts = []
+    status = edit.status or _STATUS_OF_CODE.get(act.status_code)
+    if status == "complete":
+        on = edit.actual_finish or edit.actual_start or sim_dd
+        parts.append(f"{'Achieved' if is_milestone else 'Completed'} on {p6_date(on)}")
+    elif status == "in_progress":
+        parts.append(f"In progress since {p6_date(edit.actual_start)}" if edit.actual_start else "In progress")
+        if edit.percent_complete is not None:
+            parts.append(f"{edit.percent_complete:g}%")
+        if edit.remaining_days is not None:
+            parts.append(f"{_fmt_days(edit.remaining_days)} remaining")
+    else:
+        parts.append("Not started")
+        if edit.remaining_days is not None:
+            parts.append(f"{_fmt_days(edit.remaining_days)} duration")
+    if edit.expected_finish is not None:
+        parts.append(f"{'moved to' if is_milestone else 'expected finish'} {p6_date(edit.expected_finish)}")
+    if edit.finish_delay_days:
+        d = edit.finish_delay_days
+        parts.append(f"{'+' if d > 0 else '−'}{_fmt_days(abs(d))} later")
+    return ", ".join(parts)
+
+
+def _edit_summary(edit: SimEdit, is_milestone: bool, sim_dd: datetime, act: Optional[EngineActivity] = None) -> str:
+    if edit.kind == "progress" and act is not None:
+        return _progress_summary(edit, act, is_milestone, sim_dd)
     if edit.kind == "complete":
         on = edit.value or sim_dd  # no date: at the simulation data date
         return f"{'Achieved' if is_milestone else 'Marked complete'} on {p6_date(on)}"  # type: ignore[arg-type]
@@ -365,6 +407,31 @@ def _edit_summary(edit: SimEdit, is_milestone: bool, sim_dd: datetime) -> str:
         sign = "+" if days >= 0 else "−"
         return f"{'Moved' if is_milestone else 'Finish moved'} by {sign}{_fmt_days(abs(days))}"
     return f"{'Moved to' if is_milestone else 'Finish on'} {p6_date(edit.value)}"  # type: ignore[arg-type]
+
+
+def _progress_error(e: SimEdit, act: EngineActivity, milestone: bool, sim_dd: datetime) -> Optional[str]:
+    sim_day = sim_dd.date()
+    status = e.status or _STATUS_OF_CODE.get(act.status_code)
+    if status not in ("not_started", "in_progress", "complete"):
+        return "Pick a status."
+    if milestone and status == "in_progress":
+        return "A milestone is never in progress: it's achieved on its one date, or not yet."
+    for d in (e.actual_start, e.actual_finish):
+        if d is not None and d > sim_day:
+            return f"Actual dates can't be after the simulation data date ({p6_date(sim_dd)})."
+    if not milestone and e.actual_start and e.actual_finish and e.actual_finish < e.actual_start:
+        return "Actual Finish is before Actual Start."
+    if e.percent_complete is not None and not 0 <= e.percent_complete <= 100:
+        return "% complete must be between 0 and 100."
+    if status == "in_progress" and e.percent_complete is not None and e.percent_complete >= 100:
+        return "100% is complete: set the status to Completed."
+    if e.remaining_days is not None and e.remaining_days < 0:
+        return "Remaining duration can't be negative."
+    if status != "complete" and e.expected_finish is not None and e.expected_finish <= sim_day:
+        return "Pick an expected finish after the simulation data date."
+    if milestone and e.finish_delay_days is not None and e.finish_delay_days < 0:
+        return "Move a milestone later only; its logic sets how early it can be."
+    return None
 
 
 def _validate(src: SimSource, edits: list[SimEdit], sim_dd: datetime) -> None:
@@ -390,14 +457,19 @@ def _validate(src: SimSource, edits: list[SimEdit], sim_dd: datetime) -> None:
         if e.kind not in EDIT_KINDS:
             err(e, f"Unknown change type {e.kind!r}.")
             continue
+        milestone = act.task_type in MILESTONE_TYPES
+        sim_day = sim_dd.date()
+        if e.kind == "progress":
+            message = _progress_error(e, act, milestone, sim_dd)
+            if message:
+                err(e, message)
+            continue
         if act.status_code == "TK_Complete":
             err(e, "This activity is already complete in the live schedule.")
             continue
-        milestone = act.task_type in MILESTONE_TYPES
         if milestone and e.kind not in MILESTONE_EDIT_KINDS:
             err(e, "A milestone has one date: mark it achieved, or move it.")
             continue
-        sim_day = sim_dd.date()
         if e.kind in ("complete", "actual_start", "finish_on"):
             if e.value is not None and not isinstance(e.value, date):
                 err(e, "Pick a date.")
@@ -441,6 +513,73 @@ def _set_floor(act: EngineActivity, at: datetime) -> None:
         act.cstr_type2, act.cstr_date2 = ctype, at
 
 
+def _apply_progress(act: EngineActivity, e: SimEdit, cal: CalendarEngine, hpd: float, milestone: bool,
+                    sim_dd: datetime, ref: EngineActivity) -> None:
+    """An activity edited as in Project Activities: the status picks which of
+    the dates count (routes/activities.py::_derive_status), % sets the
+    remaining duration unless a remaining duration is given
+    (activity_progress.apply_progress_entry), and an Expected Finish or a
+    delay then stretches what's left."""
+    status = e.status or _STATUS_OF_CODE[act.status_code]
+    if status == "complete":
+        if milestone:
+            day = e.actual_finish or e.actual_start
+            act_end = min(_work_end(cal, day), sim_dd) if day else sim_dd
+            act_start = act_end
+        else:
+            act_end = min(_work_end(cal, e.actual_finish), sim_dd) if e.actual_finish else sim_dd
+            if e.actual_start is not None:
+                act_start = min(_work_start(cal, e.actual_start), act_end)
+            elif act.act_start_date is not None:
+                act_start = min(act.act_start_date, act_end)
+            else:
+                act_start = min(ref.early_start_date or act_end, act_end)
+        act.act_start_date, act.act_end_date = act_start, act_end
+        act.status_code = "TK_Complete"
+        act.remain_drtn_hr_cnt = 0.0
+        act.phys_complete_pct = 100.0
+        act.expect_end_date = None
+        return
+
+    was_complete = act.status_code == "TK_Complete"
+    act.act_end_date = None
+    if status == "in_progress":
+        if e.actual_start is not None:
+            act.act_start_date = min(_work_start(cal, e.actual_start), sim_dd)
+        elif act.act_start_date is None:
+            act.act_start_date = sim_dd
+        act.status_code = "TK_Active"
+    else:
+        act.act_start_date = None
+        act.status_code = "TK_NotStart"
+
+    target = act.target_drtn_hr_cnt or 0.0
+    if e.remaining_days is not None:
+        act.remain_drtn_hr_cnt = e.remaining_days * hpd
+    elif e.percent_complete is not None and status == "in_progress":
+        act.remain_drtn_hr_cnt = round(target * (1 - e.percent_complete / 100), 4)
+    elif status == "not_started" and (was_complete or act.remain_drtn_hr_cnt <= 0):
+        act.remain_drtn_hr_cnt = target
+    elif was_complete:
+        act.remain_drtn_hr_cnt = target
+    if e.percent_complete is not None:
+        act.phys_complete_pct = e.percent_complete
+    elif status == "not_started":
+        act.phys_complete_pct = 0.0
+
+    if milestone:
+        if e.expected_finish is not None:
+            _set_floor(act, _work_start(cal, e.expected_finish) if act.task_type == START_MILESTONE else _work_end(cal, e.expected_finish))
+        elif e.finish_delay_days:
+            at = (ref.early_start_date if act.task_type == START_MILESTONE else ref.early_end_date) or sim_dd
+            _set_floor(act, cal.add_work_hours(at, e.finish_delay_days * hpd))
+        return
+    if e.expected_finish is not None:
+        act.expect_end_date = _work_end(cal, e.expected_finish)
+    elif e.finish_delay_days:
+        act.remain_drtn_hr_cnt = max(0.0, act.remain_drtn_hr_cnt + e.finish_delay_days * hpd)
+
+
 def _apply(src: SimSource, acts: dict[str, EngineActivity], edits: list[SimEdit], sim_dd: datetime,
            unchanged: dict[str, EngineActivity]) -> None:
     """The progress rules of services/activity_progress.py, on the engine copy."""
@@ -449,7 +588,9 @@ def _apply(src: SimSource, acts: dict[str, EngineActivity], edits: list[SimEdit]
         cal = src.cal(act)
         hpd = src.hpd(act)
         milestone = act.task_type in MILESTONE_TYPES
-        if e.kind == "complete":
+        if e.kind == "progress":
+            _apply_progress(act, e, cal, hpd, milestone, sim_dd, unchanged[act.task_id])
+        elif e.kind == "complete":
             finish_day: date = e.value or sim_dd.date()  # type: ignore[assignment]
             act_end = min(_work_end(cal, finish_day), sim_dd)
             if milestone:
@@ -617,7 +758,7 @@ def run_simulation(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, sim
     def driver_of(tid: str, cause: Optional[tuple[str, str, float]]) -> dict:
         a = simulated[tid]
         if tid in edited:
-            return {"kind": "edit", "summary": _edit_summary(edit_of[tid], a.task_type in MILESTONE_TYPES, sim_dd)}
+            return {"kind": "edit", "summary": _edit_summary(edit_of[tid], a.task_type in MILESTONE_TYPES, sim_dd, a)}
         if a.driven_by == "logic" and a.driving_rels:
             rel = next((r for r in a.driving_rels if cause and r[0] == cause[0]), a.driving_rels[0])
             pred = simulated[rel[0]]
@@ -721,7 +862,10 @@ def run_simulation(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, sim
                         }
                     )
                     break
-        if e.kind in ("finish_on", "finish_delay") and a.task_type in MILESTONE_TYPES:
+        moves_milestone = e.kind in ("finish_on", "finish_delay") or (
+            e.kind == "progress" and (e.expected_finish is not None or bool(e.finish_delay_days))
+        )
+        if moves_milestone and a.task_type in MILESTONE_TYPES and a.status_code != "TK_Complete":
             wanted = a.cstr_date2 if a.cstr_type2 in ("CS_MSOA", "CS_MEOA") and a.cstr_date2 else a.cstr_date
             got = _moment(a)
             if wanted and got and abs(src.cal(a).work_hours_between(wanted, got)) > _TOL:
