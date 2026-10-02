@@ -23,7 +23,6 @@ const PLANNED: Record<string, Planned> = {
       { href: "/reporting/float-path", label: "Float Path" },
     ],
   },
-  "AI Schedule Builder": { section: "Planning", useToday: [{ href: "/project-files", label: "Program Library" }] },
   Documents: { section: "Planning", useToday: [{ href: "/project-files", label: "Program Library" }] },
   "My Focus": {
     section: "Execution",

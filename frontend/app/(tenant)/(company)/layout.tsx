@@ -97,7 +97,6 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
       { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
       { href: "/planning/schedule-simulation", label: "Schedule Simulation", icon: SimulationIcon, visible: always },
-      { href: "/planning/ai-schedule-builder", label: "AI Schedule Builder", icon: SparkleIcon, visible: always, planned: true },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
     ],
   },
