@@ -188,16 +188,23 @@ def _schedule_keeping_p6_values(parsed: ParsedSchedule) -> None:
     doesn't reproduce P6's figures to the hour (scheduling options, calendars,
     out-of-sequence handling all differ at the edges). So CPM still runs, for
     the network check (cycles) and the longest path, but its dates/float only
-    stand for an activity the file left unscheduled (no early dates at all).
-    A blank float on a scheduled row stays blank — P6 leaves it empty on
-    finished work."""
+    stand for a file P6 never scheduled.
+    A blank float or date on a scheduled file stays blank — P6 leaves float
+    empty on finished work, and an LOE's early dates empty once it's done.
+
+    Whether the file was scheduled by P6 at all is decided for the whole file
+    (any activity with early dates), not row by row: an unscheduled programme
+    takes Poko's CPM throughout, a scheduled one never has a P6 blank filled
+    in."""
     file_values = {a.task_id: {f: getattr(a, f) for f in _P6_SCHEDULE_FIELDS} for a in parsed.activities}
+    scheduled_by_p6 = any(
+        v["early_start_date"] is not None or v["early_end_date"] is not None for v in file_values.values()
+    )
     schedule(parsed)
+    if not scheduled_by_p6:
+        return
     for act in parsed.activities:
-        values = file_values[act.task_id]
-        if values["early_start_date"] is None and values["early_end_date"] is None:
-            continue
-        for field_name, value in values.items():
+        for field_name, value in file_values[act.task_id].items():
             setattr(act, field_name, value)
 
 

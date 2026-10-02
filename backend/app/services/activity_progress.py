@@ -3,18 +3,20 @@
 Things P6 would derive itself, and that the user reads in Poko before the file
 ever goes back to P6:
 
-  - A finished activity has no float: its total and free float are zero and it
-    is never critical (P6's own convention, and what the importer's
+  - A finished activity has no float: its total and free float are blank (as
+    P6 writes them) and it is never critical (P6's own convention, and what the importer's
     `_is_critical` already assumes).
   - Its RT_Labor assignments' units follow the entered %:
     act_reg_qty = target_qty x %, remain_qty = target_qty - act_reg_qty
     (their sum is TASK.act_work_qty on export). Material / equipment units and
     all costs are left alone — costs are the AC side of EVM, and deriving them
     from % would make actual cost equal earned value by construction.
-  - An activity without labor resources records the entered % as its physical
-    % (TASK.phys_complete_pct) and moves its remaining duration to match:
-    remain_drtn = target_drtn x (1 - %), so the duration % Poko shows for it
-    equals what was entered and the file P6 gets back says the same.
+  - The entered % is also the physical % (TASK.phys_complete_pct), and the
+    remaining duration moves to match: remain_drtn = target_drtn x (1 - %).
+    P6 shows an activity's % by its complete_pct_type — physical, duration or
+    units — so with all three moved together P6 opens the file showing the %
+    that was entered, whichever the activity uses; and the duration % Poko
+    shows for an activity without labor equals it too.
 
 What Poko shows as % (`Activity.percent_complete`) — `display_percent`:
 
@@ -106,7 +108,10 @@ def apply_progress_entry(
         activity.phys_complete_pct = 0.0
         if target is not None:
             activity.remaining_duration_hours = target
-    elif budget <= 0 and pct_entered:
+    elif pct_entered:
+        # Every measure P6 can show a % by (TASK.complete_pct_type: CP_Phys,
+        # CP_Drtn, CP_Units) moves together, so P6 opens the file showing the %
+        # that was entered whichever one the activity uses.
         pct = float(activity.percent_complete or 0)
         activity.phys_complete_pct = pct
         if target:
@@ -130,7 +135,8 @@ def apply_progress_entry(
 
 
 def clear_float_if_finished(activity: Activity) -> None:
+    """Finished work has no float: blank, as P6 writes it (not 0)."""
     if activity.status == ActivityStatus.complete:
-        activity.total_float_hours = 0.0
-        activity.free_float_hours = 0.0
+        activity.total_float_hours = None
+        activity.free_float_hours = None
         activity.is_critical = False

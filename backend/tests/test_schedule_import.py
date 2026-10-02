@@ -487,6 +487,8 @@ def test_import_keeps_p6_float_and_early_dates(client, db_session):
     assert a400["free_float_hours"] == 16
     assert a400["early_start"] == "2026-01-20"
     assert a400["early_finish"] == "2026-01-20"
-    # A row P6 never scheduled (no early dates) still gets Poko's CPM values.
-    assert by_code["A100"]["early_start"] == "2026-01-05"
-    assert by_code["A100"]["total_float_hours"] == 0
+    # The file is P6-scheduled, so what P6 left blank stays blank (an LOE's
+    # dates once done, a finished activity's float) — Poko's CPM only stands
+    # in for a file P6 never scheduled at all (the plain fixture, above).
+    assert by_code["A100"]["early_start"] is None
+    assert by_code["A100"]["total_float_hours"] is None

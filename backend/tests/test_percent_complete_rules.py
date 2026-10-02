@@ -140,3 +140,18 @@ def test_percent_entry_with_labor_resources_splits_labor_units_only(client, db_s
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (16, 24)
     assert by_budget[100].act_reg_qty == 0  # RT_Material
+
+
+def test_percent_on_a_not_started_activity_starts_it_on_the_data_date(client, db_session):
+    """P6 doesn't write a started activity without an actual start; a %
+    alone starts it where P6 would — on the data date."""
+    tenant, project = _setup(db_session)
+    _login(client)
+    _upload(client, project.id, SYNTHETIC.read_bytes())  # data date 2026-01-05
+    a300 = _activity(db_session, project.id, "A300")
+
+    body = client.patch(f"/activities/{a300.id}", json={"percent_complete": 30}).json()
+
+    assert body["status"] == "in_progress"
+    assert body["actual_start"] == "2026-01-05"
+    assert body["status_code"] == "TK_Active"

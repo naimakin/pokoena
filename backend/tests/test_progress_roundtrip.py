@@ -197,8 +197,9 @@ def test_actual_finish_zeroes_float_and_burns_all_units(client, db_session):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["total_float_hours"] == 0
-    assert body["free_float_hours"] == 0
+    # Finished work has no float — blank, as P6 writes it.
+    assert body["total_float_hours"] is None
+    assert body["free_float_hours"] is None
     assert body["is_critical"] is False
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (40, 0)
@@ -249,8 +250,8 @@ def test_export_writes_units_dates_and_zero_float_into_task_and_taskrsrc(client,
     task = next(r for r in _table(text, "TASK") if r["task_code"] == "A200")
     assert task["status_code"] == "TK_Complete"
     assert task["act_end_date"].startswith("2026-01-12")
-    assert task["total_float_hr_cnt"] == "0"
-    assert task["free_float_hr_cnt"] == "0"
+    assert task["total_float_hr_cnt"] == ""
+    assert task["free_float_hr_cnt"] == ""
     a200_assignments = {r["rsrc_id"]: r for r in _table(text, "TASKRSRC") if r["task_id"] == task["task_id"]}
     assert (a200_assignments["R1"]["act_reg_qty"], a200_assignments["R1"]["remain_qty"]) == ("40", "0")
     assert a200_assignments["R3"]["act_reg_qty"] == "0"  # RT_Material: units don't follow the %
@@ -304,7 +305,7 @@ def test_export_moves_the_assignment_dates_with_the_activity():
     assert (task_rows, updated) == (1, 1)
     tasks = {r["proj_id"]: r for r in _table(text, "TASK")}
     assert tasks["P1"]["act_end_date"] == "2026-05-15 17:00"
-    assert tasks["P1"]["total_float_hr_cnt"] == "0"
+    assert tasks["P1"]["total_float_hr_cnt"] == ""
     assert (tasks["P1"]["act_work_qty"], tasks["P1"]["remain_work_qty"]) == ("16", "0")
     # The baseline copy of K1 is left exactly as P6 wrote it.
     assert tasks["B1"]["status_code"] == "TK_NotStart"

@@ -168,7 +168,8 @@ def test_start_milestone_completes_on_start_date(client, db_session):
     body = client.patch(f"/activities/{a.id}", json={"actual_start": "2026-02-01"}).json()
     assert body["status"] == "complete"
     assert body["actual_start"] == "2026-02-01"
-    assert body["actual_finish"] is None
+    # P6 writes a milestone's one moment into both actual dates.
+    assert body["actual_finish"] == "2026-02-01"
     assert body["status_code"] == "TK_Complete"
 
 

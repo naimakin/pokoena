@@ -128,24 +128,41 @@ def test_non_ascii_names_survive_the_roundtrip():
     assert "Kazı işleri" in text
 
 
-def test_an_activity_with_no_progress_in_poko_is_left_exactly_as_p6_wrote_it():
-    # Import copies P6's actuals onto a row only when it first creates it, so on
-    # an untouched activity ours are stale while P6's file has moved on. Writing
-    # ours back would wipe real progress across the whole programme.
-    source = SOURCE.replace(
-        "%R\t80204\t396\tA1020\tUntouched\t0\tTK_NotStart\t8\t\t\t8",
-        "%R\t80204\t396\tA1020\tUntouched\t100\tTK_Complete\t0\t2026-01-05 08:00\t2026-01-09 17:00\t8",
+_UNTOUCHED_A1020 = "%R\t80204\t396\tA1020\tUntouched\t0\tTK_NotStart\t8\t\t\t8"
+_FINISHED_A1020 = "%R\t80204\t396\tA1020\tUntouched\t100\tTK_Complete\t0\t2026-01-05 08:00\t2026-01-09 17:00\t8"
+
+
+def test_an_activity_poko_agrees_with_is_left_exactly_as_p6_wrote_it():
+    # Same status, dates, % and remaining as the row: nothing to write, so the
+    # row goes back byte-for-byte (P6's own times, blanks and number format).
+    source = SOURCE.replace(_UNTOUCHED_A1020, _FINISHED_A1020)
+    finished = _activity(
+        "A1020",
+        percent_complete=100,
+        status=ActivityStatus.complete,
+        actual_start=date(2026, 1, 5),
+        actual_finish=date(2026, 1, 9),
+        remaining_duration_hours=0,
     )
-    out, task_rows, updated = rewrite_progress(source.encode("cp1254"), [_activity("A1020")])
-    text, _ = decode_xer(out)
+    out, task_rows, updated = rewrite_progress(source.encode("cp1254"), [finished])
 
     assert task_rows == 3
     assert updated == 0
+    assert out == source.encode("cp1254")
+
+
+def test_an_undo_in_poko_reaches_p6():
+    # The row says Complete, Poko put the activity back to Not Started: the
+    # row has to follow, or P6 keeps the progress the user took back.
+    source = SOURCE.replace(_UNTOUCHED_A1020, _FINISHED_A1020)
+    out, _count, updated = rewrite_progress(
+        source.encode("cp1254"), [_activity("A1020", remaining_duration_hours=8)]
+    )
+    text, _ = decode_xer(out)
+
+    assert updated == 1
     a1020 = _task_rows(text)["A1020"]
-    assert a1020[4] == "100"
-    assert a1020[5] == "TK_Complete"
-    assert a1020[7] == "2026-01-05 08:00"
-    assert a1020[8] == "2026-01-09 17:00"
+    assert (a1020[4], a1020[5], a1020[6], a1020[7], a1020[8]) == ("0", "TK_NotStart", "8", "", "")
 
 
 def test_crlf_line_endings_are_preserved():
@@ -172,3 +189,15 @@ def test_existing_time_of_day_is_preserved():
     text, _ = decode_xer(out)
 
     assert _task_rows(text)["A1000"][7] == "2026-03-03 06:30"
+
+
+def test_quantities_keep_their_precision():
+    # `:g` kept 6 significant digits: 22255.74 x 40% went out as 8902.3 +
+    # 13353.4, which no longer adds up to the budget P6 holds.
+    from app.engine.export.xer_progress import _num
+
+    assert _num(8902.296) == "8902.296"
+    assert _num(12613.637582) == "12613.637582"
+    assert _num(40.0) == "40"
+    assert _num(0.0) == "0"
+    assert _num(-0.0000001) == "0"

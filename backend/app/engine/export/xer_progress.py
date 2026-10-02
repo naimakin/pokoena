@@ -26,7 +26,7 @@ from datetime import date
 from typing import Iterable, Optional
 
 from app.engine.durations import activity_hours_per_day
-from app.models.activity import P6_STATUS_CODE, Activity, ActivityStatus
+from app.models.activity import FINISH_MILESTONE, MILESTONE_TYPES, P6_STATUS_CODE, Activity, ActivityStatus
 from app.models.resource import LABOR
 from app.parser.xer_parser import main_project_id
 
@@ -58,23 +58,51 @@ def _p6_datetime(value: Optional[date], existing: str, default_time: str) -> str
     return f"{value.isoformat()} {time_part or default_time}"
 
 
-def _has_poko_progress(activity: Activity) -> bool:
-    """Whether Poko holds an opinion about this activity's progress.
+def _num(value: float) -> str:
+    """A quantity the way P6 writes one: plain decimal, no exponent, no
+    trailing zeros, up to 6 places. (`:g` keeps only 6 SIGNIFICANT digits, so
+    22255.74 x 40% went out as 8902.3 / 13353.4 and the units no longer added
+    up to the budget.)"""
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
 
-    Import only copies P6's actual dates onto a row the first time it sees it —
-    after that they're subcontractor-owned and later imports leave them alone
-    (see services/xer_import.py). So on an activity nobody has touched in Poko,
-    our actuals are merely whatever the first import happened to carry, while
-    P6's file has since moved on. Writing ours back would quietly undo real
-    progress across the whole programme, so an untouched activity's row is
-    passed through exactly as P6 wrote it.
-    """
-    return (
-        (activity.percent_complete or 0) > 0
-        or activity.actual_start is not None
-        or activity.actual_finish is not None
-        or activity.status != ActivityStatus.not_started
-    )
+
+def _phys(activity: Activity) -> float:
+    phys = getattr(activity, "phys_complete_pct", None)
+    return float(activity.percent_complete or 0) if phys is None else float(phys)
+
+
+def _differs_from_row(cells: list[str], index: dict[str, int], activity: Activity) -> bool:
+    """Whether Poko's progress on this activity differs from what the file's
+    TASK row says. Only those rows are rewritten; every other row passes
+    through byte-for-byte as P6 wrote it. Comparing with the row (rather than
+    "has Poko any progress") is what lets an UNDO reach P6 — an activity put
+    back to Not Started has no progress of its own, but its row still says
+    Complete — and keeps untouched finished work from being re-serialized."""
+
+    def date_cell(column: str) -> str:
+        return _cell(cells, index, column)[:10]
+
+    def iso(value: Optional[date]) -> str:
+        return value.isoformat() if value else ""
+
+    if _cell(cells, index, "status_code") != P6_STATUS_CODE.get(activity.status, "TK_NotStart"):
+        return True
+    if date_cell("act_start_date") != iso(activity.actual_start):
+        return True
+    if date_cell("act_end_date") != iso(activity.actual_finish):
+        return True
+    try:
+        if abs(float(_cell(cells, index, "phys_complete_pct") or 0) - _phys(activity)) > 0.5:
+            return True
+        if (
+            getattr(activity, "remaining_duration_hours", None) is not None
+            and abs(float(_cell(cells, index, "remain_drtn_hr_cnt") or 0) - _remaining_hours(activity)) > 0.01
+        ):
+            return True
+    except ValueError:
+        return True
+    return False
 
 
 def _remaining_hours(activity: Activity) -> float:
@@ -122,7 +150,7 @@ def rewrite_progress(source: bytes, activities: Iterable[Activity]) -> tuple[byt
             continue
         task_rows += 1
         activity = by_code.get(_cell(cells, index, "task_code"))
-        if activity is not None and _has_poko_progress(activity):
+        if activity is not None and _differs_from_row(cells, index, activity):
             progressed[_cell(cells, index, "task_id")] = activity
 
     # Pass 2: rewrite. Every other byte passes through as P6 wrote it.
@@ -148,7 +176,10 @@ def rewrite_progress(source: bytes, activities: Iterable[Activity]) -> tuple[byt
                 if table == "TASK":
                     _patch_task_row(cells, index, activity)
                 else:
-                    is_labor = _cell(cells, index, "rsrc_id") in labor_rsrc_ids
+                    is_labor = (
+                        _cell(cells, index, "rsrc_type") == LABOR
+                        or _cell(cells, index, "rsrc_id") in labor_rsrc_ids
+                    )
                     _patch_assignment_row(cells, index, activity, is_labor)
                 patched = "%R\t" + "\t".join(cells)
 
@@ -214,8 +245,31 @@ def _split_units(
     except ValueError:
         return
     actual = budget * fraction
-    _put(cells, index, actual_col, f"{round(actual, 4):g}")
-    _put(cells, index, remain_col, f"{round(max(0.0, budget - actual), 4):g}")
+    actual = round(actual, 6)
+    _put(cells, index, actual_col, _num(actual))
+    _put(cells, index, remain_col, _num(max(0.0, round(budget - actual, 6))))
+
+
+def _actual_dates(activity: Activity, existing_start: str, existing_end: str) -> tuple[str, str]:
+    """(act_start_date, act_end_date) cells for the activity. A milestone has
+    one moment, and P6 writes it into BOTH columns, identically — a finish
+    milestone's at its finish time, a start milestone's at its start time —
+    so whichever of the two Poko holds is written to both."""
+    task_type = getattr(activity, "task_type", None)
+    if task_type in MILESTONE_TYPES and (activity.actual_start or activity.actual_finish):
+        if task_type == FINISH_MILESTONE:
+            moment = _p6_datetime(
+                activity.actual_finish or activity.actual_start, existing_end or existing_start, _DEFAULT_FINISH_TIME
+            )
+        else:
+            moment = _p6_datetime(
+                activity.actual_start or activity.actual_finish, existing_start or existing_end, _DEFAULT_START_TIME
+            )
+        return moment, moment
+    return (
+        _p6_datetime(activity.actual_start, existing_start, _DEFAULT_START_TIME),
+        _p6_datetime(activity.actual_finish, existing_end, _DEFAULT_FINISH_TIME),
+    )
 
 
 def _patch_assignment_row(cells: list[str], index: dict[str, int], activity: Activity, is_labor: bool) -> None:
@@ -224,14 +278,9 @@ def _patch_assignment_row(cells: list[str], index: dict[str, int], activity: Act
     activity's (see rewrite_progress)."""
     if is_labor:
         _split_units(cells, index, "target_qty", "act_reg_qty", "remain_qty", _fraction(activity))
-    _put(
-        cells, index, "act_start_date",
-        _p6_datetime(activity.actual_start, _cell(cells, index, "act_start_date"), _DEFAULT_START_TIME),
-    )
-    _put(
-        cells, index, "act_end_date",
-        _p6_datetime(activity.actual_finish, _cell(cells, index, "act_end_date"), _DEFAULT_FINISH_TIME),
-    )
+    start, end = _actual_dates(activity, _cell(cells, index, "act_start_date"), _cell(cells, index, "act_end_date"))
+    _put(cells, index, "act_start_date", start)
+    _put(cells, index, "act_end_date", end)
     if activity.status == ActivityStatus.complete:
         # Nothing remains, so no remaining dates — as P6 writes a finished assignment.
         _put(cells, index, "restart_date", "")
@@ -247,23 +296,22 @@ def _patch_task_row(cells: list[str], index: dict[str, int], activity: Activity)
     def current(column: str) -> str:
         return _cell(cells, index, column)
 
-    phys = getattr(activity, "phys_complete_pct", None)
-    if phys is None:
-        phys = activity.percent_complete
-    put("phys_complete_pct", f"{round(float(phys or 0), 2):g}")
+    put("phys_complete_pct", _num(round(_phys(activity), 2)))
     put("status_code", P6_STATUS_CODE.get(activity.status, "TK_NotStart"))
-    put("act_start_date", _p6_datetime(activity.actual_start, current("act_start_date"), _DEFAULT_START_TIME))
-    put("act_end_date", _p6_datetime(activity.actual_finish, current("act_end_date"), _DEFAULT_FINISH_TIME))
-    put("remain_drtn_hr_cnt", f"{_remaining_hours(activity):g}")
+    start, end = _actual_dates(activity, current("act_start_date"), current("act_end_date"))
+    put("act_start_date", start)
+    put("act_end_date", end)
+    put("remain_drtn_hr_cnt", _num(_remaining_hours(activity)))
     # Rolled-up labor units on the activity itself (TASK.act_work_qty = the sum
     # of its labor assignments' act_reg_qty), same split as those assignments.
     # Nonlabor units (act_equip_qty) don't follow the % — see TASKRSRC above.
     _split_units(cells, index, "target_work_qty", "act_work_qty", "remain_work_qty", _fraction(activity))
     if activity.status == ActivityStatus.complete:
-        # A finished activity has no float and no remaining dates. Left alone,
-        # the file carried the float it had while still open, and P6 showed it
-        # on a finished activity.
-        put("total_float_hr_cnt", "0")
-        put("free_float_hr_cnt", "0")
+        # A finished activity has no float and no remaining dates — P6 writes
+        # both floats BLANK on finished work (not 0). Left alone, the file
+        # carried the float it had while still open, and P6 showed it on a
+        # finished activity.
+        put("total_float_hr_cnt", "")
+        put("free_float_hr_cnt", "")
         put("restart_date", "")
         put("reend_date", "")

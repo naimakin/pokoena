@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -159,35 +160,41 @@ def _authorize_progress_edit(db: Session, project_id: uuid.UUID, ctx: AuthContex
         raise HTTPException(status_code=403, detail="Not permitted")
 
 
-def _apply_progress_derivation(activity: Activity, changes: dict) -> None:
+def _apply_progress_derivation(activity: Activity, changes: dict, data_date: date) -> None:
     """Keep status / % / remaining consistent after an edit, then mirror the
     status into P6's TASK.status_code. Precedence follows P6: actual_finish >
     actual_start > percent_complete. Raises HTTPException(422) on an
     inconsistent actual-date pair — callers turn that into a per-row error
-    (batch) or a 422 response (single)."""
-    _derive_status(activity, changes)
+    (batch) or a 422 response (single). `data_date` is the programme's data
+    date, the actual date a %-only entry stands on (see below)."""
+    _derive_status(activity, changes, data_date)
     if _PROGRESS_FIELDS & changes.keys():
         activity.status_code = P6_STATUS_CODE[activity.status]
 
 
-def _derive_status(activity: Activity, changes: dict) -> None:
+def _derive_status(activity: Activity, changes: dict, data_date: date) -> None:
     if activity.task_type in MILESTONE_TYPES:
         if _PROGRESS_FIELDS & changes.keys():
-            _derive_milestone_status(activity)
+            _derive_milestone_status(activity, changes)
         return
     touched_dates = {"actual_start", "actual_finish"} & changes.keys()
     if not touched_dates:
         # A percent_complete-only edit uses the legacy 3-way rule, but only
-        # while the activity isn't already actual-date-driven.
+        # while the activity isn't already actual-date-driven. An activity P6
+        # calls started has an actual start (TK_Active without act_start_date
+        # isn't a state P6 writes), so a % on one that hasn't started starts it
+        # on the data date — what P6 itself fills in when "Started" is ticked —
+        # and 100% finishes it there too.
         if "percent_complete" in changes and activity.actual_start is None and activity.actual_finish is None:
             pc = activity.percent_complete or 0
-            activity.status = (
-                ActivityStatus.complete
-                if pc >= 100
-                else ActivityStatus.in_progress
-                if pc > 0
-                else ActivityStatus.not_started
-            )
+            if pc >= 100:
+                activity.status = ActivityStatus.complete
+                activity.actual_start = activity.actual_finish = data_date
+            elif pc > 0:
+                activity.status = ActivityStatus.in_progress
+                activity.actual_start = data_date
+            else:
+                activity.status = ActivityStatus.not_started
         return
 
     if activity.actual_finish is not None:
@@ -206,23 +213,36 @@ def _derive_status(activity: Activity, changes: dict) -> None:
         _reset_to_not_started(activity)
 
 
-def _derive_milestone_status(activity: Activity) -> None:
-    """A milestone has one date — Start for TT_Mile, Finish for TT_FinMile — so
-    recording either actual date completes it; there is no in-progress
-    milestone. Whichever date was entered lands on the milestone's own one, so
-    it shows in the right Start/Finish column and exports to the column P6
-    reads for that milestone type."""
-    entered = activity.actual_start or activity.actual_finish
-    if entered is None:
+def _derive_milestone_status(activity: Activity, changes: dict) -> None:
+    """A milestone has one moment — Start for TT_Mile, Finish for TT_FinMile —
+    so recording either actual date completes it; there is no in-progress
+    milestone. P6 stores that moment in BOTH act_start_date and act_end_date,
+    so both are set to it. The milestone's own date (the one the Activity
+    modal shows) governs: entered, it completes the milestone; cleared, it
+    puts the milestone back to Not Started, other date and all."""
+    own, other = (
+        ("actual_finish", "actual_start") if activity.task_type == FINISH_MILESTONE else ("actual_start", "actual_finish")
+    )
+    if own in changes:
+        moment = getattr(activity, own)
+    elif other in changes:
+        moment = getattr(activity, other)
+    else:
+        moment = getattr(activity, own) or getattr(activity, other)
+    if moment is None:
+        activity.actual_start = activity.actual_finish = None
         _reset_to_not_started(activity)
         return
-    if activity.task_type == FINISH_MILESTONE:
-        activity.actual_finish = activity.actual_finish or entered
-    else:
-        activity.actual_start = activity.actual_start or entered
+    activity.actual_start = activity.actual_finish = moment
     activity.status = ActivityStatus.complete
     activity.percent_complete = 100
     activity.remaining_duration_days = 0
+
+
+def _data_date(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> date:
+    """The current programme's data date; today for a project without one."""
+    current = get_current_import(db, ctx.tenant_id, project_id)
+    return current.data_date.date() if current is not None and current.data_date else date.today()
 
 
 def _reset_to_not_started(activity: Activity) -> None:
@@ -372,6 +392,7 @@ def batch_update_activities(
         )
     }
 
+    data_date = _data_date(db, ctx, project_id)
     saved: list[Activity] = []
     progressed: list[_ProgressEdit] = []
     before_by_id: dict[uuid.UUID, dict[str, str | None]] = {}
@@ -388,7 +409,7 @@ def batch_update_activities(
             before_by_id[activity.id] = _edit_snapshot(activity)
             status_before = activity.status
             _apply_changes(activity, changes)
-            _apply_progress_derivation(activity, changes)
+            _apply_progress_derivation(activity, changes, data_date)
             saved.append(activity)
             if _SIDE_EFFECT_FIELDS & changes.keys():
                 progressed.append(_ProgressEdit(activity, set(changes), status_before))
@@ -425,7 +446,7 @@ def update_activity(
     before = _edit_snapshot(activity)
     status_before = activity.status
     _apply_changes(activity, changes)
-    _apply_progress_derivation(activity, changes)
+    _apply_progress_derivation(activity, changes, _data_date(db, ctx, activity.project_id))
     if _SIDE_EFFECT_FIELDS & changes.keys():
         _apply_progress_side_effects(db, [_ProgressEdit(activity, set(changes), status_before)])
     _record_edit_events(db, ctx, activity, before)
