@@ -69,19 +69,20 @@ export function PortfolioTimeline({
 
   function cells(months: PortfolioMonth[], cuts: number[], title: string, onClick?: (month: string) => void) {
     const byKey = new Map(months.map((m) => [m.month, m]));
-    const span = months.filter((m) => m.tasks > 0).map((m) => monthIndex(m.month));
-    const first = span.length ? Math.min(...span) : null;
-    const last = span.length ? Math.max(...span) : null;
+    // Only months with work in them get a cell: a gap (between two projects
+    // on the portfolio row, or a pause within one) stays empty rather than
+    // reading as a calm month. Rounded ends follow each run of active months.
+    const active = new Set(months.filter((m) => m.tasks > 0).map((m) => monthIndex(m.month)));
     return indexes.map((i) => {
       const key = monthKey(i);
-      const m = byKey.get(key);
-      const inSpan = first !== null && last !== null && i >= first && i <= last;
-      if (!inSpan) return <div key={key} className="pf-cell pf-cell-empty" />;
-      const month = m ?? { month: key, score: 0, tasks: 0, critical: 0, delay_drivers: 0 };
+      const month = byKey.get(key);
+      if (!month || !active.has(i)) return <div key={key} className="pf-cell pf-cell-empty" />;
+      const first = !active.has(i - 1);
+      const last = !active.has(i + 1);
       const level = month.score > 0 ? densityLevel(month.score, cuts) : null;
       const bg = !showDensity ? "var(--info)" : level === null ? "var(--surface-3)" : DENSITY_COLORS[level];
       const props = {
-        className: `pf-cell${i === first ? " is-first" : ""}${i === last ? " is-last" : ""}${onClick ? " is-clickable" : ""}`,
+        className: `pf-cell${first ? " is-first" : ""}${last ? " is-last" : ""}${onClick ? " is-clickable" : ""}`,
         style: { background: bg },
         "aria-label": `${title}, ${monthLabel(key)}: total score ${month.score}, ${month.tasks} tasks`,
         onMouseMove: (e: MouseEvent) =>
@@ -151,7 +152,9 @@ export function PortfolioTimeline({
           <div className="pf-tl-row pf-tl-portfolio" style={{ gridTemplateColumns: columns }}>
             <div className="pf-tl-label">
               <span className="pf-tl-name">Portfolio</span>
-              <span className="pf-tl-meta">{projects.length} projects</span>
+              <span className="pf-tl-meta" title="Every project below, added together month by month">
+                Sum of {projects.length} project{projects.length === 1 ? "" : "s"}
+              </span>
             </div>
             {cells(portfolio, portfolioCuts, "Portfolio")}
           </div>

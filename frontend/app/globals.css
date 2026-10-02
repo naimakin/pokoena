@@ -1721,3 +1721,6 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .pf-drill-foot{display:flex;justify-content:space-between;gap:.5rem;padding:.75rem 1.1rem;border-top:1px solid var(--border)}
 @media (max-width:1100px){.pf-status-grid{grid-template-columns:1fr}}
 @media print{.pf-tl-controls,.pf-search{display:none!important}.pf-tl-scroll{overflow:visible}}
+.pf-custom-range{display:flex;align-items:center;gap:.5rem}
+.pf-custom-range label{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--text-muted)}
+.pf-custom-range input{height:30px;padding:0 .5rem;font-size:.75rem}

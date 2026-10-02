@@ -15,6 +15,7 @@ import {
   DENSITY_COLORS,
   DENSITY_LABELS,
   monthIndex,
+  monthKey,
   monthLabel,
   PROGRESS_LABEL,
   PROGRESS_ROWS,
@@ -30,7 +31,7 @@ import {
 } from "@/lib/portfolio";
 import { useProjectContext } from "@/lib/project-context";
 
-type Window = "2y" | "4y" | "all";
+type Window = "1m" | "3m" | "6m" | "1y" | "2y" | "4y" | "all" | "custom";
 type VerdictFilter =
   | { kind: "progress"; key: string; label: string }
   | { kind: "risk"; key: string; label: string }
@@ -38,9 +39,14 @@ type VerdictFilter =
 type SortKey = "name" | "spi" | "planned_pct" | "actual_pct" | "forecast_finish" | "variance" | "quality_score" | "critical";
 
 const WINDOWS: { key: Window; label: string; months: number | null }[] = [
-  { key: "2y", label: "2 years", months: 24 },
-  { key: "4y", label: "4 years", months: 48 },
+  { key: "1m", label: "1M", months: 1 },
+  { key: "3m", label: "3M", months: 3 },
+  { key: "6m", label: "6M", months: 6 },
+  { key: "1y", label: "1Y", months: 12 },
+  { key: "2y", label: "2Y", months: 24 },
+  { key: "4y", label: "4Y", months: 48 },
   { key: "all", label: "All", months: null },
+  { key: "custom", label: "Custom", months: null },
 ];
 
 function windowRange(mode: Window, minIdx: number, maxIdx: number): [number, number] {
@@ -87,7 +93,10 @@ export default function PortfolioDashboardPage() {
   const [verdict, setVerdict] = useState<VerdictFilter | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
-  const [windowMode, setWindowMode] = useState<Window>("4y");
+  const [windowMode, setWindowMode] = useState<Window>("2y");
+  // Custom window, as <input type="month"> values ("YYYY-MM").
+  const [customFrom, setCustomFrom] = useState(() => monthKey(todayMonthIndex() - 1));
+  const [customTo, setCustomTo] = useState(() => monthKey(todayMonthIndex() + 5));
   const [showDensity, setShowDensity] = useState(true);
   const [drill, setDrill] = useState<{ project: PortfolioProject; month: string } | null>(null);
 
@@ -146,8 +155,13 @@ export default function PortfolioDashboardPage() {
     const keys = [...portfolioMonths.map((m) => m.month), ...projects.flatMap((p) => p.months.map((m) => m.month))];
     if (keys.length === 0) return null;
     const idx = keys.map(monthIndex);
+    if (windowMode === "custom" && /^\d{4}-\d{2}$/.test(customFrom) && /^\d{4}-\d{2}$/.test(customTo)) {
+      const a = monthIndex(customFrom);
+      const b = monthIndex(customTo);
+      return [Math.min(a, b), Math.max(a, b)];
+    }
     return windowRange(windowMode, Math.min(...idx), Math.max(...idx));
-  }, [portfolioMonths, projects, windowMode]);
+  }, [portfolioMonths, projects, windowMode, customFrom, customTo]);
 
   const kpis = useMemo(() => {
     const scheduled = (data?.projects ?? []).filter((p) => p.has_schedule);
@@ -385,13 +399,30 @@ export default function PortfolioDashboardPage() {
                   </div>
                 </div>
                 <div className="pf-tl-controls">
-                  <div className="segmented" role="group" aria-label="Window">
+                  <div className="segmented" role="group" aria-label="Time window">
                     {WINDOWS.map((w) => (
-                      <button key={w.key} className={windowMode === w.key ? "active" : ""} onClick={() => setWindowMode(w.key)}>
+                      <button
+                        key={w.key}
+                        className={windowMode === w.key ? "active" : ""}
+                        onClick={() => setWindowMode(w.key)}
+                        title={w.months ? `${w.months} month${w.months > 1 ? "s" : ""}, from around today` : undefined}
+                      >
                         {w.label}
                       </button>
                     ))}
                   </div>
+                  {windowMode === "custom" && (
+                    <div className="pf-custom-range">
+                      <label>
+                        <span>From</span>
+                        <input type="month" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                      </label>
+                      <label>
+                        <span>To</span>
+                        <input type="month" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                      </label>
+                    </div>
+                  )}
                   <button
                     type="button"
                     role="switch"
