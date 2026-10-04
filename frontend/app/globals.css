@@ -1955,3 +1955,74 @@ tbody tr.sim-chain-row,tbody tr.sim-chain-row:hover{background:var(--surface-2)}
   .dcma-targets-default{grid-column:1 / -1;text-align:right}
   .dcma-targets-count{display:none}
 }
+
+/* ---------- My Desk (Execution > My Desk) + private notes ----------
+   The user's own layer over the shared schedule: what waits on them, the
+   activities they pinned, and private notes. Tokens only; the accent appears
+   on interactive states (pin toggle, links), never as decoration. */
+.desk-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:1.25rem;align-items:start}
+.desk-col{display:flex;flex-direction:column;gap:1.25rem;min-width:0}
+@media (max-width:1100px){.desk-grid{grid-template-columns:minmax(0,1fr)}}
+
+.desk-inbox-item{display:flex;align-items:flex-start;gap:.7rem;padding:.75rem 1.1rem;border-bottom:1px solid var(--border);width:100%;text-align:left;background:none;font:inherit;color:inherit;cursor:pointer}
+.desk-inbox-item:last-child{border-bottom:none}
+.desk-inbox-item:hover{background:var(--surface-2)}
+.desk-inbox-dot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:.4rem;background:var(--info)}
+.desk-inbox-dot.warn{background:var(--warn)}
+.desk-inbox-dot.crit{background:var(--crit)}
+.desk-inbox-main{flex:1;min-width:0}
+.desk-inbox-title{display:block;font-size:.8125rem;font-weight:600}
+.desk-inbox-detail{display:block;font-size:.75rem;color:var(--text-muted);margin-top:.1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desk-inbox-side{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex:none}
+.desk-inbox-due{font-size:.6875rem;color:var(--text-muted)}
+.desk-quiet{padding:.85rem 1.1rem;font-size:.8125rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem}
+.desk-quiet .icon{color:var(--good)}
+
+.desk-filters{display:flex;gap:.4rem;flex-wrap:wrap;padding:.7rem 1.1rem;border-bottom:1px solid var(--border)}
+.desk-table td{vertical-align:top}
+.desk-table tbody tr{cursor:pointer}
+.desk-table tbody tr.is-gone{cursor:default;opacity:.6}
+.desk-act-name{font-weight:600;line-height:1.3}
+.desk-delta{display:block;font-size:.6875rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap}
+.desk-delta.later{color:var(--warn)}
+.desk-delta.earlier{color:var(--good)}
+.desk-reason{font-size:.75rem;color:var(--text-secondary)}
+.desk-suggest-intro{padding:.75rem 1.1rem 0;font-size:.8125rem;color:var(--text-secondary)}
+
+.pin-btn{display:inline-flex;align-items:center;gap:.35rem;height:28px;padding:0 .6rem;border-radius:var(--radius-sm);border:1px solid var(--border-strong);font-size:.75rem;font-weight:600;color:var(--text-secondary);background:var(--surface);transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+.pin-btn:hover:not(:disabled){background:var(--accent-soft);border-color:transparent;color:var(--accent-strong)}
+.pin-btn:disabled{opacity:.5}
+.pin-btn.is-pinned{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong)}
+.pin-btn.is-pinned .icon{fill:currentColor}
+.modal-head .pin-btn .icon{color:inherit;margin-top:0}
+.act-modal-actions{display:flex;align-items:center;gap:.4rem;flex:none}
+
+.note-composer{display:flex;flex-direction:column;gap:.5rem}
+.note-composer textarea{width:100%;resize:vertical}
+.note-composer-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.note-private{display:inline-flex;align-items:center;gap:.3rem;font-size:.6875rem;color:var(--text-muted);margin-right:auto}
+.note-remind{display:inline-flex;align-items:center;gap:.4rem;font-size:.6875rem;color:var(--text-secondary);font-weight:600}
+.note-remind input{height:28px;font-size:.75rem}
+.note-list{display:flex;flex-direction:column;list-style:none;margin:0;padding:0}
+.note-item{display:flex;align-items:flex-start;gap:.6rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
+.note-item:last-child{border-bottom:none}
+.note-item.is-done .note-body{color:var(--text-muted);text-decoration:line-through}
+.note-check{width:18px;height:18px;flex:none;margin-top:.1rem;border-radius:var(--radius-xs);border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--accent-contrast);background:var(--surface)}
+.note-check:hover{border-color:var(--accent)}
+.note-check.is-on{background:var(--accent);border-color:var(--accent)}
+.note-check .icon{width:12px;height:12px;stroke-width:3}
+.note-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:.3rem}
+.note-main textarea{width:100%;resize:vertical}
+.note-body{text-align:left;font:inherit;font-size:.8125rem;line-height:1.45;color:var(--text-primary);white-space:pre-wrap;word-break:break-word;background:none;border:0;padding:0;cursor:text}
+.note-meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.note-activity,.note-activity-static{font-size:.6875rem;color:var(--text-secondary);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;padding:0;font-family:inherit}
+.note-activity{cursor:pointer}
+.note-activity:hover{color:var(--accent-strong)}
+.note-date{font-size:.6875rem;color:var(--text-tertiary)}
+.note-context{font-size:.6875rem;color:var(--text-muted)}
+.note-delete{flex:none;padding:.25rem}
+.note-empty{font-size:.8125rem;color:var(--text-muted);padding:.6rem 0}
+.note-done-toggle{font-size:.75rem;font-weight:600;color:var(--text-secondary);background:none;border:0;padding:.5rem 0;cursor:pointer;align-self:flex-start}
+.note-done-toggle:hover{color:var(--accent-strong)}
+.act-private{border-top:1px solid var(--border);padding-top:.9rem;display:flex;flex-direction:column;gap:.5rem}
+.act-private-head{display:flex;align-items:center;gap:.4rem}

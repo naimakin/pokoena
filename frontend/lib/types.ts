@@ -1430,3 +1430,80 @@ export interface ResourceAnalysis {
   updates: number;
   qsra: { p10: string | null; p50: string | null; p90: string | null; cpm_finish: string | null; run_at: string | null } | null;
 }
+
+// ---------- My Desk (Execution → My Desk; backend routes/my_desk.py) ----------
+
+export type DeskInboxKind =
+  | "recovery_review"
+  | "recovery_revision"
+  | "flag_review"
+  | "mitigation_review"
+  | "mitigation_revision"
+  | "update_period";
+
+export interface DeskInboxItem {
+  kind: DeskInboxKind;
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  title: string;
+  detail: string | null;
+  count: number;
+  due_at: string | null;
+  tone: "crit" | "warn" | "info";
+  href: string;
+}
+
+export interface DeskPin {
+  id: string;
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  activity_external_id: string;
+  activity_name: string;
+  pinned_at: string;
+  pinned_finish: string | null;
+  pinned_total_float_hours: number | null;
+  pinned_hours_per_day: number | null;
+  pinned_revision_label: string | null;
+  /** The live activity; null once the current programme no longer carries it. */
+  activity: Activity | null;
+  finish: string | null;
+  /** Shown finish now minus at pinning, calendar days (positive = later). */
+  drift_days: number | null;
+  previous_revision_label: string | null;
+  previous_finish: string | null;
+  previous_total_float_hours: number | null;
+  note_count: number;
+}
+
+export interface DeskSuggestion {
+  activity: Activity;
+  reason: string;
+}
+
+export interface PersonalNoteContext {
+  finish: string | null;
+  total_float_hours: number | null;
+  hours_per_day: number | null;
+  revision_label: string | null;
+}
+
+export interface PersonalNote {
+  id: string;
+  project_id: string | null;
+  project_code: string | null;
+  activity_external_id: string | null;
+  activity_name: string | null;
+  body: string;
+  remind_on: string | null;
+  done_at: string | null;
+  context: PersonalNoteContext | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityDesk {
+  pinned: boolean;
+  notes: PersonalNote[];
+}

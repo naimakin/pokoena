@@ -45,6 +45,7 @@ from app.models.progress_entry import ProgressEntry
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.recovery_plan import RecoveryPlan
 from app.models.report_format import ReportFormat
 from app.models.resource import Resource
@@ -149,6 +150,8 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
     gone(WbsNode, project_id=project_id)
     gone(DashboardLayout, project_id=project_id)
     gone(SavedActivityFilter, project_id=project_id)
+    gone(ActivityPin, project_id=project_id)
+    gone(PersonalNote, project_id=project_id)
     gone(ReportFormat, project_id=project_id)
     gone(RiskAnalysisSettings, project_id=project_id)
     gone(RiskSimulationRun, project_id=project_id)

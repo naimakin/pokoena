@@ -30,6 +30,7 @@ from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan, RecoveryPlanItem
+from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.report_format import ReportFormat
 from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
 from app.models.schedule_simulation import ScheduleSimulation
@@ -207,6 +208,17 @@ def _populate_everything(client, db_session, tenant, project, admin):
         )
     )
 
+    # --- My Desk: a pin and a private note on this project ---
+    db_session.add(
+        ActivityPin(
+            id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=admin.id,
+            activity_external_id="A100", activity_name="A100",
+        )
+    )
+    db_session.add(
+        PersonalNote(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=admin.id, body="Note")
+    )
+
     # --- report formats (the Reporting presets are seeded on first read) ---
     assert client.get(f"/projects/{project.id}/report-formats").status_code == 200
 
@@ -232,7 +244,7 @@ def _populate_everything(client, db_session, tenant, project, admin):
 
 
 _PROJECT_SCOPED_MODELS = [
-    Activity, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
+    Activity, ActivityPin, PersonalNote, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
     Baseline, Calendar, DashboardLayout, EvmSnapshot, ProgressEntry, ProjectMembership, ProjectScope,
     RecoveryPlan, RecoveryPlanItem, Resource, ResourceAssignment, RiskItem, RiskActionItem,
     ReportFormat, RiskAnalysisSettings, RiskSimulationRun, SavedActivityFilter, ScheduleExport, ScheduleSimulation, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod,

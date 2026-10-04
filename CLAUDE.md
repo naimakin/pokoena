@@ -84,6 +84,12 @@ DESIGN.md                 ← full design system spec
   predecessors) and `retained_logic=True` (P6's default option; Schedule Simulation,
   `services/schedule_simulation.py`). Simulation diffs engine against engine at the same data
   date — never against P6's stored dates, which our CPM doesn't reproduce on every file.
+- Execution → My Desk (`services/my_desk.py`) is the one personal, cross-project page: an inbox
+  rolled up from the existing approval queues, activity pins, and private notes. POKO has no
+  activity assignees, so "mine" is only what the user pinned or wrote. `activity_pins` /
+  `personal_notes` are private per user: RLS isolates the tenant, every query also filters on
+  `user_id`, and there is no admin read path. Both key on `activity_external_id` (re-linked on P6
+  rename in `xer_import.py`, like recovery plans).
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

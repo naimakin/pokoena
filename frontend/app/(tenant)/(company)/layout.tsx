@@ -26,6 +26,7 @@ import {
   LayersIcon,
   LockIcon,
   LogOutIcon,
+  PinIcon,
   SettingsIcon,
   ShieldCheckIcon,
   SimulationIcon,
@@ -107,7 +108,7 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/execution/project-status",
     visible: always,
     children: [
-      { href: "/execution/my-focus", label: "My Focus", icon: FlagIcon, visible: always, planned: true },
+      { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: always },
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/progress", label: "Project Activities", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },

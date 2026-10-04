@@ -303,7 +303,7 @@ export default function ProjectStatusPage() {
         {/* --- Project Summary --- */}
         <div className="card-head" style={{ border: "none", padding: 0 }}>
           <div className="card-title" style={{ fontFamily: "var(--font-display)", fontSize: "1rem", letterSpacing: "-.01em" }}>
-            PROJECT SUMMARY
+            Project summary
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
@@ -350,7 +350,7 @@ export default function ProjectStatusPage() {
         {/* --- Priorities Matrix --- */}
         <div className="card-head" style={{ border: "none", padding: 0 }}>
           <div className="card-title" style={{ fontFamily: "var(--font-display)", fontSize: "1rem", letterSpacing: "-.01em" }}>
-            PRIORITIES MATRIX
+            Priorities matrix
           </div>
           <div className="card-title-sub">
             {status.priorities.filtered_total} activities · Important × Urgent

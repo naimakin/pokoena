@@ -52,6 +52,7 @@ from app.models.calendar import Calendar as CalendarModel
 from app.models.project import Project
 from app.models.resource import LABOR, Resource as ResourceModel
 from app.models.resource_assignment import ResourceAssignment as ResourceAssignmentModel
+from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
@@ -511,6 +512,15 @@ def import_xer(
                 RecoveryPlan.project_id == project_id,
                 RecoveryPlan.activity_external_id == old_code,
             ).update({RecoveryPlan.activity_external_id: new_code}, synchronize_session=False)
+            # Same durable key on My Desk pins and notes.
+            db.query(ActivityPin).filter(
+                ActivityPin.project_id == project_id,
+                ActivityPin.activity_external_id == old_code,
+            ).update({ActivityPin.activity_external_id: new_code}, synchronize_session=False)
+            db.query(PersonalNote).filter(
+                PersonalNote.project_id == project_id,
+                PersonalNote.activity_external_id == old_code,
+            ).update({PersonalNote.activity_external_id: new_code}, synchronize_session=False)
 
         # --- relationships: the .xer is a full network snapshot, so replace wholesale ---
         db.query(ActivityRelationship).filter(ActivityRelationship.project_id == project_id).delete()

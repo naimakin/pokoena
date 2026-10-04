@@ -24,13 +24,6 @@ const PLANNED: Record<string, Planned> = {
     ],
   },
   Documents: { section: "Planning", useToday: [{ href: "/project-files", label: "Program Library" }] },
-  "My Focus": {
-    section: "Execution",
-    useToday: [
-      { href: "/progress", label: "Project Activities" },
-      { href: "/risk/early-warnings", label: "Early Warnings" },
-    ],
-  },
   Lookahead: {
     section: "Execution",
     useToday: [

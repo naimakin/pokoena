@@ -19,6 +19,7 @@ from app.models.change_request import ChangeRequest, ChangeRequestStatus, RiskLe
 from app.models.dashboard_layout import DashboardLayout
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.invite import Invite, InviteStatus
+from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.password_reset import PasswordReset
 from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
@@ -66,6 +67,7 @@ from app.models.wbs_node import WbsNode
 
 __all__ = [
     "Activity",
+    "ActivityPin",
     "ActivityStatus",
     "ActivityCodeType",
     "ActivityCodeValue",
@@ -92,6 +94,7 @@ __all__ = [
     "Invite",
     "InviteStatus",
     "PasswordReset",
+    "PersonalNote",
     "ProgressEntry",
     "ProgressEntryType",
     "Project",

@@ -1,7 +1,6 @@
-import { ComingSoon } from "@/components/ComingSoon";
+import { redirect } from "next/navigation";
 
+// My Focus became My Desk (Execution → My Desk); old links and bookmarks land there.
 export default function MyFocusPage() {
-  return (
-    <ComingSoon label="My Focus" description="A personalized view of what needs your attention today will live here." />
-  );
+  redirect("/execution/my-desk");
 }

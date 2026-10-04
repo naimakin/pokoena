@@ -17,6 +17,7 @@ from app.api.routes import (
     invites,
     logic_diff,
     metadata,
+    my_desk,
     password_reset,
     platform,
     platform_auth,
@@ -111,6 +112,7 @@ app.include_router(float_path.router)
 app.include_router(reports.router)
 app.include_router(portfolio.router)
 app.include_router(simulations.router)
+app.include_router(my_desk.router)
 
 
 @app.get("/healthz")

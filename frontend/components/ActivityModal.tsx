@@ -6,12 +6,15 @@ import { hoursPerDay } from "@/lib/duration";
 import { FINISH_MILESTONE, isMilestone, START_MILESTONE } from "@/lib/schedule-dates";
 import { BREAKDOWN_LABELS, criticalityChip, criticalityLabel, SITE_RISK_OPTIONS } from "@/lib/criticality";
 import { useToast } from "@/components/Toast";
-import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, XIcon } from "@/components/icons";
+import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
+import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
 import type {
   Activity,
+  ActivityDesk,
   ActivityHistoryItem,
   ActivityRelationship,
   ActivityStatus,
+  PersonalNote,
   SiteRisk,
   WbsNode,
 } from "@/lib/types";
@@ -153,6 +156,10 @@ export function ActivityModal({
 
   const [relationships, setRelationships] = useState<ActivityRelationship[] | null>(null);
   const [history, setHistory] = useState<ActivityHistoryItem[] | null>(null);
+  // The caller's own My Desk state for this activity (pin + private notes);
+  // null until loaded, or when the desk isn't available to this user.
+  const [desk, setDesk] = useState<ActivityDesk | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
 
   const activityId = activity?.id ?? null;
 
@@ -186,6 +193,14 @@ export function ActivityModal({
     }
     if (tab === "history" && history === null) loadHistory();
   }, [tab, activityId, relationships, history, loadHistory, snapshotOnly]);
+
+  useEffect(() => {
+    if (!activityId || snapshotOnly) return;
+    api
+      .get<ActivityDesk>(`/my-desk/activities/${activityId}`)
+      .then(setDesk)
+      .catch(() => setDesk(null));
+  }, [activityId, snapshotOnly]);
 
   const comments = useMemo(
     () => (history ?? []).filter((h) => h.kind === "comment"),
@@ -315,6 +330,57 @@ export function ActivityModal({
     }
   }
 
+  async function togglePin() {
+    if (!activity || !desk || pinBusy) return;
+    setPinBusy(true);
+    try {
+      if (desk.pinned) {
+        await api.delete(`/my-desk/activities/${activity.id}/pin`);
+        showToast(`Unpinned ${activity.external_id}`);
+      } else {
+        await api.put(`/my-desk/activities/${activity.id}/pin`);
+        showToast(`Pinned ${activity.external_id} to My Desk`);
+      }
+      setDesk((d) => (d ? { ...d, pinned: !d.pinned } : d));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not change the pin.", "error");
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
+  async function createNote(note: NoteDraft): Promise<boolean> {
+    if (!activity) return false;
+    try {
+      const created = await api.post<PersonalNote>("/my-desk/notes", { ...note, activity_id: activity.id });
+      setDesk((d) => (d ? { ...d, notes: [created, ...d.notes] } : d));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not save the note.", "error");
+      return false;
+    }
+  }
+
+  async function updateNote(id: string, patch: NotePatch): Promise<boolean> {
+    try {
+      const updated = await api.patch<PersonalNote>(`/my-desk/notes/${id}`, patch);
+      setDesk((d) => (d ? { ...d, notes: d.notes.map((n) => (n.id === id ? updated : n)) } : d));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not update the note.", "error");
+      return false;
+    }
+  }
+
+  async function deleteNote(id: string) {
+    try {
+      await api.delete(`/my-desk/notes/${id}`);
+      setDesk((d) => (d ? { ...d, notes: d.notes.filter((n) => n.id !== id) } : d));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not delete the note.", "error");
+    }
+  }
+
   const predecessors = (relationships ?? []).filter((r) => r.successor_id === activity.id);
   const successors = (relationships ?? []).filter((r) => r.predecessor_id === activity.id);
 
@@ -351,9 +417,24 @@ export function ActivityModal({
               <span className="act-modal-float">Total float {days(activity.total_float_hours, hoursPerDay(activity))}</span>
             </div>
           </div>
-          <button className="act-btn" onClick={onClose} aria-label="Close" title="Close">
-            <XIcon className="icon" />
-          </button>
+          <div className="act-modal-actions">
+            {desk && (
+              <button
+                type="button"
+                className={`pin-btn${desk.pinned ? " is-pinned" : ""}`}
+                aria-pressed={desk.pinned}
+                disabled={pinBusy}
+                onClick={togglePin}
+                title={desk.pinned ? "Remove from My Desk" : "Watch this activity on My Desk"}
+              >
+                <PinIcon className="icon icon-sm" />
+                {desk.pinned ? "Pinned" : "Pin"}
+              </button>
+            )}
+            <button className="act-btn" onClick={onClose} aria-label="Close" title="Close">
+              <XIcon className="icon" />
+            </button>
+          </div>
         </div>
 
         <div className="act-modal-tabs" role="tablist">
@@ -529,7 +610,7 @@ export function ActivityModal({
               </div>
 
               <label className="field">
-                <span>Notes</span>
+                <span>Shared notes · visible to the project team</span>
                 <textarea
                   rows={3}
                   disabled={!canEdit}
@@ -579,6 +660,25 @@ export function ActivityModal({
                   </ul>
                 )}
               </div>
+              )}
+
+              {desk && (
+                <div className="act-private">
+                  <div className="act-private-head">
+                    <div className="act-section-label" style={{ marginBottom: 0 }}>Private notes</div>
+                    <span className="note-private">
+                      <LockIcon className="icon icon-xs" /> Only you · also on My Desk
+                    </span>
+                  </div>
+                  <NoteComposer placeholder="A note to yourself about this activity… (Ctrl+Enter to save)" onCreate={createNote} />
+                  <NoteList
+                    notes={desk.notes}
+                    showActivity={false}
+                    emptyText="No private notes on this activity."
+                    onUpdate={updateNote}
+                    onDelete={deleteNote}
+                  />
+                </div>
               )}
             </>
           )}
