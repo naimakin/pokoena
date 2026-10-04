@@ -473,7 +473,6 @@ export default function MyDeskPage() {
                 )}
               </div>
             )}
-            </div>
           </div>
 
           {/* ---------------- Private notes ---------------- */}
