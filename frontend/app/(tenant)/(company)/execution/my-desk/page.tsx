@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
@@ -11,7 +10,7 @@ import { ActivityModal } from "@/components/ActivityModal";
 import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
 import { FloatBadge, fmtDays, fmtP6Date } from "@/components/reporting/format";
 import { useToast } from "@/components/Toast";
-import { CheckIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
 import { NoProjectIllo } from "@/components/illustrations";
 import type { Activity, DeskInboxItem, DeskPin, DeskSuggestion, PersonalNote } from "@/lib/types";
 
@@ -26,6 +25,7 @@ type Scope = "project" | "all";
 type PinFilter = "all" | "critical" | "slipped" | "noted";
 
 const SCOPE_KEY = "poko:my-desk-scope";
+const SUGGEST_KEY = "poko:my-desk-suggestions-open";
 
 const PIN_FILTERS: { key: PinFilter; label: string; test: (p: DeskPin) => boolean }[] = [
   { key: "all", label: "All", test: () => true },
@@ -73,7 +73,28 @@ export default function MyDeskPage() {
   const [openActivity, setOpenActivity] = useState<Activity | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => setScope(readScope()), []);
+  // Suggestions stay open by default; folding them is remembered per browser.
+  const [suggestOpen, setSuggestOpen] = useState(true);
+
+  useEffect(() => {
+    setScope(readScope());
+    try {
+      setSuggestOpen(window.localStorage.getItem(SUGGEST_KEY) !== "closed");
+    } catch {
+      // per-viewer convenience only
+    }
+  }, []);
+
+  function toggleSuggestions() {
+    setSuggestOpen((open) => {
+      try {
+        window.localStorage.setItem(SUGGEST_KEY, open ? "closed" : "open");
+      } catch {
+        // per-viewer convenience only
+      }
+      return !open;
+    });
+  }
 
   function changeScope(next: Scope) {
     setScope(next);
@@ -381,12 +402,35 @@ export default function MyDeskPage() {
                     </table>
                   </div>
                 </>
-              ) : suggestions.length > 0 ? (
-                <>
-                  <p className="desk-suggest-intro">
-                    Nothing pinned yet. These look worth watching on {project?.code} — or pin any activity from its
-                    detail in <Link href="/progress">Project Activities</Link>.
-                  </p>
+              ) : (
+                <div className="desk-quiet">
+                  {allMode
+                    ? "Nothing pinned on any project yet. Open an activity in Project Activities and press Pin."
+                    : "Nothing pinned yet. Pin a suggestion below, or open any activity in Project Activities and press Pin."}
+                </div>
+              )}
+            </div>
+
+            {/* ---------------- Suggestions ---------------- */}
+            {!allMode && suggestions.length > 0 && (
+              <div className="card">
+                <button
+                  type="button"
+                  className="section-head"
+                  aria-expanded={suggestOpen}
+                  onClick={() => toggleSuggestions()}
+                >
+                  <ChevronDownIcon className="icon icon-sm section-caret" />
+                  <span>
+                    <span className="card-title">Worth watching on {project?.code}</span>
+                    <span className="card-title-sub">
+                      Negative float, critical or starting within 14 days — and not pinned yet
+                    </span>
+                  </span>
+                  <span className="spacer" />
+                  <span className="chip chip-neutral">{suggestions.length}</span>
+                </button>
+                {suggestOpen && (
                   <div className="table-wrap">
                     <table className="desk-table">
                       <thead>
@@ -426,14 +470,9 @@ export default function MyDeskPage() {
                       </tbody>
                     </table>
                   </div>
-                </>
-              ) : (
-                <div className="desk-quiet">
-                  {allMode
-                    ? "Nothing pinned on any project yet. Open an activity in Project Activities and press Pin."
-                    : "Nothing pinned yet. Open an activity in Project Activities and press Pin to watch it here."}
-                </div>
-              )}
+                )}
+              </div>
+            )}
             </div>
           </div>
 
@@ -456,6 +495,7 @@ export default function MyDeskPage() {
                       : `A note on ${project?.code ?? "this project"}… (Ctrl+Enter to save)`
                   }
                   onCreate={createNote}
+                  showPrivacy={false}
                 />
                 <NoteList
                   notes={notes}

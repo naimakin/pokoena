@@ -51,9 +51,12 @@ function contextLine(note: PersonalNote): string | null {
 export function NoteComposer({
   placeholder,
   onCreate,
+  showPrivacy = true,
 }: {
   placeholder: string;
   onCreate: (draft: NoteDraft) => Promise<boolean>;
+  /** Off where the surrounding card already says the notes are private. */
+  showPrivacy?: boolean;
 }) {
   const [body, setBody] = useState("");
   const [remindOn, setRemindOn] = useState("");
@@ -86,9 +89,13 @@ export function NoteComposer({
         }}
       />
       <div className="note-composer-row">
-        <span className="note-private">
-          <LockIcon className="icon icon-xs" /> Only you can see this
-        </span>
+        {showPrivacy ? (
+          <span className="note-private">
+            <LockIcon className="icon icon-xs" /> Only you can see this
+          </span>
+        ) : (
+          <span className="spacer" style={{ flex: 1 }} />
+        )}
         <label className="note-remind">
           Remind me
           <input type="date" value={remindOn} onChange={(e) => setRemindOn(e.target.value)} />

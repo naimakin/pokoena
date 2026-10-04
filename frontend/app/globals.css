@@ -2001,7 +2001,7 @@ tbody tr.sim-chain-row,tbody tr.sim-chain-row:hover{background:var(--surface-2)}
 .note-composer textarea{width:100%;resize:vertical}
 .note-composer-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .note-private{display:inline-flex;align-items:center;gap:.3rem;font-size:.6875rem;color:var(--text-muted);margin-right:auto}
-.note-remind{display:inline-flex;align-items:center;gap:.4rem;font-size:.6875rem;color:var(--text-secondary);font-weight:600}
+.note-remind{display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap;font-size:.6875rem;color:var(--text-secondary);font-weight:600}
 .note-remind input{height:28px;font-size:.75rem}
 .note-list{display:flex;flex-direction:column;list-style:none;margin:0;padding:0}
 .note-item{display:flex;align-items:flex-start;gap:.6rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
