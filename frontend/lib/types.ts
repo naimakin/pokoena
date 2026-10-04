@@ -218,6 +218,12 @@ export interface DcmaReport {
   overall_score: number;
   overall_status: "pass" | "warn" | "fail";
   checks: DcmaCheckResult[];
+  // The targets the report was measured against (the project's own over
+  // DCMA's), DCMA's defaults, and which keys the project changed.
+  thresholds?: Record<string, number>;
+  default_thresholds?: Record<string, number>;
+  customized?: string[];
+  can_edit_thresholds?: boolean;
 }
 
 export interface MonteCarloRequest {

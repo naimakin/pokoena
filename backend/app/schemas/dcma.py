@@ -25,3 +25,9 @@ class DcmaReportOut(BaseModel):
     overall_score: float
     overall_status: str
     checks: list[DcmaCheckResultOut]
+    # The targets this report was measured against, DCMA's own, and which of
+    # them the project changed.
+    thresholds: dict[str, float] = {}
+    default_thresholds: dict[str, float] = {}
+    customized: list[str] = []
+    can_edit_thresholds: bool = False

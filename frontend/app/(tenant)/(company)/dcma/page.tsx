@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { PageState } from "@/components/PageShell";
 import { EmptyState } from "@/components/EmptyState";
 import { UploadScheduleIllo } from "@/components/illustrations";
 import { DcmaRing } from "@/components/dcma/DcmaRing";
+import { DcmaTargetsModal } from "@/components/dcma/DcmaTargetsModal";
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -13,6 +14,7 @@ import {
   ChevronUpIcon,
   DownloadIcon,
   InfoIcon,
+  SettingsIcon,
   XIcon,
 } from "@/components/icons";
 import { api, ApiError } from "@/lib/api";
@@ -22,6 +24,7 @@ import {
   countShort,
   DCMA_CATEGORIES,
   factLabel,
+  isCustom,
   isIndex,
   metaFor,
   resultLabel,
@@ -29,7 +32,9 @@ import {
   STATUS_CHIP,
   STATUS_LABEL,
   STATUS_STROKE,
+  thresholdsOf,
   type DcmaCategory,
+  type Thresholds,
 } from "@/lib/dcma";
 import { useProjectContext } from "@/lib/project-context";
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
@@ -65,8 +70,13 @@ function impactLabel(impact: number): string {
   return impact === 0 ? "—" : `−${Math.abs(impact).toFixed(1)}`;
 }
 
-function ringLabel(check: DcmaCheckResult): string {
-  const m = metaFor(check);
+// A card is at least this wide; the page fits as many columns as that allows
+// (at most five, the largest category) and lets each row's sections share it.
+const CARD_MIN = 300;
+const GAP_PX = 16;
+
+function ringLabel(check: DcmaCheckResult, t: Thresholds): string {
+  const m = metaFor(check, t);
   return `${m.title}: ${resultLabel(check)} (${countLabel(check)}). Target ${m.target}. ${STATUS_LABEL[check.status]}.`;
 }
 
@@ -79,15 +89,19 @@ export default function DcmaPage() {
   const [category, setCategory] = useState<DcmaCategory | "all">("all");
   const [view, setView] = useState<View>("cards");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // The targets editor: closed (null), or open at one check (or none).
+  const [targetsAt, setTargetsAt] = useState<number | "all" | null>(null);
+  const [cols, setCols] = useState(5);
+  const flowRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(
+    async (quiet = false) => {
       if (!project) {
         setReport(null);
         setLoading(false);
         return;
       }
-      setLoading(true);
+      if (!quiet) setLoading(true);
       setError(null);
       try {
         setReport(await api.get<DcmaReport>(`/projects/${project.id}/dcma`));
@@ -96,9 +110,33 @@ export default function DcmaPage() {
       } finally {
         setLoading(false);
       }
-    }
+    },
+    [project],
+  );
+
+  useEffect(() => {
     load();
-  }, [project]);
+  }, [load]);
+
+  // How many card columns fit; re-measured as the page resizes.
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    flowRef.current = el;
+    if (el) setCols(Math.max(1, Math.min(5, Math.floor((el.clientWidth + GAP_PX) / (CARD_MIN + GAP_PX)))));
+  }, []);
+  useEffect(() => {
+    const el = flowRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => measure(el));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure, view, report]);
+
+  const t = useMemo(() => thresholdsOf(report), [report]);
+  const canEdit = Boolean(report?.can_edit_thresholds);
+  const customCount = useMemo(
+    () => (report?.checks ?? []).filter((c) => isCustom(c.id, report)).length,
+    [report],
+  );
 
   const counts = useMemo(() => {
     const c = { pass: 0, warn: 0, fail: 0, not_tracked: 0 };
@@ -111,24 +149,24 @@ export default function DcmaPage() {
       (report?.checks ?? []).filter(
         (c) =>
           (statusFilter === "all" || c.status === statusFilter) &&
-          (category === "all" || metaFor(c).category === category),
+          (category === "all" || metaFor(c, t).category === category),
       ),
-    [report, statusFilter, category],
+    [report, statusFilter, category, t],
   );
 
   const byCategory = useMemo(
     () =>
       DCMA_CATEGORIES.map((cat) => {
-        const all = (report?.checks ?? []).filter((c) => metaFor(c).category === cat.key);
+        const all = (report?.checks ?? []).filter((c) => metaFor(c, t).category === cat.key);
         const applicable = all.filter((c) => c.status !== "not_tracked");
         return {
           ...cat,
           total: applicable.length,
           passed: applicable.filter((c) => c.status === "pass").length,
-          shown: visible.filter((c) => metaFor(c).category === cat.key),
+          shown: visible.filter((c) => metaFor(c, t).category === cat.key),
         };
       }),
-    [report, visible],
+    [report, visible, t],
   );
 
   function toggle(id: number) {
@@ -205,6 +243,14 @@ export default function DcmaPage() {
                 <div className="dcma-summary-meta">
                   {report.total_activities} activities · {report.in_scope} unfinished in scope · computed{" "}
                   {new Date(report.computed_at).toLocaleString()}
+                  {customCount > 0 && (
+                    <>
+                      {" · "}
+                      <span className="dcma-custom-note">
+                        Project targets on {customCount} check{customCount === 1 ? "" : "s"}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div className="dcma-tallies">
                   {(["pass", "warn", "fail"] as const).map((s) => (
@@ -300,6 +346,15 @@ export default function DcmaPage() {
                   Table
                 </button>
               </div>
+              {canEdit && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setTargetsAt("all")}
+                  title="Set this project's own targets for the 14 checks"
+                >
+                  <SettingsIcon className="icon" /> Targets
+                </button>
+              )}
               <button className="btn btn-secondary btn-sm" onClick={downloadCsv} title="Download the 14 checks as CSV">
                 <DownloadIcon className="icon" /> CSV
               </button>
@@ -310,29 +365,47 @@ export default function DcmaPage() {
                 <p className="empty-state">No checks match this filter.</p>
               </div>
             ) : view === "cards" ? (
-              byCategory
-                .filter((cat) => cat.shown.length > 0)
-                .map((cat) => (
-                  <section key={cat.key} className="dcma-section">
-                    <div className="dcma-section-head">
-                      <span className="dcma-section-title">{cat.label}</span>
-                      <span className="dcma-section-sub">
-                        {cat.passed} of {cat.total} passing
-                      </span>
-                    </div>
-                    <div className="dcma-grid">
-                      {cat.shown.map((check) => (
-                        <CheckCard
-                          key={check.id}
-                          check={check}
-                          impact={scoreImpact(check, report)}
-                          open={expanded.has(check.id)}
-                          onToggle={() => toggle(check.id)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ))
+              // Categories sit side by side when they fit (Dates + Duration +
+              // Performance share a row), and a row with room to spare widens
+              // its cards rather than leaving a hole.
+              <div className="dcma-flow" ref={measure}>
+                {byCategory
+                  .filter((cat) => cat.shown.length > 0)
+                  .map((cat) => {
+                    const n = cat.shown.length;
+                    const span = Math.min(n, cols);
+                    const perRow = Math.ceil(n / Math.ceil(n / cols));
+                    const style = {
+                      flexGrow: span,
+                      flexBasis: `calc((100% - ${(cols - 1) * GAP_PX}px) * ${span / cols} + ${(span - 1) * GAP_PX}px - 1px)`,
+                      "--dcma-per": perRow,
+                    } as CSSProperties;
+                    return (
+                      <section key={cat.key} className="dcma-section" style={style}>
+                        <div className="dcma-section-head">
+                          <span className="dcma-section-title">{cat.label}</span>
+                          <span className="dcma-section-sub">
+                            {cat.passed} of {cat.total} passing
+                          </span>
+                        </div>
+                        <div className="dcma-grid">
+                          {cat.shown.map((check) => (
+                            <CheckCard
+                              key={check.id}
+                              check={check}
+                              t={t}
+                              custom={isCustom(check.id, report)}
+                              onEditTarget={canEdit ? () => setTargetsAt(check.id) : undefined}
+                              impact={scoreImpact(check, report)}
+                              open={expanded.has(check.id)}
+                              onToggle={() => toggle(check.id)}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+              </div>
             ) : (
               <div className="card" style={{ marginTop: "1rem" }}>
                 <div className="table-wrap">
@@ -352,7 +425,7 @@ export default function DcmaPage() {
                     </thead>
                     <tbody>
                       {visible.map((check) => {
-                        const m = metaFor(check);
+                        const m = metaFor(check, t);
                         const isOpen = expanded.has(check.id);
                         const hasDetails = check.details.length > 0;
                         return (
@@ -377,7 +450,10 @@ export default function DcmaPage() {
                               <td className="num" style={{ textAlign: "right" }}>
                                 {resultLabel(check)}
                               </td>
-                              <td className="mono">{m.target}</td>
+                              <td className="mono">
+                                {m.target}
+                                {isCustom(check.id, report) && <span className="dcma-custom-dot" title="Project target" />}
+                              </td>
                               <td className="mono" style={{ color: "var(--text-secondary)" }}>
                                 {countLabel(check)}
                               </td>
@@ -412,22 +488,42 @@ export default function DcmaPage() {
           </>
         )}
       </div>
+
+      {targetsAt !== null && report && project && (
+        <DcmaTargetsModal
+          projectId={project.id}
+          thresholds={t}
+          defaults={report.default_thresholds ?? {}}
+          focusCheck={targetsAt === "all" ? null : targetsAt}
+          onClose={() => setTargetsAt(null)}
+          onSaved={() => {
+            setTargetsAt(null);
+            void load(true);
+          }}
+        />
+      )}
     </>
   );
 }
 
 function CheckCard({
   check,
+  t,
+  custom,
+  onEditTarget,
   impact,
   open,
   onToggle,
 }: {
   check: DcmaCheckResult;
+  t: Thresholds;
+  custom: boolean;
+  onEditTarget?: () => void;
   impact: number;
   open: boolean;
   onToggle: () => void;
 }) {
-  const m = metaFor(check);
+  const m = metaFor(check, t);
   const tracked = check.status !== "not_tracked";
   return (
     <div className="card dcma-card">
@@ -442,7 +538,7 @@ function CheckCard({
           pct={tracked ? check.pct : 0}
           marks={tracked ? m.marks : []}
           stroke={STATUS_STROKE[check.status]}
-          label={ringLabel(check)}
+          label={ringLabel(check, t)}
         >
           <span className="dcma-ring-value">{resultLabel(check)}</span>
           <span className="dcma-ring-sub">{isIndex(check) ? "index" : `of ${check.basis === "relationships" ? "links" : "activities"}`}</span>
@@ -450,7 +546,24 @@ function CheckCard({
         <dl className="dcma-facts">
           <div>
             <dt>Target</dt>
-            <dd className="mono">{m.target}</dd>
+            <dd className="mono">
+              {onEditTarget ? (
+                <button
+                  type="button"
+                  className="dcma-target-btn"
+                  onClick={onEditTarget}
+                  title={custom ? "Project target — click to change" : "DCMA target — click to set this project's own"}
+                >
+                  {custom && <span className="dcma-custom-dot" aria-label="Project target" />}
+                  {m.target}
+                </button>
+              ) : (
+                <>
+                  {custom && <span className="dcma-custom-dot" aria-label="Project target" />}
+                  {m.target}
+                </>
+              )}
+            </dd>
           </div>
           <div>
             <dt>{factLabel(check)}</dt>

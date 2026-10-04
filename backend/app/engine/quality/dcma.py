@@ -28,13 +28,19 @@ DCMA 14 checks (reference: DCMA EA PAM 200.1):
   12. Critical path length — critical activities vs total (informational)
   13. Total float = 0     — TF=0 but not on the longest path (>10% = warn)
   14. BEI                 — Baseline Execution Index (target: 0.95-1.05)
+
+Those targets are DCMA's; a project can set its own (`DcmaThresholds`, stored
+per project as `projects.dcma_thresholds`, edited on the DCMA page). Which
+checks fail and which only warn stays DCMA's: #10 and #13 warn when over
+target, #12 warns outside its band, #4 warns above half its target and fails
+above it, and BEI warns within 0.10 outside its band.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import date, datetime
 from typing import Optional
 
@@ -50,9 +56,73 @@ _MILESTONE_TYPES = {"TT_Mile", "TT_FinMile", "TT_StartMile"}
 # programme fail this check (see engine/cpm/scheduler.py for the same mix-up).
 _MAND_CONSTRAINTS = {"CS_MANDSTART", "CS_MANDFIN"}  # Mandatory Start / Finish
 _FF_SF_TYPES = {LinkType.FF, LinkType.SF}
-_FLOAT_HIGH_DAYS = 44
-_DURATION_HIGH_DAYS = 44
 _TOL = 0.01
+
+
+@dataclass
+class DcmaThresholds:
+    """Every target the 14 checks are measured against. `*_max` / `*_min` are
+    % of the check's whole (activities or relationships); the BEI pair is the
+    index itself; `*_days` are working days on each activity's own calendar."""
+
+    logic_max: float = 5.0
+    leads_max: float = 0.0
+    lags_max: float = 5.0
+    rel_types_max: float = 10.0
+    hard_constraints_max: float = 5.0
+    high_float_max: float = 5.0
+    high_float_days: float = 44.0
+    negative_float_max: float = 0.0
+    high_duration_max: float = 5.0
+    high_duration_days: float = 44.0
+    invalid_dates_max: float = 0.0
+    resources_max: float = 20.0
+    missed_logic_max: float = 5.0
+    cp_length_min: float = 5.0
+    cp_length_max: float = 20.0
+    zero_float_max: float = 10.0
+    bei_min: float = 0.95
+    bei_max: float = 1.05
+
+    @classmethod
+    def from_overrides(cls, overrides: dict | None) -> "DcmaThresholds":
+        """DCMA's defaults with a project's stored overrides on top; unknown
+        keys and non-numbers are ignored, so an old stored value never breaks
+        the report."""
+        t = cls()
+        names = {f.name for f in fields(cls)}
+        for key, value in (overrides or {}).items():
+            if key in names and isinstance(value, (int, float)) and not isinstance(value, bool):
+                setattr(t, key, float(value))
+        return t
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def validate_thresholds(values: dict) -> dict[str, str]:
+    """Field -> problem, for a set of overrides about to be stored."""
+    names = {f.name for f in fields(DcmaThresholds)}
+    errors: dict[str, str] = {}
+    for key, value in values.items():
+        if key not in names:
+            errors[key] = "Unknown target"
+        elif not isinstance(value, (int, float)) or isinstance(value, bool):
+            errors[key] = "Enter a number"
+        elif key.startswith("bei_"):
+            if not 0 < value <= 2:
+                errors[key] = "Between 0 and 2"
+        elif key.endswith("_days"):
+            if not 1 <= value <= 1000:
+                errors[key] = "Between 1 and 1000 days"
+        elif not 0 <= value <= 100:
+            errors[key] = "Between 0 and 100%"
+    t = DcmaThresholds.from_overrides(values)
+    if t.cp_length_min > t.cp_length_max:
+        errors["cp_length_min"] = "The lower bound is above the upper one"
+    if t.bei_min > t.bei_max:
+        errors["bei_min"] = "The lower bound is above the upper one"
+    return errors
 
 
 @dataclass
@@ -80,6 +150,7 @@ class DcmaReport:
     overall_score: float
     overall_status: str
     checks: list[DcmaCheckResult]
+    thresholds: dict | None = None  # the targets this report was measured against
 
 
 def _check(
@@ -105,7 +176,7 @@ def _check(
     )
 
 
-def _check1_logic(acts: list[Activity], rels: list[ActivityRelationship], total: int) -> DcmaCheckResult:
+def _check1_logic(acts: list[Activity], rels: list[ActivityRelationship], total: int, t: DcmaThresholds) -> DcmaCheckResult:
     act_ids = {a.id for a in acts}
     has_pred: set = set()
     has_succ: set = set()
@@ -119,90 +190,94 @@ def _check1_logic(acts: list[Activity], rels: list[ActivityRelationship], total:
         a for a in acts
         if a.task_type not in _MILESTONE_TYPES and (a.id not in has_pred or a.id not in has_succ)
     ]
-    return _check(1, "Logic (Open Ends)", len(open_ends), total, 5.0, [a.external_id for a in open_ends])
+    return _check(1, "Logic (Open Ends)", len(open_ends), total, t.logic_max, [a.external_id for a in open_ends])
 
 
-def _check2_leads(rels: list[ActivityRelationship], id_to_code: dict, total: int) -> DcmaCheckResult:
+def _check2_leads(rels: list[ActivityRelationship], id_to_code: dict, total: int, t: DcmaThresholds) -> DcmaCheckResult:
     # A share of relationships, like #3/#4 (the target is none at all, so the
     # denominator only changes how the share reads, never pass/fail).
     leads = [r for r in rels if (r.lag_hours or 0) < 0]
     codes = [id_to_code.get(r.predecessor_id, "") for r in leads]
-    result = _check(2, "Leads (Negative Lag)", len(leads), len(rels), 0.0, codes)
+    result = _check(2, "Leads (Negative Lag)", len(leads), len(rels), t.leads_max, codes)
     result.basis = "relationships"
     return result
 
 
-def _check3_lags(rels: list[ActivityRelationship], id_to_code: dict, total: int) -> DcmaCheckResult:
+def _check3_lags(rels: list[ActivityRelationship], id_to_code: dict, total: int, t: DcmaThresholds) -> DcmaCheckResult:
     lags = [r for r in rels if (r.lag_hours or 0) > 0]
     pct = round(len(lags) / len(rels) * 100, 2) if rels else 0.0
-    status = "fail" if pct > 5.0 else "pass"
+    status = "fail" if pct > t.lags_max else "pass"
     codes = [id_to_code.get(r.predecessor_id, "") for r in lags[:20]]
     return DcmaCheckResult(
-        id=3, name="Lags (Positive Lag)", status=status, value=float(len(lags)), threshold=5.0,
+        id=3, name="Lags (Positive Lag)", status=status, value=float(len(lags)), threshold=t.lags_max,
         pct=pct, unit="%", details=codes, denominator=len(rels), basis="relationships",
     )
 
 
-def _check4_rel_types(rels: list[ActivityRelationship], id_to_code: dict, total: int) -> DcmaCheckResult:
+def _check4_rel_types(rels: list[ActivityRelationship], id_to_code: dict, total: int, t: DcmaThresholds) -> DcmaCheckResult:
     ff_sf = [r for r in rels if r.link_type in _FF_SF_TYPES]
     pct = round(len(ff_sf) / len(rels) * 100, 2) if rels else 0.0
-    status = "fail" if pct > 10.0 else ("warn" if pct > 5.0 else "pass")
+    # Warns above half the target, fails above it (DCMA: warn > 5%, fail > 10%).
+    status = "fail" if pct > t.rel_types_max else ("warn" if pct > t.rel_types_max / 2 else "pass")
     codes = [id_to_code.get(r.predecessor_id, "") for r in ff_sf[:20]]
     return DcmaCheckResult(
-        id=4, name="Relationship Types (FF+SF)", status=status, value=float(len(ff_sf)), threshold=10.0,
+        id=4, name="Relationship Types (FF+SF)", status=status, value=float(len(ff_sf)), threshold=t.rel_types_max,
         pct=pct, unit="%", details=codes, denominator=len(rels), basis="relationships",
     )
 
 
-def _check5_hard_constraints(acts: list[Activity], total: int) -> DcmaCheckResult:
+def _check5_hard_constraints(acts: list[Activity], total: int, t: DcmaThresholds) -> DcmaCheckResult:
     hard = [
         a for a in acts
         if (a.constraint_type in _MAND_CONSTRAINTS) or (a.constraint_type_2 in _MAND_CONSTRAINTS)
     ]
-    return _check(5, "Hard Constraints (Mandatory)", len(hard), total, 5.0, [a.external_id for a in hard])
+    return _check(5, "Hard Constraints (Mandatory)", len(hard), total, t.hard_constraints_max, [a.external_id for a in hard])
 
 
-def _check6_high_float(acts: list[Activity], hpd: float, total: int) -> DcmaCheckResult:
-    # 44 working days on each activity's OWN calendar (engine/durations.py);
-    # `hpd` is only the fallback for one with no calendar.
+def _check6_high_float(acts: list[Activity], hpd: float, total: int, t: DcmaThresholds) -> DcmaCheckResult:
+    # Working days on each activity's OWN calendar (engine/durations.py); `hpd`
+    # is only the fallback for one with no calendar.
     high = [
         a for a in acts
-        if a.total_float_hours is not None and a.total_float_hours > _FLOAT_HIGH_DAYS * activity_hours_per_day(a, hpd)
+        if a.total_float_hours is not None and a.total_float_hours > t.high_float_days * activity_hours_per_day(a, hpd)
     ]
-    return _check(6, f"High Float (TF > {_FLOAT_HIGH_DAYS}d)", len(high), total, 5.0, [a.external_id for a in high])
+    return _check(
+        6, f"High Float (TF > {t.high_float_days:g}d)", len(high), total, t.high_float_max, [a.external_id for a in high]
+    )
 
 
-def _check7_negative_float(acts: list[Activity], total: int) -> DcmaCheckResult:
+def _check7_negative_float(acts: list[Activity], total: int, t: DcmaThresholds) -> DcmaCheckResult:
     neg = [a for a in acts if a.total_float_hours is not None and a.total_float_hours < -_TOL]
-    return _check(7, "Negative Float", len(neg), total, 0.0, [a.external_id for a in neg])
+    return _check(7, "Negative Float", len(neg), total, t.negative_float_max, [a.external_id for a in neg])
 
 
-def _check8_high_duration(acts: list[Activity], hpd: float, total: int) -> DcmaCheckResult:
+def _check8_high_duration(acts: list[Activity], hpd: float, total: int, t: DcmaThresholds) -> DcmaCheckResult:
     high = [
         a for a in acts
-        if (a.remaining_duration_hours or 0) > _DURATION_HIGH_DAYS * activity_hours_per_day(a, hpd)
+        if (a.remaining_duration_hours or 0) > t.high_duration_days * activity_hours_per_day(a, hpd)
         and a.status_code != "TK_Complete"
         and a.task_type not in _MILESTONE_TYPES
     ]
     return _check(
-        8, f"High Duration (RD > {_DURATION_HIGH_DAYS}d)", len(high), total, 5.0, [a.external_id for a in high]
+        8, f"High Duration (RD > {t.high_duration_days:g}d)", len(high), total, t.high_duration_max,
+        [a.external_id for a in high],
     )
 
 
-def _check9_invalid_dates(acts: list[Activity], data_date: date, total: int) -> DcmaCheckResult:
+def _check9_invalid_dates(acts: list[Activity], data_date: date, total: int, t: DcmaThresholds) -> DcmaCheckResult:
     invalid = [
         a for a in acts
         if a.status_code == "TK_NotStart" and a.early_start is not None and a.early_start < data_date
     ]
-    return _check(9, "Invalid Dates (ES < Data Date)", len(invalid), total, 0.0, [a.external_id for a in invalid])
+    return _check(9, "Invalid Dates (ES < Data Date)", len(invalid), total, t.invalid_dates_max, [a.external_id for a in invalid])
 
 
 def _check10_resources(
-    acts: list[Activity], assigned_activity_ids: Optional[set[uuid.UUID]], total: int
+    acts: list[Activity], assigned_activity_ids: Optional[set[uuid.UUID]], total: int, t: DcmaThresholds
 ) -> DcmaCheckResult:
     if assigned_activity_ids is None:
         return DcmaCheckResult(
-            id=10, name="Resources (Unassigned)", status="not_tracked", value=0.0, threshold=20.0,
+            id=10, name="Resources (Unassigned)", status="not_tracked", value=0.0, threshold=t.resources_max,
             pct=0.0, unit="%", details=[], denominator=total,
         )
     no_rsrc = [
@@ -211,15 +286,15 @@ def _check10_resources(
     ]
     codes = [a.external_id for a in no_rsrc]
     pct = round(len(no_rsrc) / total * 100, 2) if total > 0 else 0.0
-    status = "warn" if pct > 20.0 else "pass"
+    status = "warn" if pct > t.resources_max else "pass"
     return DcmaCheckResult(
-        id=10, name="Resources (Unassigned)", status=status, value=float(len(no_rsrc)), threshold=20.0,
+        id=10, name="Resources (Unassigned)", status=status, value=float(len(no_rsrc)), threshold=t.resources_max,
         pct=pct, unit="%", details=codes[:20], denominator=total,
     )
 
 
 def _check11_missed_logic(
-    acts: list[Activity], rels: list[ActivityRelationship], id_to_code: dict, total: int
+    acts: list[Activity], rels: list[ActivityRelationship], id_to_code: dict, total: int, t: DcmaThresholds
 ) -> DcmaCheckResult:
     status_map = {a.id: a.status_code for a in acts}
     complete_ids = {a.id for a in acts if a.status_code == "TK_Complete"}
@@ -228,24 +303,24 @@ def _check11_missed_logic(
         if r.predecessor_id in complete_ids and status_map.get(r.successor_id) == "TK_NotStart":
             missed.add(r.predecessor_id)
     codes = [id_to_code.get(aid, "") for aid in list(missed)[:20]]
-    return _check(11, "Missed Logic (Complete→NotStart)", len(missed), total, 5.0, codes)
+    return _check(11, "Missed Logic (Complete→NotStart)", len(missed), total, t.missed_logic_max, codes)
 
 
-def _check12_critical_path_length(acts: list[Activity], total: int) -> DcmaCheckResult:
+def _check12_critical_path_length(acts: list[Activity], total: int, t: DcmaThresholds) -> DcmaCheckResult:
     critical = [
         a for a in acts
         if a.total_float_hours is not None and abs(a.total_float_hours) <= _TOL
         and a.status_code != "TK_Complete"
     ]
     pct = round(len(critical) / total * 100, 2) if total > 0 else 0.0
-    status = "warn" if (pct < 5.0 or pct > 20.0) else "pass"
+    status = "warn" if (pct < t.cp_length_min or pct > t.cp_length_max) else "pass"
     return DcmaCheckResult(
-        id=12, name="Critical Path Length", status=status, value=float(len(critical)), threshold=20.0,
+        id=12, name="Critical Path Length", status=status, value=float(len(critical)), threshold=t.cp_length_max,
         pct=pct, unit="%", details=[a.external_id for a in critical[:20]], denominator=total,
     )
 
 
-def _check13_total_float_zero(acts: list[Activity], total: int) -> DcmaCheckResult:
+def _check13_total_float_zero(acts: list[Activity], total: int, t: DcmaThresholds) -> DcmaCheckResult:
     zero_float = [
         a for a in acts
         if a.total_float_hours is not None and abs(a.total_float_hours) <= _TOL
@@ -253,14 +328,14 @@ def _check13_total_float_zero(acts: list[Activity], total: int) -> DcmaCheckResu
         and a.status_code != "TK_Complete"
     ]
     pct = round(len(zero_float) / total * 100, 2) if total > 0 else 0.0
-    status = "warn" if pct > 10.0 else "pass"
+    status = "warn" if pct > t.zero_float_max else "pass"
     return DcmaCheckResult(
-        id=13, name="Total Float = 0 (Artificial)", status=status, value=float(len(zero_float)), threshold=10.0,
+        id=13, name="Total Float = 0 (Artificial)", status=status, value=float(len(zero_float)), threshold=t.zero_float_max,
         pct=pct, unit="%", details=[a.external_id for a in zero_float[:20]], denominator=total,
     )
 
 
-def _check14_bei(acts: list[Activity], data_date: date) -> DcmaCheckResult:
+def _check14_bei(acts: list[Activity], data_date: date, t: DcmaThresholds) -> DcmaCheckResult:
     planned_done = [a for a in acts if a.planned_finish and a.planned_finish <= data_date]
     actually_done = [
         a for a in planned_done
@@ -274,16 +349,16 @@ def _check14_bei(acts: list[Activity], data_date: date) -> DcmaCheckResult:
         status = "pass"
     else:
         bei = round(completed / expected, 4)
-        if 0.95 <= bei <= 1.05:
+        if t.bei_min <= bei <= t.bei_max:
             status = "pass"
-        elif 0.85 <= bei <= 1.15:
+        elif t.bei_min - 0.10 <= bei <= t.bei_max + 0.10:
             status = "warn"
         else:
             status = "fail"
 
     missed_codes = [a.external_id for a in planned_done if a.status_code != "TK_Complete"][:20]
     return DcmaCheckResult(
-        id=14, name="BEI (Baseline Execution Index)", status=status, value=bei, threshold=0.95,
+        id=14, name="BEI (Baseline Execution Index)", status=status, value=bei, threshold=t.bei_min,
         pct=round(bei * 100, 2), unit="index", details=missed_codes, denominator=expected, basis="planned",
     )
 
@@ -294,10 +369,13 @@ def run_dcma(
     hours_per_day: float,
     data_date: datetime | None,
     assigned_activity_ids: Optional[set[uuid.UUID]] = None,
+    thresholds: Optional[DcmaThresholds] = None,
 ) -> DcmaReport:
     """Run all 14 DCMA checks against a project's current activities/relationships.
     `assigned_activity_ids` (activity ids with >=1 resource_assignments row) makes
-    check #10 real instead of "not_tracked" — see module docstring."""
+    check #10 real instead of "not_tracked" — see module docstring. `thresholds`
+    defaults to DCMA's own targets."""
+    t = thresholds or DcmaThresholds()
     dd = (data_date or datetime.utcnow()).date()
     hpd = hours_per_day if hours_per_day > 0 else 8.0
 
@@ -306,20 +384,20 @@ def run_dcma(
     id_to_code = {a.id: a.external_id for a in activities}
 
     checks: list[DcmaCheckResult] = [
-        _check1_logic(in_scope, relationships, total),
-        _check2_leads(relationships, id_to_code, total),
-        _check3_lags(relationships, id_to_code, total),
-        _check4_rel_types(relationships, id_to_code, total),
-        _check5_hard_constraints(in_scope, total),
-        _check6_high_float(in_scope, hpd, total),
-        _check7_negative_float(in_scope, total),
-        _check8_high_duration(in_scope, hpd, total),
-        _check9_invalid_dates(in_scope, dd, total),
-        _check10_resources(in_scope, assigned_activity_ids, total),
-        _check11_missed_logic(activities, relationships, id_to_code, total),
-        _check12_critical_path_length(in_scope, total),
-        _check13_total_float_zero(in_scope, total),
-        _check14_bei(activities, dd),
+        _check1_logic(in_scope, relationships, total, t),
+        _check2_leads(relationships, id_to_code, total, t),
+        _check3_lags(relationships, id_to_code, total, t),
+        _check4_rel_types(relationships, id_to_code, total, t),
+        _check5_hard_constraints(in_scope, total, t),
+        _check6_high_float(in_scope, hpd, total, t),
+        _check7_negative_float(in_scope, total, t),
+        _check8_high_duration(in_scope, hpd, total, t),
+        _check9_invalid_dates(in_scope, dd, total, t),
+        _check10_resources(in_scope, assigned_activity_ids, total, t),
+        _check11_missed_logic(activities, relationships, id_to_code, total, t),
+        _check12_critical_path_length(in_scope, total, t),
+        _check13_total_float_zero(in_scope, total, t),
+        _check14_bei(activities, dd, t),
     ]
 
     applicable = [c for c in checks if c.status != "not_tracked"]
@@ -343,4 +421,5 @@ def run_dcma(
         overall_score=score,
         overall_status=overall,
         checks=checks,
+        thresholds=t.as_dict(),
     )

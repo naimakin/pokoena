@@ -1,10 +1,14 @@
 import uuid
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+_JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
 
 
 class Project(Base):
@@ -23,3 +27,6 @@ class Project(Base):
     # schedule has been imported.
     p6_proj_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     p6_proj_short_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The project's own DCMA 14-Point targets, over DCMA's defaults
+    # (engine/quality/dcma.py::DcmaThresholds); None = DCMA's own throughout.
+    dcma_thresholds: Mapped[dict | None] = mapped_column(_JSON, nullable=True)

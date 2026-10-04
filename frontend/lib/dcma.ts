@@ -1,8 +1,7 @@
 // Presentation metadata for the DCMA 14-Point page: which category a check
-// belongs to, what it measures in a sentence, its target as a reader states it,
-// and where the target sits on the check's ring. The checks themselves (and
-// their pass/warn/fail thresholds) live in backend/app/engine/quality/dcma.py —
-// keep the targets here in step with that file.
+// belongs to, what it measures in a sentence, and its target. The targets come
+// from the report (`thresholds`): DCMA's own unless the project set its own
+// (backend/app/engine/quality/dcma.py::DcmaThresholds, edited on this page).
 
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
 
@@ -16,120 +15,188 @@ export const DCMA_CATEGORIES: { key: DcmaCategory; label: string }[] = [
   { key: "performance", label: "Performance" },
 ];
 
+export type Thresholds = Record<string, number>;
+
+/** DCMA's own targets — what an older report without `thresholds` means. */
+export const DCMA_DEFAULTS: Thresholds = {
+  logic_max: 5,
+  leads_max: 0,
+  lags_max: 5,
+  rel_types_max: 10,
+  hard_constraints_max: 5,
+  high_float_max: 5,
+  high_float_days: 44,
+  negative_float_max: 0,
+  high_duration_max: 5,
+  high_duration_days: 44,
+  invalid_dates_max: 0,
+  resources_max: 20,
+  missed_logic_max: 5,
+  cp_length_min: 5,
+  cp_length_max: 20,
+  zero_float_max: 10,
+  bei_min: 0.95,
+  bei_max: 1.05,
+};
+
+/** One editable number of a check's target. */
+export type TargetField = { key: string; label: string; unit: "%" | "days" | "index" };
+
 type CheckMeta = {
   title: string;
   category: DcmaCategory;
-  measures: string;
-  target: string;
+  measures: (t: Thresholds) => string;
+  target: (t: Thresholds) => string;
   // Where the limit sits on the ring, in % of the whole (two for a band).
-  marks: number[];
+  marks: (t: Thresholds) => number[];
+  fields: TargetField[];
+  /** How over-target reads when it isn't a plain fail. */
+  rule?: string;
 };
 
-export const DCMA_META: Record<number, CheckMeta> = {
+const num = (v: number) => String(Math.round(v * 100) / 100);
+const atMost = (key: string) => ({
+  target: (t: Thresholds) => (t[key] === 0 ? "None" : `≤ ${num(t[key])}%`),
+  marks: (t: Thresholds) => (t[key] > 0 ? [t[key]] : []),
+  fields: [{ key, label: "At most", unit: "%" as const }],
+});
+const text = (s: string) => () => s;
+
+const META: Record<number, CheckMeta> = {
   1: {
     title: "Logic (open ends)",
     category: "logic",
-    measures: "Unfinished activities missing a predecessor or a successor",
-    target: "≤ 5%",
-    marks: [5],
+    measures: text("Unfinished activities missing a predecessor or a successor"),
+    ...atMost("logic_max"),
   },
-  2: {
-    title: "Leads",
-    category: "logic",
-    measures: "Relationships with a negative lag",
-    target: "None",
-    marks: [],
-  },
-  3: {
-    title: "Lags",
-    category: "logic",
-    measures: "Relationships with a positive lag",
-    target: "≤ 5%",
-    marks: [5],
-  },
+  2: { title: "Leads", category: "logic", measures: text("Relationships with a negative lag"), ...atMost("leads_max") },
+  3: { title: "Lags", category: "logic", measures: text("Relationships with a positive lag"), ...atMost("lags_max") },
   4: {
     title: "Relationship types",
     category: "logic",
-    measures: "Finish-to-finish and start-to-finish links",
-    target: "≤ 10%",
-    marks: [10],
+    measures: text("Finish-to-finish and start-to-finish links"),
+    ...atMost("rel_types_max"),
+    rule: "Warns above half the target, fails above it.",
   },
   5: {
     title: "Hard constraints",
     category: "dates",
-    measures: "Activities with a mandatory start or finish constraint",
-    target: "≤ 5%",
-    marks: [5],
+    measures: text("Activities with a mandatory start or finish constraint"),
+    ...atMost("hard_constraints_max"),
   },
   6: {
     title: "High float",
     category: "float",
-    measures: "Activities with more than 44 working days of total float",
-    target: "≤ 5%",
-    marks: [5],
+    measures: (t) => `Activities with more than ${num(t.high_float_days)} working days of total float`,
+    ...atMost("high_float_max"),
+    fields: [
+      { key: "high_float_max", label: "At most", unit: "%" },
+      { key: "high_float_days", label: "High float is over", unit: "days" },
+    ],
   },
-  7: {
-    title: "Negative float",
-    category: "float",
-    measures: "Activities with negative total float",
-    target: "None",
-    marks: [],
-  },
+  7: { title: "Negative float", category: "float", measures: text("Activities with negative total float"), ...atMost("negative_float_max") },
   8: {
     title: "High duration",
     category: "duration",
-    measures: "Activities with more than 44 working days remaining",
-    target: "≤ 5%",
-    marks: [5],
+    measures: (t) => `Activities with more than ${num(t.high_duration_days)} working days remaining`,
+    ...atMost("high_duration_max"),
+    fields: [
+      { key: "high_duration_max", label: "At most", unit: "%" },
+      { key: "high_duration_days", label: "High duration is over", unit: "days" },
+    ],
   },
   9: {
     title: "Invalid dates",
     category: "dates",
-    measures: "Not-started activities scheduled before the data date",
-    target: "None",
-    marks: [],
+    measures: text("Not-started activities scheduled before the data date"),
+    ...atMost("invalid_dates_max"),
   },
   10: {
     title: "Resources",
     category: "duration",
-    measures: "Unfinished activities with no resource assigned",
-    target: "≤ 20%",
-    marks: [20],
+    measures: text("Unfinished activities with no resource assigned"),
+    ...atMost("resources_max"),
+    rule: "Over target warns; it never fails.",
   },
   11: {
     title: "Missed logic",
     category: "logic",
-    measures: "Completed activities whose successors haven't started",
-    target: "≤ 5%",
-    marks: [5],
+    measures: text("Completed activities whose successors haven't started"),
+    ...atMost("missed_logic_max"),
   },
   12: {
     title: "Critical path length",
     category: "float",
-    measures: "Share of unfinished activities on zero float",
-    target: "5 – 20%",
-    marks: [5, 20],
+    measures: text("Share of unfinished activities on zero float"),
+    target: (t) => `${num(t.cp_length_min)} – ${num(t.cp_length_max)}%`,
+    marks: (t) => [t.cp_length_min, t.cp_length_max],
+    fields: [
+      { key: "cp_length_min", label: "From", unit: "%" },
+      { key: "cp_length_max", label: "To", unit: "%" },
+    ],
+    rule: "Outside the band warns; it never fails.",
   },
   13: {
     title: "Artificial zero float",
     category: "float",
-    measures: "Zero-float activities that aren't on the longest path",
-    target: "≤ 10%",
-    marks: [10],
+    measures: text("Zero-float activities that aren't on the longest path"),
+    ...atMost("zero_float_max"),
+    rule: "Over target warns; it never fails.",
   },
   14: {
     title: "Baseline Execution Index",
     category: "performance",
-    measures: "Activities finished vs planned to finish by the data date",
-    target: "0.95 – 1.05",
-    marks: [95],
+    measures: text("Activities finished vs planned to finish by the data date"),
+    target: (t) => `${t.bei_min.toFixed(2)} – ${t.bei_max.toFixed(2)}`,
+    marks: (t) => [t.bei_min * 100],
+    fields: [
+      { key: "bei_min", label: "From", unit: "index" },
+      { key: "bei_max", label: "To", unit: "index" },
+    ],
+    rule: "Within 0.10 outside the band warns; further out fails.",
   },
 };
 
-export function metaFor(check: DcmaCheckResult): CheckMeta {
-  return (
-    DCMA_META[check.id] ?? { title: check.name, category: "logic", measures: "", target: "—", marks: [] }
-  );
+export const CHECK_IDS = Object.keys(META).map(Number);
+
+/** The report's targets, falling back to DCMA's own for any missing. */
+export function thresholdsOf(report: DcmaReport | null): Thresholds {
+  return { ...DCMA_DEFAULTS, ...(report?.thresholds ?? {}) };
+}
+
+export interface ResolvedMeta {
+  title: string;
+  category: DcmaCategory;
+  measures: string;
+  target: string;
+  marks: number[];
+  fields: TargetField[];
+  rule?: string;
+}
+
+export function metaById(id: number, t: Thresholds = DCMA_DEFAULTS): ResolvedMeta {
+  const m = META[id];
+  if (!m) return { title: `Check ${id}`, category: "logic", measures: "", target: "—", marks: [], fields: [] };
+  return {
+    title: m.title,
+    category: m.category,
+    measures: m.measures(t),
+    target: m.target(t),
+    marks: m.marks(t),
+    fields: m.fields,
+    rule: m.rule,
+  };
+}
+
+export function metaFor(check: DcmaCheckResult, t: Thresholds = DCMA_DEFAULTS): ResolvedMeta {
+  const m = metaById(check.id, t);
+  return META[check.id] ? m : { ...m, title: check.name };
+}
+
+/** Whether any of the check's targets differ from DCMA's. */
+export function isCustom(id: number, report: DcmaReport | null): boolean {
+  const custom = new Set(report?.customized ?? []);
+  return (META[id]?.fields ?? []).some((f) => custom.has(f.key));
 }
 
 const BASIS_NOUN: Record<DcmaCheckResult["basis"], string> = {
@@ -210,10 +277,11 @@ export const STATUS_STROKE: Record<DcmaCheckResult["status"], string> = {
 };
 
 export function checksCsv(report: DcmaReport): string {
+  const t = thresholdsOf(report);
   const rows = [
     ["#", "Check", "Category", "Status", "Result", "Target", "Affected", "Of", "Basis", "Score impact"],
     ...report.checks.map((c) => {
-      const m = metaFor(c);
+      const m = metaFor(c, t);
       return [
         String(c.id),
         m.title,

@@ -20,12 +20,13 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.engine.durations import activity_days
-from app.engine.quality.dcma import run_dcma
+from app.engine.quality.dcma import DcmaThresholds, run_dcma
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship
 from app.models.baseline import Baseline, BaselineStatus
 from app.models.calendar import Calendar
 from app.models.evm_snapshot import EvmSnapshot
+from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.services.schedule_current import get_current_import, to_naive
@@ -260,7 +261,9 @@ def load_status_inputs(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID)
             ResourceAssignment.project_id == project_id,
         )
     }
+    project = db.get(Project, project_id)
     return {
+        "dcma_thresholds": DcmaThresholds.from_overrides(project.dcma_thresholds if project else None),
         "activities": activities,
         "relationships": relationships,
         "hours_per_day": hours_per_day,
@@ -317,6 +320,7 @@ def rollup_from_inputs(inputs: dict) -> StatusRollup:
             hours_per_day,
             data_date,
             inputs["assigned_activity_ids"],
+            inputs.get("dcma_thresholds"),
         )
         dcma_score = report.overall_score
         dcma_status = report.overall_status

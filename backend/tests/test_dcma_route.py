@@ -60,3 +60,69 @@ def test_dcma_report_after_schedule_import(client, db_session):
     # high-float threshold.
     assert by_id[6]["status"] == "pass"
     assert body["overall_score"] > 0
+
+
+# --- a project's own targets ------------------------------------------------
+
+
+def _import(client, project):
+    with open(FIXTURE, "rb") as f:
+        r = client.post(
+            f"/projects/{project.id}/schedule-imports",
+            files={"file": ("synthetic_project.xer", f.read(), "application/octet-stream")},
+        )
+    assert r.status_code == 201
+
+
+def test_project_targets_change_the_verdicts(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "dcma-admin@example.com", "password": "secret123"})
+    _import(client, project)
+
+    before = client.get(f"/projects/{project.id}/dcma").json()
+    assert before["customized"] == [] and before["can_edit_thresholds"] is True
+    assert before["thresholds"]["logic_max"] == 5.0 == before["default_thresholds"]["logic_max"]
+    by_id = {c["id"]: c for c in before["checks"]}
+    assert by_id[1]["status"] == "fail" and by_id[6]["value"] == 0
+
+    saved = client.put(
+        f"/projects/{project.id}/dcma/thresholds",
+        json={"logic_max": 20, "resources_max": 90, "high_float_days": 4, "lags_max": 5},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["customized"] == ["high_float_days", "logic_max", "resources_max"]  # 5 is DCMA's own
+
+    after = client.get(f"/projects/{project.id}/dcma").json()
+    by_id = {c["id"]: c for c in after["checks"]}
+    assert by_id[1]["status"] == "pass" and by_id[1]["threshold"] == 20
+    assert by_id[10]["status"] == "pass"
+    # A400/A500 carry 4.44 days of float: over a 4-day "high float" bar.
+    assert by_id[6]["value"] == 2 and by_id[6]["name"] == "High Float (TF > 4d)"
+    assert after["overall_score"] > before["overall_score"]
+
+    # Back to DCMA's own.
+    assert client.put(f"/projects/{project.id}/dcma/thresholds", json={}).status_code == 200
+    reset = client.get(f"/projects/{project.id}/dcma").json()
+    assert reset["customized"] == [] and reset["overall_score"] == before["overall_score"]
+
+
+def test_targets_are_validated_and_need_edit_rights(client, db_session):
+    tenant, project = _setup(db_session)
+    client.post("/auth/login", json={"email": "dcma-admin@example.com", "password": "secret123"})
+
+    bad = client.put(f"/projects/{project.id}/dcma/thresholds", json={"logic_max": 120, "cp_length_min": 30})
+    assert bad.status_code == 422
+    assert set(bad.json()["detail"]["errors"]) == {"logic_max", "cp_length_min"}
+
+    viewer = create_user(db_session, "dcma-viewer@example.com", "secret123")
+    add_membership(db_session, viewer, tenant, TenantRole.company_employee)
+    import uuid
+
+    from app.models.project_membership import ProjectMembership
+
+    db_session.add(ProjectMembership(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=viewer.id))
+    db_session.commit()
+    client.post("/auth/logout")
+    client.post("/auth/login", json={"email": "dcma-viewer@example.com", "password": "secret123"})
+    assert client.get(f"/projects/{project.id}/dcma").json()["can_edit_thresholds"] is False
+    assert client.put(f"/projects/{project.id}/dcma/thresholds", json={"logic_max": 10}).status_code == 403
