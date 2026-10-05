@@ -30,7 +30,6 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
   SimulationIcon,
-  SparkleIcon,
   TrendingUpIcon,
   UsersIcon,
 } from "@/components/icons";
@@ -44,8 +43,6 @@ interface NavChild {
   label: string;
   icon: IconComponent;
   visible: Visible;
-  /** Not built yet: the route renders the PlannedFeature page, but the menu hides it. */
-  planned?: boolean;
 }
 
 interface NavSection {
@@ -65,11 +62,6 @@ const canManageTeam: Visible = (user) =>
   Boolean(user?.project_roles?.includes("project_administrator"));
 
 const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
-
-// Planned pages keep their routes (they render <ComingSoon>, the PlannedFeature page) but are
-// hidden from the menu. Owner: set to true to list them again.
-const SHOW_PLANNED = true;
-const inMenu = (child: NavChild, user: User | null) => child.visible(user) && (SHOW_PLANNED || !child.planned);
 
 // Where a destination is reused under more than one top section, TOP_SECTIONS
 // order below decides which section is treated as "active" when that route is
@@ -113,9 +105,6 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/progress", label: "Project Activities", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
-      { href: "/update-period-control", label: "Update Period Control", icon: CalendarIcon, visible: always, planned: true },
-      { href: "/execution/lookahead", label: "Lookahead", icon: CalendarIcon, visible: always, planned: true },
-      { href: "/execution/issues", label: "Issues", icon: AlertTriangleIcon, visible: always, planned: true },
       { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: isCompanyAdmin },
     ],
   },
@@ -156,21 +145,6 @@ const TOP_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "ai",
-    label: "AI",
-    icon: SparkleIcon,
-    href: "/ai/assistant",
-    visible: always,
-    children: [
-      { href: "/ai/assistant", label: "AI Assistant", icon: SparkleIcon, visible: always, planned: true },
-      { href: "/ai/schedule-generator", label: "Schedule Generator", icon: GanttIcon, visible: always, planned: true },
-      { href: "/ai/progress-analysis", label: "Progress Analysis", icon: TrendingUpIcon, visible: always, planned: true },
-      { href: "/ai/delay-analysis", label: "Delay Analysis", icon: ClockIcon, visible: always, planned: true },
-      { href: "/ai/risk-analysis", label: "Risk Analysis", icon: DiceIcon, visible: always, planned: true },
-      { href: "/ai/insights", label: "AI Insights", icon: SparkleIcon, visible: always, planned: true },
-    ],
-  },
-  {
     key: "administration",
     label: "Administration",
     icon: SettingsIcon,
@@ -179,10 +153,6 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
       { href: "/administration/profile", label: "My Profile", icon: UsersIcon, visible: always },
-      { href: "/administration/roles", label: "Roles", icon: ShieldCheckIcon, visible: canManageTeam, planned: true },
-      { href: "/administration/contractors", label: "Contractors", icon: BuildingIcon, visible: canManageTeam, planned: true },
-      { href: "/administration/teams", label: "Teams", icon: UsersIcon, visible: canManageTeam, planned: true },
-      { href: "/administration/settings", label: "Settings", icon: SettingsIcon, visible: canManageTeam, planned: true },
     ],
   },
 ];
@@ -257,13 +227,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
         : isActiveHref(pathname, section.href)
     ) ?? null;
 
-  // What the top bar lists: sections with at least one non-planned page. Kept
-  // separate from visibleSections so a planned route (e.g. the AI pages) still
-  // resolves to its section — and its baseline gate — exactly as before.
-  const menuSections = visibleSections.filter(
-    (section) => section.children.length === 0 || section.children.some((child) => inMenu(child, user))
-  );
-
   const pageLabel = activeSection
     ? activeSection.children.find((c) => c.href === pathname)?.label ?? activeSection.label
     : null;
@@ -294,7 +257,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           </div>
 
           <nav className="a-topnav-tabs" aria-label="Main">
-            {menuSections.map((section) => {
+            {visibleSections.map((section) => {
               const active = section.key === activeSection?.key;
               const Icon = section.icon;
               const marker = BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null;
@@ -323,7 +286,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
                   id={section.key}
                   label={section.label}
                   icon={Icon}
-                  items={section.children.filter((child) => inMenu(child, user))}
+                  items={section.children.filter((child) => child.visible(user))}
                   pathname={pathname}
                   active={active}
                   open={openKey === section.key}

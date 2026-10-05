@@ -8,10 +8,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { NoBaselineIllo } from "@/components/illustrations";
 
 // Top-nav section keys that stay locked until the selected project has a
-// baseline programme. Planning / Portfolio / Documents / Administration are
-// deliberately left open so the planner can import the schedule and lock the
-// baseline in the first place.
-export const BASELINE_GATED_SECTIONS = new Set(["dashboard", "execution", "risk", "reporting", "ai"]);
+// baseline programme. Planning / Portfolio / Administration are deliberately
+// left open so the planner can import the schedule and lock the baseline in
+// the first place.
+export const BASELINE_GATED_SECTIONS = new Set(["dashboard", "execution", "risk", "reporting"]);
 
 // Pages inside a gated section that measure the programme against itself rather
 // than against a baseline, so the gate would only be in the way. Float Path

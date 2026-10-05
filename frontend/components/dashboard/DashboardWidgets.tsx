@@ -37,7 +37,8 @@ interface WidgetDef {
 // preset filter (see progress/page.tsx) so the critical-path / overdue rows
 // land on the exact activity list behind the number.
 const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
-  scope_submissions: "/update-period-control",
+  // Reminding non-responders and closing the period both live on Dashboard itself.
+  scope_submissions: "/dashboard",
   evm: "/evm",
   critical_path: "/progress?filter=critical",
   pending_reviews: "/review-queue",

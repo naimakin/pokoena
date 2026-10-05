@@ -44,15 +44,3 @@ export const NoBaselineIllo = () => (
   </svg>
 );
 
-/** Construction-line bars and a 45° set square — planned pages. */
-export const DraftingIllo = () => (
-  <svg {...svg}>
-    <rect className="paper" x="14" y="6" width="74" height="62" rx="3" />
-    <path className="hair" d="M14 16H88" />
-    <path className="dash" d="M22 26h24M34 36h28M48 46h22M40 56h24" />
-    <path className="hair" d="M46 26v10M62 36v10" />
-    <path className="paper em" d="M70 72H106L70 36Z" />
-    <path className="em" d="M77 65H89L77 53Z" />
-    <path className="hair" d="M76 72v-3M82 72v-3M88 72v-3M94 72v-3M100 72v-3" />
-  </svg>
-);
