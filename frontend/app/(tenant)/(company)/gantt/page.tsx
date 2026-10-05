@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,11 +29,20 @@ import { buildGridRows, groupByLeaf, UNGROUPED_KEY, type GridRow } from "@/lib/w
 // chart scrolls through time.
 
 const ROW_H = 28;
-const HEAD_H = 46; // two-tier timescale / grid header
+const HEAD_H = 54; // three-tier timescale (year / month / week) and grid header
 const MS_DAY = 86_400_000;
 const MIN_LEFT_W = 220;
 const MILESTONE_TYPES = new Set(["TT_Mile", "TT_FinMile", "TT_StartMile"]);
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** ISO-8601 week number (1-53) of the UTC day at `ms`. */
+function isoWeek(ms: number): number {
+  const d = new Date(ms);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  const thursday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day + 3);
+  const yearStart = Date.UTC(new Date(thursday).getUTCFullYear(), 0, 1);
+  return Math.floor((thursday - yearStart) / (7 * MS_DAY)) + 1;
+}
 
 const ZOOM_LEVELS = [
   { key: "day", pxPerDay: 32, label: "Day" },
@@ -55,7 +65,7 @@ const LENSES = [
 type LensKey = (typeof LENSES)[number]["key"];
 
 /** One labelled band of the timescale (a year on the top tier, a month or
- *  quarter on the lower one), in chart pixels. */
+ *  quarter in the middle, a week number at the bottom), in chart pixels. */
 interface ScaleSeg {
   x: number;
   w: number;
@@ -267,6 +277,10 @@ export default function GanttPage() {
   const releaseRaf = useRef<number | null>(null);
   const vizRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startPxPerDay: number } | null>(null);
+  // While the timescale is being dragged: the day under the pointer when the
+  // drag began and where it sat in the pane, so that day stays put as the
+  // scale stretches (P6 behaves the same way).
+  const zoomAnchor = useRef<{ day: number; offsetX: number } | null>(null);
   const latestClientX = useRef(0);
   const dragRaf = useRef<number | null>(null);
 
@@ -561,6 +575,11 @@ export default function GanttPage() {
       e.preventDefault();
       dragRef.current = { startX: e.clientX, startPxPerDay: pxPerDay };
       latestClientX.current = e.clientX;
+      const pane = rightPaneRef.current;
+      if (pane) {
+        const offsetX = e.clientX - pane.getBoundingClientRect().left;
+        zoomAnchor.current = { day: (pane.scrollLeft + offsetX) / pxPerDay, offsetX };
+      }
 
       const onMove = (ev: MouseEvent) => {
         latestClientX.current = ev.clientX;
@@ -569,14 +588,17 @@ export default function GanttPage() {
           dragRaf.current = null;
           const drag = dragRef.current;
           if (!drag) return;
+          // P6 direction: pull the scale right to stretch it (zoom in), left
+          // to compress it (zoom out).
           const dx = latestClientX.current - drag.startX;
-          const next = Math.min(Math.max(drag.startPxPerDay * Math.pow(2, -dx / 150), 0.15), 60);
+          const next = Math.min(Math.max(drag.startPxPerDay * Math.pow(2, dx / 150), 0.15), 60);
           setCustomPxPerDay(next);
           setZoomKey("custom");
         });
       };
       const onUp = () => {
         dragRef.current = null;
+        zoomAnchor.current = null;
         if (dragRaf.current !== null) {
           cancelAnimationFrame(dragRaf.current);
           dragRaf.current = null;
@@ -589,6 +611,15 @@ export default function GanttPage() {
     },
     [pxPerDay],
   );
+
+  // Keep the anchored day under the pointer while a timescale drag rescales
+  // the chart. Layout effect, so the scroll lands before the frame paints.
+  useLayoutEffect(() => {
+    const anchor = zoomAnchor.current;
+    const pane = rightPaneRef.current;
+    if (!anchor || !pane) return;
+    pane.scrollLeft = Math.max(anchor.day * pxPerDay - anchor.offsetX, 0);
+  }, [pxPerDay]);
 
   // Drag the divider to trade grid width for chart width.
   const startSplitDrag = useCallback((e: React.MouseEvent) => {
@@ -720,8 +751,8 @@ export default function GanttPage() {
     milestonesOnly;
 
   // --- timescale tiers -----------------------------------------------------
-  const tiers = useMemo<{ top: ScaleSeg[]; bottom: ScaleSeg[] }>(() => {
-    if (!rangeStart || !totalDays) return { top: [], bottom: [] };
+  const tiers = useMemo<{ top: ScaleSeg[]; middle: ScaleSeg[]; bottom: ScaleSeg[] }>(() => {
+    if (!rangeStart || !totalDays) return { top: [], middle: [], bottom: [] };
     const endMs = rangeStart.getTime() + totalDays * MS_DAY;
     const startMs = rangeStart.getTime();
     const toX = (ms: number) => ((ms - startMs) / MS_DAY) * pxPerDay;
@@ -736,9 +767,9 @@ export default function GanttPage() {
     }
 
     // Months read well once there's room for a 3-letter label; below that the
-    // bottom tier steps to quarters, matching how P6 thins its own scale.
+    // middle tier steps to quarters, matching how P6 thins its own scale.
     const byMonth = pxPerDay >= 4;
-    const bottom: ScaleSeg[] = [];
+    const middle: ScaleSeg[] = [];
     let cursor = new Date(
       Date.UTC(
         rangeStart.getUTCFullYear(),
@@ -753,7 +784,7 @@ export default function GanttPage() {
       const segStart = Math.max(cursor.getTime(), startMs);
       const segEnd = Math.min(next.getTime(), endMs);
       if (segEnd > segStart) {
-        bottom.push({
+        middle.push({
           x: toX(segStart),
           w: toX(segEnd) - toX(segStart),
           label: byMonth
@@ -763,7 +794,27 @@ export default function GanttPage() {
       }
       cursor = next;
     }
-    return { top, bottom };
+
+    // Bottom tier: ISO week of the year (Monday start; week 1 holds the year's
+    // first Thursday), like P6's ordinal dates by week. Skipped once a week is
+    // narrower than ~4px (the Year zoom).
+    const bottom: ScaleSeg[] = [];
+    if (pxPerDay * 7 >= 4) {
+      const first = new Date(startMs);
+      let week =
+        Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate()) -
+        ((first.getUTCDay() + 6) % 7) * MS_DAY; // back to that week's Monday
+      while (week < endMs) {
+        const next = week + 7 * MS_DAY;
+        const segStart = Math.max(week, startMs);
+        const segEnd = Math.min(next, endMs);
+        if (segEnd > segStart) {
+          bottom.push({ x: toX(segStart), w: toX(segEnd) - toX(segStart), label: String(isoWeek(week)) });
+        }
+        week = next;
+      }
+    }
+    return { top, middle, bottom };
   }, [rangeStart, totalDays, pxPerDay]);
 
   const markers = useMemo(() => {
@@ -1235,9 +1286,16 @@ export default function GanttPage() {
                       ))}
                     </div>
                     <div className="gantt-scale-tier is-lower">
-                      {tiers.bottom.map((s, i) => (
+                      {tiers.middle.map((s, i) => (
                         <span key={`q${i}`} style={{ left: s.x, width: s.w }}>
                           {s.w > 18 ? s.label : ""}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="gantt-scale-tier is-lower is-weeks">
+                      {tiers.bottom.map((s, i) => (
+                        <span key={`w${i}`} style={{ left: s.x, width: s.w }}>
+                          {s.w > 12 ? s.label : ""}
                         </span>
                       ))}
                     </div>
@@ -1275,7 +1333,7 @@ export default function GanttPage() {
                       own stacking context: gridlines sit *under* the bars,
                       markers *over* them. */}
                   <div className="gantt-overlay is-grid" style={{ top: HEAD_H }}>
-                    {tiers.bottom.map((s, i) => (
+                    {tiers.middle.map((s, i) => (
                       <i key={`g${i}`} className="gantt-gridline" style={{ left: s.x }} />
                     ))}
                   </div>

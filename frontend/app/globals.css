@@ -1323,12 +1323,13 @@ tr.resolved{opacity:.45}
 .gantt-split-grip{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);pointer-events:none}
 
 .gantt-scale{flex-direction:column;cursor:ew-resize;user-select:none}
-.gantt-scale-tier{position:relative;height:50%;flex:1}
+.gantt-scale-tier{position:relative;flex:1;min-height:0}
 .gantt-scale-tier span{
   position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;
   font-size:.625rem;color:var(--text-secondary);border-left:1px solid var(--border);overflow:hidden;
 }
 .gantt-scale-tier.is-lower span{font-size:.5625rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.gantt-scale-tier.is-weeks span{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 .gantt-overlay{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
 .gantt-overlay.is-grid{z-index:1}
