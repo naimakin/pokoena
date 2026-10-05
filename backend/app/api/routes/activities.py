@@ -25,6 +25,7 @@ from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
 from app.models.user_tenant_role import TenantRole
 from app.schemas.activity import (
+    ActivityAssignmentOut,
     ActivityBatchResultOut,
     ActivityBatchRowError,
     ActivityBatchUpdateIn,
@@ -265,27 +266,27 @@ class _ProgressEdit:
 
 
 def _apply_progress_side_effects(db: Session, edits: list[_ProgressEdit]) -> None:
-    """Float, labor units, physical % and remaining duration follow a progress
-    edit, and the displayed % is re-derived — see services/activity_progress.py.
-    One query for the whole batch."""
+    """Float, resource units, physical % and remaining duration follow a
+    progress edit, and the displayed % is re-derived — see
+    services/activity_progress.py. One query for the whole batch."""
     if not edits:
         return
     labor_by_activity: dict[uuid.UUID, list[ResourceAssignment]] = {}
-    for assignment in (
-        db.query(ResourceAssignment)
+    nonlabor_by_activity: dict[uuid.UUID, list[ResourceAssignment]] = {}
+    for assignment, rsrc_type in (
+        db.query(ResourceAssignment, Resource.rsrc_type)
         .join(Resource, Resource.id == ResourceAssignment.resource_id)
-        .filter(
-            ResourceAssignment.activity_id.in_([e.activity.id for e in edits]),
-            Resource.rsrc_type == LABOR,
-        )
+        .filter(ResourceAssignment.activity_id.in_([e.activity.id for e in edits]))
     ):
-        labor_by_activity.setdefault(assignment.activity_id, []).append(assignment)
+        bucket = labor_by_activity if rsrc_type == LABOR else nonlabor_by_activity
+        bucket.setdefault(assignment.activity_id, []).append(assignment)
     for edit in edits:
         activity = edit.activity
         clear_float_if_finished(activity)
         apply_progress_entry(
             activity,
             labor_by_activity.get(activity.id, []),
+            nonlabor=nonlabor_by_activity.get(activity.id, []),
             pct_entered="percent_complete" in edit.changed,
             remaining_entered="remaining_duration_days" in edit.changed,
             status_changed=activity.status != edit.status_before,
@@ -366,6 +367,41 @@ def list_activity_relationships(
         rel.successor_external_id = successor.external_id if successor else None
 
     return relationships
+
+
+@router.get("/{activity_id}/assignments", response_model=list[ActivityAssignmentOut])
+def list_activity_assignments(
+    activity_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> list[ActivityAssignmentOut]:
+    """The activity's resource assignments (P6 TASKRSRC) with their units —
+    the Activity modal's Details tab."""
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx)
+    require_scope_access(activity.project_scope_id, ctx)
+
+    rows = (
+        db.query(ResourceAssignment, Resource)
+        .join(Resource, Resource.id == ResourceAssignment.resource_id)
+        .filter(ResourceAssignment.tenant_id == ctx.tenant_id, ResourceAssignment.activity_id == activity_id)
+        .all()
+    )
+    out = [
+        ActivityAssignmentOut(
+            id=a.id,
+            rsrc_id=r.rsrc_id,
+            name=r.name,
+            short_name=r.short_name,
+            rsrc_type=r.rsrc_type,
+            unit_id=a.unit_id or r.unit_id,
+            target_qty=a.target_qty or 0.0,
+            act_reg_qty=a.act_reg_qty or 0.0,
+            remain_qty=a.remain_qty or 0.0,
+        )
+        for a, r in rows
+    ]
+    # Labor first (it drives the %), then by name.
+    out.sort(key=lambda o: (o.rsrc_type != LABOR, o.name))
+    return out
 
 
 @router.patch("", response_model=ActivityBatchResultOut)

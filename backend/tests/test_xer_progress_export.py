@@ -201,3 +201,59 @@ def test_quantities_keep_their_precision():
     assert _num(40.0) == "40"
     assert _num(0.0) == "0"
     assert _num(-0.0000001) == "0"
+
+
+def test_every_resource_type_follows_the_percent():
+    """Labor, nonlabor (RT_Equip) and material (RT_Mat) assignments all split by
+    the %: act_reg_qty = target_qty x %, remain_qty = the rest. The activity's
+    own roll-ups follow too — labor into TASK.*_work_qty, nonlabor into
+    TASK.*_equip_qty (P6 keeps no activity-level material total)."""
+    source = "\n".join(
+        [
+            "ERMHDR\t24.12",
+            "%T\tPROJECT",
+            "%F\tproj_id\tproj_short_name",
+            "%R\t1\tP",
+            "%T\tRSRC",
+            "%F\trsrc_id\trsrc_name\trsrc_type",
+            "%R\tL1\tCrew\tRT_Labor",
+            "%R\tE1\tExcavator\tRT_Equip",
+            "%R\tM1\tConcrete\tRT_Mat",
+            "%T\tTASK",
+            "%F\ttask_id\tproj_id\ttask_code\tphys_complete_pct\tstatus_code\tremain_drtn_hr_cnt"
+            "\tact_start_date\tact_end_date\ttarget_drtn_hr_cnt"
+            "\ttarget_work_qty\tact_work_qty\tremain_work_qty\ttarget_equip_qty\tact_equip_qty\tremain_equip_qty",
+            "%R\t10\t1\tA1\t0\tTK_NotStart\t40\t\t\t40\t80\t0\t80\t24\t0\t24",
+            "%T\tTASKRSRC",
+            "%F\ttaskrsrc_id\ttask_id\trsrc_id\trsrc_type\ttarget_qty\tact_reg_qty\tremain_qty\tact_start_date\tact_end_date",
+            "%R\t1\t10\tL1\tRT_Labor\t80\t0\t80\t\t",
+            "%R\t2\t10\tE1\tRT_Equip\t24\t0\t24\t\t",
+            "%R\t3\t10\tM1\tRT_Mat\t150\t0\t150\t\t",
+            "%E",
+            "",
+        ]
+    )
+    activity = _activity(
+        "A1", percent_complete=25, status=ActivityStatus.in_progress, actual_start=date(2026, 1, 5),
+        remaining_duration_hours=30,
+    )
+    out, _, updated = rewrite_progress(source.encode("utf-8"), [activity])
+    text, _ = decode_xer(out)
+    assert updated == 1
+
+    def table(name):
+        rows, current, cols = [], None, []
+        for line in text.split("\n"):
+            if line.startswith("%T\t"):
+                current = line.split("\t")[1]
+            elif line.startswith("%F\t"):
+                cols = line.split("\t")[1:]
+            elif line.startswith("%R\t") and current == name:
+                rows.append(dict(zip(cols, line.split("\t")[1:])))
+        return rows
+
+    by_rsrc = {r["rsrc_id"]: (r["act_reg_qty"], r["remain_qty"]) for r in table("TASKRSRC")}
+    assert by_rsrc == {"L1": ("20", "60"), "E1": ("6", "18"), "M1": ("37.5", "112.5")}
+    task = table("TASK")[0]
+    assert (task["act_work_qty"], task["remain_work_qty"]) == ("20", "60")
+    assert (task["act_equip_qty"], task["remain_equip_qty"]) == ("6", "18")

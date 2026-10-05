@@ -40,8 +40,8 @@ function fmtDate(iso: string | null | undefined): string {
 
 const RSRC_TYPE_LABEL: Record<string, string> = {
   RT_Labor: "Labor",
-  RT_Material: "Material",
-  RT_Equip: "Equipment",
+  RT_Mat: "Material",
+  RT_Equip: "Nonlabor",
 };
 
 function varianceChip(days: number | null | undefined): string {

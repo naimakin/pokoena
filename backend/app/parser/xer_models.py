@@ -161,7 +161,7 @@ class Resource:
     rsrc_id: str
     rsrc_name: str
     rsrc_short_name: str
-    rsrc_type: str  # RT_Labor, RT_Material, RT_Equipment
+    rsrc_type: str  # RT_Labor, RT_Equip (nonlabor), RT_Mat (material)
     unit_id: Optional[str]
     clndr_id: Optional[str]
     curr_id: Optional[str]

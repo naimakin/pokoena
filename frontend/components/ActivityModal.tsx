@@ -10,6 +10,7 @@ import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, LockIcon, PinIcon, X
 import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
 import type {
   Activity,
+  ActivityAssignment,
   ActivityDesk,
   ActivityHistoryItem,
   ActivityRelationship,
@@ -155,6 +156,7 @@ export function ActivityModal({
   const [posting, setPosting] = useState(false);
 
   const [relationships, setRelationships] = useState<ActivityRelationship[] | null>(null);
+  const [assignments, setAssignments] = useState<ActivityAssignment[] | null>(null);
   const [history, setHistory] = useState<ActivityHistoryItem[] | null>(null);
   // The caller's own My Desk state for this activity (pin + private notes);
   // null until loaded, or when the desk isn't available to this user.
@@ -192,7 +194,13 @@ export function ActivityModal({
         .catch(() => setRelationships([]));
     }
     if (tab === "history" && history === null) loadHistory();
-  }, [tab, activityId, relationships, history, loadHistory, snapshotOnly]);
+    if (tab === "details" && assignments === null) {
+      api
+        .get<ActivityAssignment[]>(`/activities/${activityId}/assignments`)
+        .then(setAssignments)
+        .catch(() => setAssignments([]));
+    }
+  }, [tab, activityId, relationships, history, assignments, loadHistory, snapshotOnly]);
 
   useEffect(() => {
     if (!activityId || snapshotOnly) return;
@@ -306,6 +314,7 @@ export function ActivityModal({
       onSaved(updated);
       setDraft(draftFrom(updated));
       setHistory(null); // the save just wrote new timeline rows
+      setAssignments(null); // and moved the resource units with the %
       showToast("Activity saved");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save this activity.", "error");
@@ -738,6 +747,7 @@ export function ActivityModal({
               />
             </div>
           )}
+          {tab === "details" && !snapshotOnly && <AssignmentTable rows={assignments} />}
 
           {/* ---------------- Relationships ---------------- */}
           {tab === "relationships" && (
@@ -838,6 +848,69 @@ export function ActivityModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const RSRC_TYPE_LABEL: Record<string, string> = {
+  RT_Labor: "Labor",
+  RT_Equip: "Nonlabor",
+  RT_Mat: "Material",
+};
+
+function units(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/** P6 TASKRSRC for this activity. Budgeted, actual (act_reg_qty) and remaining
+ *  (remain_qty) units — all three follow the entered % for every resource type;
+ *  labor ones also roll up into the units % Poko shows. */
+function AssignmentTable({ rows }: { rows: ActivityAssignment[] | null }) {
+  return (
+    <div className="act-rel-block">
+      <div className="act-section-label">Resource assignments</div>
+      {rows === null ? (
+        <p className="act-modal-note">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="act-modal-note">No resources assigned in P6 — the % is the duration %.</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Resource</th>
+                <th>Type</th>
+                <th style={{ textAlign: "right" }}>Budgeted</th>
+                <th style={{ textAlign: "right" }}>Actual</th>
+                <th style={{ textAlign: "right" }}>Remaining</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const unit = r.unit_id ?? (r.rsrc_type === "RT_Labor" ? "h" : "");
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      {r.name}
+                      <div className="cell-sub mono">{r.short_name ?? r.rsrc_id}</div>
+                    </td>
+                    <td>{RSRC_TYPE_LABEL[r.rsrc_type] ?? r.rsrc_type}</td>
+                    <td className="num" style={{ textAlign: "right" }}>
+                      {units(r.target_qty)} {unit}
+                    </td>
+                    <td className="num" style={{ textAlign: "right" }}>
+                      {units(r.act_reg_qty)} {unit}
+                    </td>
+                    <td className="num" style={{ textAlign: "right" }}>
+                      {units(r.remain_qty)} {unit}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

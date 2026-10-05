@@ -661,6 +661,21 @@ export interface ActivityUpdatePayload {
 
 export type LinkType = "FS" | "SS" | "FF" | "SF";
 
+/** One resource assignment (P6 TASKRSRC) of an activity — GET /activities/{id}/assignments.
+ *  Budgeted / actual / remaining units all follow the activity's % for every resource type. */
+export interface ActivityAssignment {
+  id: string;
+  rsrc_id: string;
+  name: string;
+  short_name: string | null;
+  /** P6 RSRC.rsrc_type: RT_Labor | RT_Equip (nonlabor) | RT_Mat (material). */
+  rsrc_type: string;
+  unit_id: string | null;
+  target_qty: number;
+  act_reg_qty: number;
+  remain_qty: number;
+}
+
 export interface ActivityRelationship {
   id: string;
   predecessor_id: string;

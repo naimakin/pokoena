@@ -254,7 +254,6 @@ def import_xer(
     parsed: ParsedSchedule = parse_xer(file_bytes)
     _schedule_keeping_p6_values(parsed)
     labor_units = _labor_units_by_task(parsed)
-    labor_rsrc_ids = {r.rsrc_id for r in parsed.resources if r.rsrc_type == LABOR}
 
     # Each activity's hours→days divisor is its OWN calendar's day_hr_cnt
     # (engine/durations.py) — falling back to the project calendar, the same
@@ -616,7 +615,8 @@ def import_xer(
                 remain_cost=assign.remain_cost,
                 unit_id=assign.unit_id,
             )
-            if activity_row_id in poko_ahead and assign.rsrc_id in labor_rsrc_ids:
+            if activity_row_id in poko_ahead:
+                # Every resource type's units follow Poko's % (activity_progress.py).
                 apply_units_from_progress(poko_ahead[activity_row_id], [assignment_row])
             db.add(assignment_row)
 

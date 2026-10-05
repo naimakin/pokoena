@@ -6,10 +6,12 @@ ever goes back to P6:
   - A finished activity has no float: its total and free float are blank (as
     P6 writes them) and it is never critical (P6's own convention, and what the importer's
     `_is_critical` already assumes).
-  - Its RT_Labor assignments' units follow the entered %:
-    act_reg_qty = target_qty x %, remain_qty = target_qty - act_reg_qty
-    (their sum is TASK.act_work_qty on export). Material / equipment units and
-    all costs are left alone — costs are the AC side of EVM, and deriving them
+  - Every resource assignment's units follow the entered % — labor
+    (RT_Labor), nonlabor (RT_Equip) and material (RT_Mat) alike:
+    act_reg_qty = target_qty x %, remain_qty = target_qty - act_reg_qty.
+    On export the labor ones roll up into TASK.act_work_qty and the nonlabor
+    ones into TASK.act_equip_qty; P6 has no activity-level material total.
+    Costs are left alone — they are the AC side of EVM, and deriving them
     from % would make actual cost equal earned value by construction.
   - The entered % is also the physical % (TASK.phys_complete_pct), and the
     remaining duration moves to match: remain_drtn = target_drtn x (1 - %).
@@ -20,7 +22,9 @@ ever goes back to P6:
 
 What Poko shows as % (`Activity.percent_complete`) — `display_percent`:
 
-  - labor resources assigned: act_reg_qty / target_qty (summed over them);
+  - labor resources assigned: act_reg_qty / target_qty (summed over the
+    labor ones — nonlabor and material units are in their own unit of measure,
+    so they don't enter the %);
   - otherwise Completed 100, Not Started 0, In Progress the duration %
     (target_drtn - remain_drtn) / target_drtn — or, with no duration to go
     by, the physical %; failing all of that, 0.
@@ -75,11 +79,11 @@ def progress_fraction(activity: Activity) -> float:
     return max(0.0, min(100.0, float(activity.percent_complete or 0))) / 100.0
 
 
-def apply_units_from_progress(activity: Activity, labor: Iterable[ResourceAssignment]) -> None:
-    """Split each LABOR assignment's budget by the activity's %. Callers pass
-    only the RT_Labor assignments."""
+def apply_units_from_progress(activity: Activity, assignments: Iterable[ResourceAssignment]) -> None:
+    """Split each assignment's budget by the activity's %, whatever its
+    resource type."""
     fraction = progress_fraction(activity)
-    for assignment in labor:
+    for assignment in assignments:
         budget = assignment.target_qty or 0.0
         assignment.act_reg_qty = round(budget * fraction, 4)
         assignment.remain_qty = round(budget - assignment.act_reg_qty, 4)
@@ -92,10 +96,14 @@ def apply_progress_entry(
     pct_entered: bool,
     remaining_entered: bool,
     status_changed: bool,
+    nonlabor: list[ResourceAssignment] | None = None,
 ) -> None:
     """Carry a progress edit through to units / physical % / remaining duration,
     then re-derive the displayed %. Runs after the route has settled status and
-    actual dates (routes/activities.py::_apply_progress_derivation)."""
+    actual dates (routes/activities.py::_apply_progress_derivation).
+
+    `labor` are the RT_Labor assignments (they also drive the displayed %),
+    `nonlabor` every other one (RT_Equip, RT_Mat) — units follow the % on both."""
     budget, _ = labor_units(labor)
     hpd = activity_hours_per_day(activity)
     target = activity.target_duration_hours
@@ -120,8 +128,8 @@ def apply_progress_entry(
     elif remaining_entered:
         activity.remaining_duration_hours = float(activity.remaining_duration_days) * hpd
 
-    if budget > 0 and (pct_entered or status_changed):
-        apply_units_from_progress(activity, labor)
+    if pct_entered or status_changed:
+        apply_units_from_progress(activity, [*labor, *(nonlabor or [])])
 
     actual = labor_units(labor)[1]
     activity.percent_complete = display_percent(

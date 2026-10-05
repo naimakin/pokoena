@@ -165,7 +165,7 @@ def test_update_import_keeps_poko_progress_that_is_ahead_of_the_file(client, db_
 
 def _assignments(db_session, activity_id) -> dict[float, ResourceAssignment]:
     """By budgeted units — A200 carries two assignments: 40 (RT_Labor) and
-    100 (RT_Material)."""
+    100 (RT_Mat)."""
     db_session.expire_all()
     rows = db_session.query(ResourceAssignment).filter(ResourceAssignment.activity_id == activity_id).all()
     return {a.target_qty: a for a in rows}
@@ -181,8 +181,9 @@ def test_percent_complete_splits_resource_units(client, db_session):
 
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (10, 30)
-    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (0, 100)  # material
+    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (25, 75)  # material follows too
     assert by_budget[40].act_reg_cost == 0  # costs stay the AC side of EVM
+    assert by_budget[100].act_reg_cost == 0
 
 
 def test_actual_finish_zeroes_float_and_burns_all_units(client, db_session):
@@ -203,7 +204,7 @@ def test_actual_finish_zeroes_float_and_burns_all_units(client, db_session):
     assert body["is_critical"] is False
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (40, 0)
-    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (0, 100)  # material
+    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (100, 0)  # material
 
 
 def test_batch_progress_edit_splits_units_too(client, db_session):
@@ -254,7 +255,7 @@ def test_export_writes_units_dates_and_zero_float_into_task_and_taskrsrc(client,
     assert task["free_float_hr_cnt"] == ""
     a200_assignments = {r["rsrc_id"]: r for r in _table(text, "TASKRSRC") if r["task_id"] == task["task_id"]}
     assert (a200_assignments["R1"]["act_reg_qty"], a200_assignments["R1"]["remain_qty"]) == ("40", "0")
-    assert a200_assignments["R3"]["act_reg_qty"] == "0"  # RT_Material: units don't follow the %
+    assert (a200_assignments["R3"]["act_reg_qty"], a200_assignments["R3"]["remain_qty"]) == ("100", "0")  # RT_Mat
     # An untouched activity's assignment passes through as P6 wrote it.
     untouched = next(r for r in _table(text, "TASKRSRC") if r["task_id"] != task["task_id"])
     assert untouched["act_reg_qty"] == "0"

@@ -24,7 +24,7 @@
 %F	rsrc_id	rsrc_name	rsrc_short_name	rsrc_type	unit_id	clndr_id	curr_id
 %R	R1	Labor Crew A	CREW-A	RT_Labor		CAL1	
 %R	R2	Labor Crew B	CREW-B	RT_Labor		CAL1	
-%R	R3	Ready-Mix Concrete	CONC	RT_Material			
+%R	R3	Ready-Mix Concrete	CONC	RT_Mat			
 %T	TASKRSRC
 %F	taskrsrc_id	task_id	rsrc_id	remain_qty	target_qty	act_reg_qty	target_cost	act_reg_cost	remain_cost
 %R	1	1001	R1	8	8	0	800	0	800

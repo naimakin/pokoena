@@ -1,8 +1,10 @@
 """The % Poko shows, and what a % entered in Poko writes
 (services/activity_progress.py):
 
-- labor resources assigned (TASKRSRC, RT_Labor): % = act_reg_qty / target_qty,
-  and an entered % splits their units;
+- labor resources assigned (TASKRSRC, RT_Labor): % = act_reg_qty / target_qty;
+- an entered % splits the units of every assignment — labor, nonlabor
+  (RT_Equip) and material (RT_Mat): act_reg_qty = target_qty x %,
+  remain_qty = target_qty - act_reg_qty;
 - none: Completed 100, Not Started 0, In Progress the duration %
   (target_drtn - remain_drtn) / target_drtn; an entered % is stored as the
   physical % and moves the remaining duration so the two agree.
@@ -128,7 +130,7 @@ def test_unchanged_percent_riding_along_is_not_an_entry(client, db_session):
     assert body["percent_complete"] == 25
 
 
-def test_percent_entry_with_labor_resources_splits_labor_units_only(client, db_session):
+def test_percent_entry_splits_labor_and_material_units(client, db_session):
     tenant, project = _setup(db_session)
     _login(client)
     _upload(client, project.id, RESOURCE_LOADED.read_bytes())
@@ -139,7 +141,41 @@ def test_percent_entry_with_labor_resources_splits_labor_units_only(client, db_s
     assert body["percent_complete"] == 40
     by_budget = _assignments(db_session, a200.id)
     assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (16, 24)
-    assert by_budget[100].act_reg_qty == 0  # RT_Material
+    assert (by_budget[100].act_reg_qty, by_budget[100].remain_qty) == (40, 60)  # RT_Mat
+
+
+def test_percent_entry_splits_nonlabor_units_but_the_percent_stays_labor(client, db_session):
+    """An RT_Equip assignment's units follow the entered % like labor's do;
+    the % Poko shows is still the labor units % (nonlabor is in its own unit)."""
+    import uuid
+
+    from app.models.resource import NONLABOR, Resource
+    from app.models.resource_assignment import ResourceAssignment
+
+    tenant, project = _setup(db_session)
+    _login(client)
+    _upload(client, project.id, RESOURCE_LOADED.read_bytes())
+    a200 = _activity(db_session, project.id, "A200")
+    excavator = Resource(
+        id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, rsrc_id="E1", name="Excavator",
+        rsrc_type=NONLABOR,
+    )
+    db_session.add(excavator)
+    db_session.flush()
+    db_session.add(
+        ResourceAssignment(
+            id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, activity_id=a200.id,
+            resource_id=excavator.id, target_qty=16, act_reg_qty=0, remain_qty=16,
+        )
+    )
+    db_session.commit()
+
+    body = client.patch(f"/activities/{a200.id}", json={"percent_complete": 25}).json()
+
+    assert body["percent_complete"] == 25
+    by_budget = _assignments(db_session, a200.id)
+    assert (by_budget[16].act_reg_qty, by_budget[16].remain_qty) == (4, 12)  # RT_Equip
+    assert (by_budget[40].act_reg_qty, by_budget[40].remain_qty) == (10, 30)  # RT_Labor
 
 
 def test_percent_on_a_not_started_activity_starts_it_on_the_data_date(client, db_session):
@@ -155,3 +191,19 @@ def test_percent_on_a_not_started_activity_starts_it_on_the_data_date(client, db
     assert body["status"] == "in_progress"
     assert body["actual_start"] == "2026-01-05"
     assert body["status_code"] == "TK_Active"
+
+
+def test_assignments_endpoint_shows_units_after_a_percent_entry(client, db_session):
+    """The Activity modal's resource table: every assignment's units, labor first."""
+    tenant, project = _setup(db_session)
+    _login(client)
+    _upload(client, project.id, RESOURCE_LOADED.read_bytes())
+    a200 = _activity(db_session, project.id, "A200")
+    client.patch(f"/activities/{a200.id}", json={"percent_complete": 40})
+
+    rows = client.get(f"/activities/{a200.id}/assignments").json()
+
+    assert [(r["rsrc_type"], r["target_qty"], r["act_reg_qty"], r["remain_qty"]) for r in rows] == [
+        ("RT_Labor", 40, 16, 24),
+        ("RT_Mat", 100, 40, 60),
+    ]

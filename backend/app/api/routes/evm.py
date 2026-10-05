@@ -32,6 +32,7 @@ from app.models.calendar import Calendar
 from app.models.evm_snapshot import EvmSnapshot
 from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
+from app.models.resource import LABOR, MATERIAL, NONLABOR
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.user_tenant_role import TenantRole
@@ -363,11 +364,11 @@ def get_baseline_resources(
         baseline_id=baseline.id,
         version_label=baseline.version_label,
         resource_count=len(resources),
-        labor_count=sum(1 for r in resources if r.rsrc_type == "RT_Labor"),
-        material_count=sum(1 for r in resources if r.rsrc_type == "RT_Material"),
-        equipment_count=sum(1 for r in resources if r.rsrc_type == "RT_Equip"),
+        labor_count=sum(1 for r in resources if r.rsrc_type == LABOR),
+        material_count=sum(1 for r in resources if r.rsrc_type == MATERIAL),
+        equipment_count=sum(1 for r in resources if r.rsrc_type == NONLABOR),
         total_budgeted_labor_hours=round(
-            sum(qty_by_rsrc.get(r.id, 0.0) for r in resources if r.rsrc_type == "RT_Labor"), 2
+            sum(qty_by_rsrc.get(r.id, 0.0) for r in resources if r.rsrc_type == LABOR), 2
         ),
         total_budgeted_cost=round(sum(cost_by_rsrc.values()), 2),
         resources=items,

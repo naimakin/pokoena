@@ -112,6 +112,22 @@ class ActivityBatchResultOut(BaseModel):
     failed: list[ActivityBatchRowError]
 
 
+class ActivityAssignmentOut(BaseModel):
+    """One TASKRSRC row of an activity, as Poko holds it: budgeted / actual /
+    remaining units. All three follow the activity's % for every resource
+    type (services/activity_progress.py)."""
+
+    id: uuid.UUID
+    rsrc_id: str
+    name: str
+    short_name: str | None = None
+    rsrc_type: str
+    unit_id: str | None = None
+    target_qty: float
+    act_reg_qty: float
+    remain_qty: float
+
+
 class ActivityRelationshipOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

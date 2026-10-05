@@ -5,9 +5,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-# P6 RSRC.rsrc_type of a labor resource — the only kind whose units follow an
-# activity's % (services/activity_progress.py).
+# P6 RSRC.rsrc_type values, exactly as P6 writes them (checked against P6
+# Professional's own database and real exports). Labor units roll up into
+# TASK.*_work_qty and drive the units %; nonlabor into TASK.*_equip_qty;
+# material has no activity-level total.
 LABOR = "RT_Labor"
+NONLABOR = "RT_Equip"
+MATERIAL = "RT_Mat"
 
 
 class Resource(Base):
