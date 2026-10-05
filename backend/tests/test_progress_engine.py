@@ -7,6 +7,7 @@ from app.engine.evm.progress_engine import (
     planned_percent,
     schedule_performance,
     version_facts,
+    wbs_levels,
 )
 from app.engine.evm.scurve_engine import compute_evm_series
 
@@ -49,11 +50,11 @@ def test_spi_zero_state_before_the_baseline_plans_any_work():
 
 def test_version_facts_counts_milestones_tasks_and_wbs_depth():
     rows = [
-        VersionRow("TT_Mile", date(2026, 1, 1), date(2026, 1, 1), "P > A", False),
-        VersionRow("TT_FinMile", date(2026, 6, 1), date(2026, 6, 1), "P > A", True),
-        VersionRow("TT_Task", date(2026, 1, 2), date(2026, 3, 1), "P > A > B > C", True),
-        VersionRow("TT_LOE", date(2025, 1, 1), date(2028, 1, 1), "P", True),  # ignored
-        VersionRow("TT_WBS", date(2025, 1, 1), date(2028, 1, 1), "P", True),  # ignored
+        VersionRow("TT_Mile", date(2026, 1, 1), date(2026, 1, 1), 2, False),
+        VersionRow("TT_FinMile", date(2026, 6, 1), date(2026, 6, 1), 2, True),
+        VersionRow("TT_Task", date(2026, 1, 2), date(2026, 3, 1), 4, True),
+        VersionRow("TT_LOE", date(2025, 1, 1), date(2028, 1, 1), 9, True),  # ignored
+        VersionRow("TT_WBS", date(2025, 1, 1), date(2028, 1, 1), 9, True),  # ignored
     ]
     facts = version_facts(rows)
     assert (facts.milestones_total, facts.milestones_remaining) == (2, 1)
@@ -69,3 +70,10 @@ def test_evm_series_carries_cumulative_values_forward():
     points = {p.snapshot_date: p for p in compute_evm_series(pv, ac, bac=20.0, current_ev=8.0)}
     assert points[date(2026, 1, 2)].ac_cumulative == 5.0  # no entry that day
     assert points[date(2026, 1, 3)].pv_cumulative == 20.0  # past the curve's end
+
+
+def test_wbs_levels_count_the_project_root_as_level_one():
+    levels = wbs_levels({"P": None, "A": "P", "B": "A", "C": "B", "X": "Y", "Y": "X"})
+    assert levels["P"] == 1
+    assert levels["C"] == 4
+    assert levels["X"] == 2  # a malformed cycle stops instead of looping

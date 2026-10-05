@@ -28,12 +28,14 @@ from app.engine.evm.progress_engine import (
     planned_percent,
     schedule_performance,
     version_facts,
+    wbs_levels,
 )
 from app.engine.evm.scurve_engine import EvmPoint, compute_current_ev
 from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineActivity, BaselinePvCurve
 from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.schedule_import import ScheduleImport
+from app.models.wbs_node import WbsNode
 from app.services.schedule_current import get_current_import, to_naive
 
 # How Poko arrives at percent complete, stated on every report.
@@ -138,6 +140,15 @@ def compute_progress_summary(
     programme = current_programme(all_activities, current)
     baseline_rows = db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).all()
 
+    # Activity.wbs_path / BaselineActivity.wbs_code hold the P6 wbs_id, not a
+    # path — depth comes from the WBS tree.
+    level = wbs_levels(
+        {
+            n.wbs_id: n.parent_wbs_id
+            for n in db.query(WbsNode).filter(WbsNode.tenant_id == tenant_id, WbsNode.project_id == project_id)
+        }
+    )
+
     planned = baseline_planned_percent(baseline_rows, by_id, as_of)
     actual = programme_actual_percent(programme)
 
@@ -148,7 +159,7 @@ def compute_progress_summary(
             task_type=by_id[ba.activity_id].task_type if ba.activity_id in by_id else None,
             start=ba.baseline_start,
             finish=ba.baseline_end,
-            wbs_path=ba.wbs_code,
+            wbs_level=level.get(ba.wbs_code or "", 0),
             is_remaining=ba.baseline_end is None or ba.baseline_end >= as_of,
         )
         for ba in baseline_rows
@@ -158,7 +169,7 @@ def compute_progress_summary(
             task_type=a.task_type,
             start=a.actual_start or a.early_start or a.planned_start,
             finish=a.actual_finish or a.early_finish or a.planned_finish,
-            wbs_path=a.wbs_path,
+            wbs_level=level.get(a.wbs_path or "", 0),
             is_remaining=a.status != ActivityStatus.complete,
         )
         for a in programme

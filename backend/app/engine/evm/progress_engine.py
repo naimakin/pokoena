@@ -104,8 +104,25 @@ class VersionRow:
     task_type: Optional[str]
     start: Optional[date]
     finish: Optional[date]
-    wbs_path: Optional[str]
+    wbs_level: int  # depth of the activity's WBS node, project root = 1
     is_remaining: bool
+
+
+def wbs_levels(parent_by_id: dict[str, Optional[str]]) -> dict[str, int]:
+    """Depth of every WBS node, counting the project root as level 1 (the
+    convention Nodes & Links' "Max WBS Level" uses). Guards against a cycle in
+    malformed data by stopping once a node repeats."""
+    levels: dict[str, int] = {}
+    for wbs_id in parent_by_id:
+        seen: set[str] = set()
+        node: Optional[str] = wbs_id
+        depth = 0
+        while node is not None and node in parent_by_id and node not in seen:
+            seen.add(node)
+            depth += 1
+            node = parent_by_id[node]
+        levels[wbs_id] = depth
+    return levels
 
 
 def version_facts(rows: Iterable[VersionRow]) -> VersionFacts:
@@ -128,8 +145,7 @@ def version_facts(rows: Iterable[VersionRow]) -> VersionFacts:
         else:
             tasks += 1
             tasks_open += r.is_remaining
-        if r.wbs_path:
-            max_level = max(max_level, len([p for p in r.wbs_path.split(" > ") if p]))
+        max_level = max(max_level, r.wbs_level)
     return VersionFacts(
         start=min(starts) if starts else None,
         finish=max(finishes) if finishes else None,
