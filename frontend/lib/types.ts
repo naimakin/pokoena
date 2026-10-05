@@ -585,6 +585,37 @@ export interface EvmSummary {
   entry_count: number;
 }
 
+/** GET /projects/{id}/evm/progress-summary — planned vs actual at the data
+ *  date plus the baseline vs latest version table. See
+ *  backend/app/engine/evm/progress_engine.py. */
+export interface ProgressVersion {
+  kind: "baseline" | "latest";
+  label: string | null;
+  filename: string | null;
+  data_date: string | null;
+  start: string | null;
+  finish: string | null;
+  milestones_total: number;
+  /** Baseline row: still open in the baseline plan at the CURRENT data date. */
+  milestones_remaining: number;
+  tasks_total: number;
+  tasks_remaining: number;
+  max_wbs_level: number;
+}
+
+export interface ProgressSummary {
+  project_id: string;
+  baseline_id: string;
+  version_label: string;
+  data_date: string;
+  basis: string;
+  planned_pct: number | null;
+  actual_pct: number | null;
+  spi: number | null;
+  finish_variance_days: number | null;
+  versions: ProgressVersion[];
+}
+
 export interface WbsNode {
   id: string;
   wbs_id: string;

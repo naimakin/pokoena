@@ -122,11 +122,14 @@ def generate_pv_curve(activities: list[dict], bac: float) -> list[tuple[date, fl
 
 def compute_current_ev(activities: list[Activity]) -> float:
     """EV = sum(percent_complete/100 x target_duration_hours) — Christensen
-    (1998) weighted method."""
+    (1998) weighted method. WBS Summary rows are skipped, same as BAC
+    (`services/baseline.py::_compute_baseline_scope`): their duration spans
+    their children's, so counting them earns the same work twice."""
     return round(
         sum(
             (a.percent_complete or 0) / 100.0 * (a.target_duration_hours or 0)
             for a in (activities or [])
+            if (a.task_type or "") != "TT_WBS"
         ),
         4,
     )
@@ -148,10 +151,14 @@ def compute_evm_series(
 
     first_ac_date = min(ac_series) if ac_series else None
 
+    # Both series are cumulative: a date missing from one (no actuals booked
+    # that day, or past the baseline finish) carries its last value forward
+    # rather than dropping to zero.
     points: list[EvmPoint] = []
+    pv_cum = ac_cum = 0.0
     for d in all_dates:
-        pv_cum = pv_series.get(d, 0.0)
-        ac_cum = ac_series.get(d, 0.0)
+        pv_cum = pv_series.get(d, pv_cum)
+        ac_cum = ac_series.get(d, ac_cum)
         ev_cum = current_ev if (first_ac_date and d >= first_ac_date) else 0.0
         points.append(EvmPoint.compute(d, pv_cum, ev_cum, ac_cum, bac))
     return points

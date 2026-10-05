@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { useToast } from "@/components/Toast";
 import { fmtP6Date } from "@/components/reporting/format";
+import { FoldCard } from "@/components/reporting/collapse";
 import { BarChartIcon, CheckIcon, DownloadIcon, SettingsIcon } from "@/components/icons";
 import { NoProjectIllo } from "@/components/illustrations";
 import type {
@@ -210,15 +211,11 @@ export default function ReportsPage() {
           </div>
         )}
 
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Report formats</div>
-              <div className="card-title-sub">
-                The four standard ones are ready to use; add your own alongside them.
-              </div>
-            </div>
-          </div>
+        <FoldCard
+          title="Report formats"
+          subtitle="The four standard ones are ready to use; add your own alongside them."
+          hint={`${formats.length} ${formats.length === 1 ? "format" : "formats"}`}
+        >
           <div className="table-wrap">
             <table>
               <thead>
@@ -277,7 +274,7 @@ export default function ReportsPage() {
               Add format
             </button>
           </div>
-        </div>
+        </FoldCard>
 
         {editing && (
           <div className="card">
@@ -343,11 +340,21 @@ export default function ReportsPage() {
               </label>
 
               <div className="report-picker">
+                <div className="report-picker-head">
+                  <span>Blocks, in print order</span>
+                  <span className="num">
+                    {ordered.filter((b) => b.enabled && byKey.has(b.key)).length} of{" "}
+                    {ordered.filter((b) => byKey.has(b.key)).length} selected
+                  </span>
+                </div>
                 {ordered.map((b, i) => {
                   const meta = byKey.get(b.key);
                   if (!meta) return null;
                   return (
                     <div key={b.key} className={`report-picker-row${b.enabled ? " is-on" : ""}`}>
+                      <span className="report-picker-no num" aria-hidden="true">
+                        {i + 1}
+                      </span>
                       <label style={{ display: "flex", gap: ".5rem", alignItems: "flex-start", flex: 1 }}>
                         <input type="checkbox" checked={b.enabled} onChange={() => toggleBlock(b.key)} />
                         <span>
@@ -386,19 +393,23 @@ export default function ReportsPage() {
           </div>
         )}
 
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Getting a PDF</div>
-              <div className="card-title-sub">
-                Open a report and press Print. Choose &ldquo;Save as PDF&rdquo; as the destination, and turn
-                the browser&rsquo;s own headers and footers off so it doesn&rsquo;t stamp the URL over the
-                page — the report prints its own data date and revision on every sheet.
-              </div>
-            </div>
-            <DownloadIcon className="icon" />
+        <FoldCard
+          title="Getting a PDF"
+          subtitle="Print settings that keep the browser from stamping over the report"
+          meta={<DownloadIcon className="icon" aria-hidden="true" />}
+          defaultOpen={false}
+        >
+          <div className="report-body">
+            <p>
+              Open a report and press Print. Choose &ldquo;Save as PDF&rdquo; as the destination, and turn the
+              browser&rsquo;s own headers and footers off so it doesn&rsquo;t stamp the URL over the page — the
+              report prints its own data date and revision on every sheet.
+            </p>
+            <p>
+              Folded blocks print in full, so collapse whatever you don&rsquo;t need to read on screen.
+            </p>
           </div>
-        </div>
+        </FoldCard>
       </div>
     </>
   );

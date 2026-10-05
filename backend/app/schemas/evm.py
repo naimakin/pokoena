@@ -265,3 +265,34 @@ class EvmSummaryOut(BaseModel):
     pct_earned: float
     total_ac_raw: float
     entry_count: int
+
+
+class ProgressVersionOut(BaseModel):
+    """One row of the baseline vs latest table. For the baseline row,
+    `*_remaining` counts what the baseline still had open at the CURRENT data
+    date; for the latest row, what is actually still open."""
+
+    kind: str  # "baseline" | "latest"
+    label: str | None
+    filename: str | None
+    data_date: date | None
+    start: date | None
+    finish: date | None
+    milestones_total: int
+    milestones_remaining: int
+    tasks_total: int
+    tasks_remaining: int
+    max_wbs_level: int
+
+
+class ProgressSummaryOut(BaseModel):
+    project_id: uuid.UUID
+    baseline_id: uuid.UUID
+    version_label: str
+    data_date: date
+    basis: str
+    planned_pct: float | None
+    actual_pct: float | None
+    spi: float | None
+    finish_variance_days: int | None
+    versions: list[ProgressVersionOut]

@@ -11,7 +11,6 @@ from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineStatus
 from app.models.change_request import ChangeRequest, ChangeRequestStatus
 from app.models.dashboard_layout import DashboardLayout
-from app.models.evm_snapshot import EvmSnapshot
 from app.models.project import Project
 from app.models.project_scope import ProjectScope
 from app.models.risk_item import RiskItem, RiskStatus
@@ -19,6 +18,7 @@ from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
 from app.models.user_tenant_role import TenantRole
+from app.services.progress_summary import compute_progress_summary, evm_point_at
 from app.schemas.dashboard import (
     DashboardLayoutOut,
     DashboardLayoutUpdate,
@@ -300,14 +300,14 @@ def _gather_signals(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> dic
         )
         .first()
     )
-    latest_snapshot = None
+    # Measured at the data date, the same way Reporting and Project Status do
+    # (services/progress_summary.py) — not from the newest EVM snapshot row.
+    performance = None
     if baseline is not None:
-        latest_snapshot = (
-            db.query(EvmSnapshot)
-            .filter(EvmSnapshot.project_id == project_id, EvmSnapshot.baseline_id == baseline.id)
-            .order_by(EvmSnapshot.snapshot_date.desc())
-            .first()
-        )
+        performance = {
+            "spi": compute_progress_summary(db, ctx.tenant_id, project_id, baseline).spi,
+            "cpi": evm_point_at(db, ctx.tenant_id, project_id, baseline).cpi,
+        }
 
     return {
         "activities": activities,
@@ -316,7 +316,7 @@ def _gather_signals(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> dic
         "orgs_submitted": orgs_submitted,
         "flagged_pending": flagged_pending,
         "baseline": baseline,
-        "latest_snapshot": latest_snapshot,
+        "performance": performance,
         "today": datetime.now(timezone.utc).date(),
     }
 
@@ -371,24 +371,23 @@ def get_project_health(
         )
 
     # 2 & 3. EVM schedule + cost performance.
-    snap = s["latest_snapshot"]
-    if snap is not None:
+    perf = s["performance"]
+    if perf is not None:
+        spi, cpi = perf["spi"], perf["cpi"]
         factors.append(
             HealthFactor(
                 key="evm", label="Schedule performance (SPI)",
-                status=_index_status(snap.spi),
-                detail=f"SPI {snap.spi:.2f}" if snap.spi is not None else "Not enough progress data",
+                status=_index_status(spi),
+                detail=f"SPI {spi:.2f}" if spi is not None else "Not enough progress data",
             )
         )
         factors.append(
             HealthFactor(
                 key="evm", label="Cost performance (CPI)",
-                status=_index_status(snap.cpi),
-                detail=f"CPI {snap.cpi:.2f}" if snap.cpi is not None else "Not enough progress data",
+                status=_index_status(cpi),
+                detail=f"CPI {cpi:.2f}" if cpi is not None else "No actual hours recorded",
             )
         )
-    elif s["baseline"] is not None:
-        factors.append(HealthFactor(key="evm", label="EVM performance", status="unknown", detail="Baseline locked, no progress submitted yet"))
     else:
         factors.append(HealthFactor(key="evm", label="EVM performance", status="unknown", detail="No baseline locked"))
 

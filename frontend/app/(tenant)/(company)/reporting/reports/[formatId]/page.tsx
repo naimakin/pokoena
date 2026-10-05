@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
-import { BLOCK_REGISTRY, type BlockContext } from "@/components/reporting/ReportBlocks";
+import { BLOCK_REGISTRY, HALF_WIDTH_BLOCKS, type BlockContext } from "@/components/reporting/ReportBlocks";
+import { FoldAllControls, FoldKey, FoldProvider } from "@/components/reporting/collapse";
 import { fmtP6Date, fmtP6DateTime } from "@/components/reporting/format";
 import { ArrowRightIcon, DownloadIcon } from "@/components/icons";
 import type { ReportFormat, ReportHeader } from "@/lib/types";
@@ -20,6 +21,17 @@ export default function ReportPage() {
   const [header, setHeader] = useState<ReportHeader | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Folded block keys. Screen only — print opens every block regardless.
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
+
+  const setBlockOpen = useCallback((key: string, open: boolean) => {
+    setClosed((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     if (!project || !formatId) {
@@ -59,6 +71,38 @@ export default function ReportPage() {
 
   const landscape = format.page_setup?.orientation === "landscape";
 
+  // The cover never folds, so it is not part of "collapse all".
+  const foldable = blocks.filter((b) => b.key !== "cover").map((b) => b.key);
+
+  // Two adjacent half-width blocks share a row; anything else takes the full
+  // width. Only neighbours pair up, so the format's order is never changed.
+  const rows: (typeof blocks)[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const next = blocks[i + 1];
+    if (HALF_WIDTH_BLOCKS.has(blocks[i].key) && next && HALF_WIDTH_BLOCKS.has(next.key)) {
+      rows.push([blocks[i], next]);
+      i++;
+    } else {
+      rows.push([blocks[i]]);
+    }
+  }
+
+  function renderBlock(b: (typeof blocks)[number]) {
+    if (!project || !format) return null;
+    const Block = BLOCK_REGISTRY[b.key];
+    const ctx: BlockContext = {
+      project,
+      header,
+      narrative: format.narrative,
+      options: b.options ?? {},
+    };
+    return (
+      <FoldKey key={b.key} id={b.key}>
+        <Block {...ctx} />
+      </FoldKey>
+    );
+  }
+
   return (
     <>
       <div className="a-topbar no-print">
@@ -72,7 +116,15 @@ export default function ReportPage() {
             <div className="page-title">{format.name}</div>
             <div className="page-desc">{format.description ?? `${blocks.length} blocks`}</div>
           </div>
-          <div style={{ display: "flex", gap: ".4rem", flexWrap: "wrap" }}>
+          <div className="report-actions">
+            {foldable.length > 0 && (
+              <FoldAllControls
+                onExpand={() => setClosed(new Set())}
+                onCollapse={() => setClosed(new Set(foldable))}
+                canExpand={closed.size > 0}
+                canCollapse={foldable.some((key) => !closed.has(key))}
+              />
+            )}
             <Link className="btn btn-ghost" href="/reporting/reports">
               Back to formats
             </Link>
@@ -114,16 +166,17 @@ export default function ReportPage() {
                     </p>
                   </div>
                 ) : (
-                  blocks.map((b) => {
-                    const Block = BLOCK_REGISTRY[b.key];
-                    const ctx: BlockContext = {
-                      project,
-                      header,
-                      narrative: format.narrative,
-                      options: b.options ?? {},
-                    };
-                    return <Block key={b.key} {...ctx} />;
-                  })
+                  <FoldProvider closed={closed} onChange={setBlockOpen}>
+                    {rows.map((row) =>
+                      row.length === 2 ? (
+                        <div className="report-pair" key={row.map((b) => b.key).join("+")}>
+                          {row.map(renderBlock)}
+                        </div>
+                      ) : (
+                        renderBlock(row[0])
+                      ),
+                    )}
+                  </FoldProvider>
                 )}
 
                 <div className="report-footer">

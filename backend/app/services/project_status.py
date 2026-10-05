@@ -17,18 +17,26 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.engine.durations import activity_days
 from app.engine.quality.dcma import DcmaThresholds, run_dcma
 from app.models.activity import Activity, ActivityStatus
 from app.models.activity_relationship import ActivityRelationship
-from app.models.baseline import Baseline, BaselineStatus
+from app.engine.evm.progress_engine import schedule_performance
+from app.engine.evm.scurve_engine import compute_current_ev
+from app.models.baseline import Baseline, BaselineActivity, BaselineStatus
 from app.models.calendar import Calendar
-from app.models.evm_snapshot import EvmSnapshot
+from app.models.progress_entry import ProgressEntry, ProgressEntryType
 from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
+from app.services.progress_summary import (
+    baseline_planned_percent,
+    current_programme,
+    programme_actual_percent,
+)
 from app.services.schedule_current import get_current_import, to_naive
 
 # An activity is "Important" if it's on/near the critical path.
@@ -52,6 +60,9 @@ class StatusRollup:
     data_date: datetime | None
     spi: float | None
     cpi: float | None
+    # Duration-weighted share the baseline planned done by the data date
+    # (engine/evm/progress_engine.py); None without a baseline.
+    planned_percent: float | None
     schedule_recovery_index: float | None
     dcma_score: float
     dcma_status: str
@@ -109,8 +120,9 @@ def real_activities(activities: list[Activity]) -> list[Activity]:
 
 
 def _fallback_spi(activities: list[Activity], dd: datetime) -> float | None:
-    """EV/PV from activity durations alone (calendar-unaware) — used only when
-    no baseline EVM snapshot exists yet."""
+    """EV/PV from the current schedule's own planned dates (calendar-unaware)
+    — used only when no baseline is locked, so there is nothing better to
+    measure planned progress against."""
     ev = 0.0
     pv = 0.0
     today = dd.date()
@@ -239,12 +251,6 @@ def load_status_inputs(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID)
     hours_per_day = calendar.hours_per_day if calendar and calendar.hours_per_day else 8.0
 
     last_import = get_current_import(db, tenant_id, project_id)
-    latest_snapshot = (
-        db.query(EvmSnapshot)
-        .filter(EvmSnapshot.tenant_id == tenant_id, EvmSnapshot.project_id == project_id)
-        .order_by(EvmSnapshot.snapshot_date.desc())
-        .first()
-    )
     active_baseline = (
         db.query(Baseline)
         .filter(
@@ -253,6 +259,20 @@ def load_status_inputs(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID)
             Baseline.status == BaselineStatus.active,
         )
         .first()
+    )
+    baseline_activities = (
+        db.query(BaselineActivity).filter(BaselineActivity.baseline_id == active_baseline.id).all()
+        if active_baseline
+        else []
+    )
+    actual_cost_hours = (
+        db.query(func.coalesce(func.sum(ProgressEntry.burned_manhours_daily), 0.0))
+        .filter(
+            ProgressEntry.tenant_id == tenant_id,
+            ProgressEntry.project_id == project_id,
+            ProgressEntry.entry_type.in_([ProgressEntryType.actual, ProgressEntryType.correction]),
+        )
+        .scalar()
     )
     assigned_activity_ids = {
         row.activity_id
@@ -268,8 +288,9 @@ def load_status_inputs(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID)
         "relationships": relationships,
         "hours_per_day": hours_per_day,
         "last_import": last_import,
-        "latest_snapshot": latest_snapshot,
         "active_baseline": active_baseline,
+        "baseline_activities": baseline_activities,
+        "actual_cost_hours": float(actual_cost_hours or 0.0),
         "assigned_activity_ids": assigned_activity_ids,
     }
 
@@ -280,19 +301,32 @@ def compute_status_rollup(db: Session, tenant_id: uuid.UUID, project_id: uuid.UU
 
 def rollup_from_inputs(inputs: dict) -> StatusRollup:
     activities: list[Activity] = inputs["activities"]
-    real = real_activities(activities)
     hours_per_day: float = inputs["hours_per_day"]
     last_import: ScheduleImport | None = inputs["last_import"]
-    latest_snapshot: EvmSnapshot | None = inputs["latest_snapshot"]
+    # Activities dropped from the latest .xer keep their row but aren't part
+    # of the programme any more.
+    programme = current_programme(activities, last_import)
+    real = real_activities(programme)
     active_baseline: Baseline | None = inputs["active_baseline"]
+    baseline_activities: list[BaselineActivity] = inputs.get("baseline_activities") or []
 
     data_date = to_naive(last_import.data_date) if last_import else None
     dd = data_date or datetime.utcnow()
 
-    spi = latest_snapshot.spi if latest_snapshot and latest_snapshot.spi is not None else None
-    cpi = latest_snapshot.cpi if latest_snapshot and latest_snapshot.cpi is not None else None
-    if spi is None:
+    # SPI = actual % / planned %, planned from the locked baseline at the data
+    # date — the same pair Reporting's progress block shows
+    # (services/progress_summary.py).
+    planned_pct = (
+        baseline_planned_percent(baseline_activities, {a.id: a for a in activities}, dd.date())
+        if baseline_activities
+        else None
+    )
+    if planned_pct is not None:
+        spi = schedule_performance(planned_pct, programme_actual_percent(programme))
+    else:
         spi = _fallback_spi(real, dd)
+    actual_cost = inputs.get("actual_cost_hours") or 0.0
+    cpi = round(compute_current_ev(programme) / actual_cost, 4) if actual_cost > 0 else None
 
     baseline_end = active_baseline.target_end_date if active_baseline else None
     recovery_index = _recovery_index(real, dd, baseline_end, hours_per_day)
@@ -334,6 +368,7 @@ def rollup_from_inputs(inputs: dict) -> StatusRollup:
         data_date=data_date,
         spi=spi,
         cpi=cpi,
+        planned_percent=planned_pct,
         schedule_recovery_index=recovery_index,
         dcma_score=dcma_score,
         dcma_status=dcma_status,

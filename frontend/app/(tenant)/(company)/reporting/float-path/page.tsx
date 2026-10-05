@@ -7,6 +7,7 @@ import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
 import { AlertTriangleIcon, CompareIcon, DownloadIcon } from "@/components/icons";
 import { FloatBadge, fmtDays, fmtP6Date } from "@/components/reporting/format";
+import { FoldAllControls, FoldCard, FoldKey, FoldProvider } from "@/components/reporting/collapse";
 import { NoProjectIllo } from "@/components/illustrations";
 import type {
   FloatPath,
@@ -16,6 +17,11 @@ import type {
 } from "@/lib/types";
 
 const PATH_COUNTS = [3, 5, 10];
+
+// With ten paths of fifty activities each the page scrolls for ever, so only
+// the first few open on a fresh calculation; the rest fold to their header
+// line, which already carries the count and the float.
+const OPEN_PATHS = 3;
 
 const MILESTONE_TYPES = new Set(["TT_Mile", "TT_FinMile"]);
 
@@ -85,6 +91,16 @@ export default function FloatPathPage() {
   const [pathCount, setPathCount] = useState(5);
   const [excludeCompleted, setExcludeCompleted] = useState(true);
   const [selected, setSelected] = useState<number | null>(null);
+  const [closedPaths, setClosedPaths] = useState<ReadonlySet<string>>(() => new Set());
+
+  const setPathOpen = useCallback((key: string, open: boolean) => {
+    setClosedPaths((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!project) {
@@ -122,8 +138,10 @@ export default function FloatPathPage() {
       exclude_completed: String(excludeCompleted),
     });
     try {
-      setReport(await api.get<FloatPathReport>(`/projects/${project.id}/float-path?${params}`));
+      const result = await api.get<FloatPathReport>(`/projects/${project.id}/float-path?${params}`);
+      setReport(result);
       setSelected(null);
+      setClosedPaths(new Set(result.paths.filter((p) => p.path_no > OPEN_PATHS).map((p) => String(p.path_no))));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not calculate the float paths.");
       setReport(null);
@@ -332,7 +350,11 @@ export default function FloatPathPage() {
                       key={p.path_no}
                       className="fp-card"
                       aria-pressed={selected === p.path_no}
-                      onClick={() => setSelected(selected === p.path_no ? null : p.path_no)}
+                      onClick={() => {
+                        // Picking a path shows it open, even if it was folded.
+                        if (selected !== p.path_no) setPathOpen(String(p.path_no), true);
+                        setSelected(selected === p.path_no ? null : p.path_no);
+                      }}
                       style={{ borderLeftColor: `var(${floatVar(p.total_float_days)})` }}
                     >
                       <div className="fp-card-no">
@@ -350,24 +372,37 @@ export default function FloatPathPage() {
                   ))}
                 </div>
 
-                {shown.map((p) => (
-                  <div className="card" key={p.path_no}>
-                    <div className="card-head">
-                      <div>
-                        <div className="card-title">
-                          {method === "free_float" ? `Path ${p.path_no}` : `Band ${p.path_no}`} —{" "}
-                          {p.activities.length} activities at {fmtDays(p.total_float_days)}
-                        </div>
-                        <div className="card-title-sub">
-                          {p.joins_at_external_id
-                            ? `Feeds ${p.joins_at_external_id} via ${linkLabel(p.join_link_type, p.join_lag_days)}`
-                            : `Ends at ${report.end_activity_external_id} — ${report.end_activity_name ?? ""}`}
-                        </div>
-                      </div>
-                    </div>
-                    <PathTable path={p} />
+                {shown.length > 1 && (
+                  <div className="fold-toolbar">
+                    <span className="fold-toolbar-note">
+                      {shown.length - shown.filter((p) => closedPaths.has(String(p.path_no))).length} of {shown.length}{" "}
+                      {method === "free_float" ? "paths" : "bands"} open
+                    </span>
+                    <FoldAllControls
+                      onExpand={() => setClosedPaths(new Set())}
+                      onCollapse={() => setClosedPaths(new Set(shown.map((p) => String(p.path_no))))}
+                      canExpand={shown.some((p) => closedPaths.has(String(p.path_no)))}
+                      canCollapse={shown.some((p) => !closedPaths.has(String(p.path_no)))}
+                    />
                   </div>
-                ))}
+                )}
+
+                <FoldProvider closed={closedPaths} onChange={setPathOpen}>
+                  {shown.map((p) => (
+                    <FoldKey key={p.path_no} id={String(p.path_no)}>
+                      <FoldCard
+                        title={`${method === "free_float" ? `Path ${p.path_no}` : `Band ${p.path_no}`} — ${p.activities.length} activities at ${fmtDays(p.total_float_days)}`}
+                        subtitle={
+                          p.joins_at_external_id
+                            ? `Feeds ${p.joins_at_external_id} via ${linkLabel(p.join_link_type, p.join_lag_days)}`
+                            : `Ends at ${report.end_activity_external_id} — ${report.end_activity_name ?? ""}`
+                        }
+                      >
+                        <PathTable path={p} />
+                      </FoldCard>
+                    </FoldKey>
+                  ))}
+                </FoldProvider>
               </>
             )}
 

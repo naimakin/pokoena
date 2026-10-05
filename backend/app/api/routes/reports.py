@@ -26,13 +26,11 @@ from app.schemas.report import (
     ReportFormatUpdate,
     ReportHeaderOut,
 )
+from app.services.progress_summary import PROGRESS_BASIS
 from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["reporting"])
 
-# How Poko arrives at percent complete, stated on every report. See
-# engine/evm/scurve_engine.py::compute_current_ev.
-PROGRESS_BASIS = "Duration-weighted earned progress against the locked baseline"
 
 
 # ---------------------------------------------------------------------------

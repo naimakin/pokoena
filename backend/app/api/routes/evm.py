@@ -59,8 +59,11 @@ from app.schemas.evm import (
     ProgressBatchIn,
     ProgressEntryOut,
     ProgressSubmitResultOut,
+    ProgressSummaryOut,
+    ProgressVersionOut,
     QuickEvmOut,
 )
+from app.services.progress_summary import PROGRESS_BASIS, compute_progress_summary, evm_point_at
 from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/evm", tags=["evm"])
@@ -645,16 +648,13 @@ def get_scurve(
 def get_evm_summary(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> EvmSummaryOut:
+    """EVM at the current schedule's data date — computed live (see
+    services/progress_summary.py::evm_point_at for why not from the newest
+    snapshot row)."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx)
     baseline = _require_active_baseline(db, ctx, project_id)
 
-    latest = (
-        db.query(EvmSnapshot)
-        .filter(EvmSnapshot.project_id == project_id, EvmSnapshot.baseline_id == baseline.id)
-        .order_by(EvmSnapshot.snapshot_date.desc())
-        .first()
-    )
     total_ac = (
         db.query(func.coalesce(func.sum(ProgressEntry.burned_manhours_daily), 0.0))
         .filter(
@@ -664,28 +664,56 @@ def get_evm_summary(
         .scalar()
     )
     entry_count = db.query(ProgressEntry).filter(ProgressEntry.project_id == project_id).count()
-    bac = round(baseline.total_budget_manhours, 2)
-
-    if latest is None:
-        # Baseline locked but no progress submitted yet. Per PMI Practice
-        # Standard for EVM: at project inception, before any work is
-        # performed, SPI=1.0 and CPI=1.0 — no deviation exists to measure.
-        return EvmSummaryOut(
-            project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label,
-            status="baseline_initialized",
-            message="Baseline locked. No progress entries yet — indices start at 1.0 (PMI standard).",
-            bac=bac, pv_cumulative=0.0, ev_cumulative=0.0, ac_cumulative=0.0, spi=1.0, cpi=1.0, sv=0.0, cv=0.0,
-            eac=bac, etc=bac, tcpi=1.0, tcpi_critical=False, pct_planned=0.0, pct_earned=0.0,
-            total_ac_raw=round(float(total_ac or 0), 2), entry_count=entry_count,
-        )
+    p = evm_point_at(db, ctx.tenant_id, project_id, baseline)
+    # Per PMI Practice Standard for EVM: before any work is performed, SPI=1.0
+    # and CPI=1.0 — no deviation exists to measure (EvmPoint.compute).
+    initialized = p.ev_cumulative == 0 and p.ac_cumulative == 0
 
     return EvmSummaryOut(
-        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label, status="active",
-        as_of_date=latest.snapshot_date, bac=bac,
-        pv_cumulative=latest.pv_cumulative or 0.0, ev_cumulative=latest.ev_cumulative or 0.0, ac_cumulative=latest.ac_cumulative or 0.0,
-        spi=latest.spi, cpi=latest.cpi, sv=latest.sv or 0.0, cv=latest.cv or 0.0, eac=latest.eac, etc=latest.etc, tcpi=latest.tcpi,
-        tcpi_critical=(latest.tcpi or 0) > 1.10, pct_planned=latest.percent_complete_planned or 0.0,
-        pct_earned=latest.percent_complete_earned or 0.0, total_ac_raw=round(float(total_ac or 0), 2), entry_count=entry_count,
+        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label,
+        status="baseline_initialized" if initialized else "active",
+        message="Baseline locked. No progress recorded yet — indices start at 1.0 (PMI standard)." if initialized else None,
+        as_of_date=p.snapshot_date, bac=round(baseline.total_budget_manhours, 2),
+        pv_cumulative=p.pv_cumulative, ev_cumulative=p.ev_cumulative, ac_cumulative=p.ac_cumulative,
+        spi=p.spi, cpi=p.cpi, sv=p.sv, cv=p.cv, eac=p.eac, etc=p.etc, tcpi=p.tcpi,
+        tcpi_critical=p.tcpi_critical, pct_planned=p.percent_complete_planned,
+        pct_earned=p.percent_complete_earned, total_ac_raw=round(float(total_ac or 0), 2), entry_count=entry_count,
+    )
+
+
+@router.get("/progress-summary", response_model=ProgressSummaryOut)
+def get_progress_summary(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> ProgressSummaryOut:
+    """Planned vs actual % at the data date (duration-weighted, LOE/WBS out)
+    and the baseline vs latest version table. See engine/evm/progress_engine.py."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    s = compute_progress_summary(db, ctx.tenant_id, project_id, baseline)
+
+    def version(kind: str, label, imp: ScheduleImport | None, facts) -> ProgressVersionOut:
+        return ProgressVersionOut(
+            kind=kind, label=label, filename=imp.filename if imp else None,
+            data_date=to_naive(imp.data_date).date() if imp and imp.data_date else None,
+            start=facts.start, finish=facts.finish,
+            milestones_total=facts.milestones_total, milestones_remaining=facts.milestones_remaining,
+            tasks_total=facts.tasks_total, tasks_remaining=facts.tasks_remaining, max_wbs_level=facts.max_wbs_level,
+        )
+
+    return ProgressSummaryOut(
+        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label,
+        data_date=s.data_date, basis=PROGRESS_BASIS,
+        planned_pct=s.planned_pct, actual_pct=s.actual_pct, spi=s.spi,
+        finish_variance_days=s.finish_variance_days,
+        versions=[
+            version("baseline", baseline.version_label, s.baseline_import, s.baseline_facts),
+            version(
+                "latest", s.current_import.revision_label if s.current_import else None,
+                s.current_import, s.latest_facts,
+            ),
+        ],
     )
 
 

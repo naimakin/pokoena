@@ -128,8 +128,9 @@ def _current_programme(activities: list[Activity], current_import_id: Optional[u
 
 
 def _planned_pct(activities: list[Activity], dd: date) -> Optional[float]:
-    """Share of the work (duration-weighted) the plan had done by the data
-    date — the PV side of the fallback SPI, as a percentage."""
+    """Share of the work (duration-weighted) the current schedule's own
+    planned dates had done by the data date — only used when no baseline is
+    locked (otherwise the rollup's baseline planned % wins)."""
     total = planned = 0.0
     for a in activities:
         hours = a.target_duration_hours or 0.0
@@ -241,7 +242,7 @@ def project_portfolio(db: Session, tenant_id: uuid.UUID, project: Project) -> Pr
         data_date=rollup.data_date,
         activity_count=rollup.activity_count,
         spi=rollup.spi,
-        planned_pct=_planned_pct(activities, dd),
+        planned_pct=rollup.planned_percent if rollup.planned_percent is not None else _planned_pct(activities, dd),
         actual_pct=rollup.percent_complete,
         start=min(starts) if starts else None,
         actual_start=min(actual_starts) if actual_starts else None,

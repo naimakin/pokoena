@@ -5,15 +5,16 @@ import { api } from "@/lib/api";
 import { toDays } from "@/lib/duration";
 import { ScurveChart } from "@/components/ScurveChart";
 import { FloatBadge, fmtDays, fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
+import { FoldCard } from "@/components/reporting/collapse";
 import type {
   Activity,
   BaselineVariance,
   DcmaReport,
   EvmScurve,
-  EvmSummary,
   FloatPathEndCandidate,
   FloatPathReport,
   MonteCarloResult,
+  ProgressSummary,
   Project,
   ProjectStatus,
   ReportHeader,
@@ -73,41 +74,167 @@ function useBlockData<T>(load: () => Promise<T>, deps: unknown[]) {
   return { data, state };
 }
 
+/** Every block except the cover folds (components/reporting/collapse.tsx).
+ *  `meta` sits on the right of the header at all times; `hint` only while the
+ *  block is folded, to say what is hidden. */
 function BlockShell({
   title,
   subtitle,
+  meta,
+  hint,
   state,
   unavailable,
   children,
 }: {
   title: string;
   subtitle?: string;
+  meta?: ReactNode;
+  hint?: string;
   state: "loading" | "ready" | "empty";
   unavailable: string;
   children: ReactNode;
 }) {
   return (
-    <section className="card report-block">
-      <div className="card-head">
-        <div>
-          <div className="card-title">{title}</div>
-          {subtitle && <div className="card-title-sub">{subtitle}</div>}
-        </div>
-      </div>
+    <FoldCard
+      className="report-block"
+      title={title}
+      subtitle={subtitle}
+      meta={state === "ready" ? meta : undefined}
+      hint={state === "ready" ? hint : undefined}
+    >
       {state === "loading" && <p className="empty-state">Loading…</p>}
       {state === "empty" && <p className="empty-state">{unavailable}</p>}
       {state === "ready" && children}
-    </section>
+    </FoldCard>
   );
 }
 
-function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
+/** Blocks narrow enough to sit two abreast on a wide screen (and on a
+ *  landscape sheet). The report page pairs two of these only when they are
+ *  adjacent in the format's order, so pairing never reorders a report. */
+export const HALF_WIDTH_BLOCKS: ReadonlySet<string> = new Set([
+  "wbs-progress",
+  "schedule-changes",
+  "risk-top",
+  "monte-carlo",
+]);
+
+type Tone = "good" | "warn" | "crit" | "neutral";
+
+/** KPI tile — the same tile language as the progress block's (.pvp-kpi). Text
+ *  values (verdicts) drop the mono face. */
+function Metric({
+  label,
+  value,
+  note,
+  tone = "neutral",
+  text = false,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: Tone;
+  text?: boolean;
+}) {
   return (
-    <div className="report-metric">
-      <div className="report-metric-label">{label}</div>
-      <div className="report-metric-value">{value}</div>
-      {note && <div className="report-metric-note">{note}</div>}
+    <div className="report-kpi">
+      <div className="report-kpi-label">{label}</div>
+      <div className={`report-kpi-value tone-${tone}${text ? "" : " num"}`}>{value}</div>
+      {note && <div className="report-kpi-note">{note}</div>}
     </div>
+  );
+}
+
+/** "24 activities" — the folded-header hint on the long-table blocks. */
+function countLabel(count: number | undefined, noun: string): string | undefined {
+  if (count == null) return undefined;
+  const plural = noun.endsWith("y")
+    ? `${noun.slice(0, -1)}ies`
+    : /(ch|sh|s|x)$/.test(noun)
+      ? `${noun}es`
+      : `${noun}s`;
+  return `${count} ${count === 1 ? noun : plural}`;
+}
+
+/** Forecast-slip tone, same bands as the progress block's finish-delay tile. */
+function slipTone(days: number | null | undefined): Tone {
+  if (days == null) return "neutral";
+  if (days > 30) return "crit";
+  if (days > 0) return "warn";
+  return "good";
+}
+
+type Fill = "good" | "warn" | "crit" | "info" | "neutral";
+
+/** One 100% bar split into counts (behind / on track / ahead, pass / warn /
+ *  fail), with a legend that always carries the numbers — the bar is the
+ *  shape, the legend is the answer. Segments are separated by a 2px surface
+ *  gap rather than outlines. */
+function DistributionStrip({
+  label,
+  unit,
+  segments,
+}: {
+  label: string;
+  unit: string;
+  segments: { label: string; value: number; fill: Fill }[];
+}) {
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  const share = (value: number) => (total > 0 ? (value / total) * 100 : 0);
+
+  return (
+    <div className="report-dist">
+      <div
+        className="report-dist-bar"
+        role="img"
+        aria-label={`${label}: ${segments.map((s) => `${s.label} ${s.value}`).join(", ")} ${unit}`}
+      >
+        {segments
+          .filter((s) => s.value > 0)
+          .map((s) => (
+            <span
+              key={s.label}
+              className={`report-dist-seg report-fill-${s.fill}`}
+              style={{ flexGrow: s.value }}
+              title={`${s.label}: ${s.value} ${unit} (${fmtPct(share(s.value))})`}
+            />
+          ))}
+      </div>
+      <ul className="report-legend">
+        {segments.map((s) => (
+          <li key={s.label}>
+            <span className={`report-swatch report-fill-${s.fill}`} aria-hidden="true" />
+            <span>{s.label}</span>
+            <b className="num">{s.value}</b>
+            <span className="report-legend-share num">{fmtPct(share(s.value))}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Horizontal bars on one shared scale, value at the tip. For counts that
+ *  answer "how much of each" rather than "what share of the whole". */
+function BarList({ rows }: { rows: { label: string; value: number; note?: string }[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <ul className="report-hbars">
+      {rows.map((r) => (
+        <li key={r.label} className="report-hbar">
+          <span className="report-hbar-label">
+            {r.label}
+            {r.note && <span className="report-hbar-note">{r.note}</span>}
+          </span>
+          <span className="report-hbar-track" aria-hidden="true">
+            {r.value > 0 && (
+              <span className="report-hbar-fill report-fill-info" style={{ width: `${(r.value / max) * 100}%` }} />
+            )}
+          </span>
+          <span className="report-hbar-value num">{fmtNum(r.value, 0)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -196,16 +323,39 @@ function ExecutiveSummaryBlock({ project, narrative }: BlockContext) {
             the starting point, not the report.
           </p>
         )}
-        {data && state === "ready" && (
-          <div className="report-metrics">
-            <Metric label="Progress" value={data.summary.progress.verdict} note={data.summary.progress.headline} />
-            <Metric label="Risk" value={data.summary.risk.verdict} note={data.summary.risk.headline} />
-            <Metric label="Quality" value={data.summary.quality.verdict} note={data.summary.quality.headline} />
-          </div>
-        )}
       </div>
+      {data && state === "ready" && (
+        <div className="report-kpis report-kpis-3">
+          {(["progress", "risk", "quality"] as const).map((kind) => (
+            <Metric
+              key={kind}
+              label={kind === "progress" ? "Progress" : kind === "risk" ? "Risk" : "Quality"}
+              value={sentenceCase(data.summary[kind].verdict)}
+              note={data.summary[kind].headline}
+              tone={verdictTone(kind, data.summary[kind].verdict)}
+              text
+            />
+          ))}
+        </div>
+      )}
     </BlockShell>
   );
+}
+
+/** The status rollup's verdicts arrive in capitals ("BEHIND SCHEDULE"); the
+ *  report shows them in sentence case like every other label. */
+function sentenceCase(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : "—";
+}
+
+/** Same mapping as Execution > Project Status (toneFor): Low/Medium/High mean
+ *  opposite things for risk and for quality. */
+function verdictTone(kind: "progress" | "risk" | "quality", verdict: string): Tone {
+  if (kind === "quality") return verdict === "HIGH" ? "good" : verdict === "MEDIUM" ? "warn" : "crit";
+  if (kind === "risk") return verdict === "HIGH" ? "crit" : verdict === "MEDIUM" ? "warn" : "good";
+  if (verdict === "AHEAD" || verdict === "ON TRACK") return "good";
+  if (verdict === "BEHIND SCHEDULE") return "crit";
+  return "neutral";
 }
 
 const MILESTONE_TYPES = new Set(["TT_Mile", "TT_FinMile"]);
@@ -240,6 +390,7 @@ function MilestonesBlock({ project }: BlockContext) {
     <BlockShell
       title="Key dates and milestones"
       subtitle="Forecast against baseline, with variance in days"
+      hint={countLabel(data?.length, "milestone")}
       state={state}
       unavailable="No milestone activities in the current programme."
     >
@@ -291,42 +442,161 @@ function MilestonesBlock({ project }: BlockContext) {
   );
 }
 
+/** Same bands as the dashboard's health factors (api/routes/dashboard.py::_index_status). */
+function spiTone(spi: number | null | undefined): Tone {
+  if (spi == null) return "neutral";
+  if (spi >= 0.95) return "good";
+  if (spi >= 0.85) return "warn";
+  return "crit";
+}
+
+function spiNote(spi: number | null | undefined): string {
+  if (spi == null) return "Not enough data";
+  if (spi >= 1.05) return "Ahead of plan";
+  if (spi >= 0.95) return "On plan";
+  return "Behind plan";
+}
+
+function daysBetween(fromIso: string | null, toIso: string | null): number | null {
+  if (!fromIso || !toIso) return null;
+  return Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 86_400_000);
+}
+
+/** Calendar months, one decimal — "15.8 months". */
+function fmtMonths(days: number | null): string {
+  if (days == null) return "—";
+  const months = Math.round((days / 30.44) * 10) / 10;
+  return `${months} ${Math.abs(months) === 1 ? "month" : "months"}`;
+}
+
 function ProgressVsPlanBlock({ project }: BlockContext) {
-  const { data, state } = useBlockData(
-    async () => {
-      const summary = await api.get<EvmSummary>(`/projects/${project.id}/evm/summary`);
-      if (!summary.baseline_id) throw new Error("no baseline");
-      return summary;
-    },
+  const { data, state } = useBlockData<ProgressSummary>(
+    () => api.get<ProgressSummary>(`/projects/${project.id}/evm/progress-summary`),
     [project.id],
   );
+
+  const planned = data?.planned_pct ?? null;
+  const actual = data?.actual_pct ?? null;
+  const gap = planned != null && actual != null ? actual - planned : null;
+  const delay = data?.finish_variance_days ?? null;
+  const baseline = data?.versions.find((v) => v.kind === "baseline") ?? null;
+  const latest = data?.versions.find((v) => v.kind === "latest") ?? null;
 
   return (
     <BlockShell
       title="Progress: planned vs actual"
-      subtitle={data ? `Against baseline ${data.version_label}` : undefined}
+      subtitle={
+        data ? `Against baseline ${data.version_label} · data date ${fmtP6Date(data.data_date)}` : undefined
+      }
       state={state}
       unavailable="Lock a baseline in Planning > Baselines — planned progress has nothing to measure against until then."
     >
       {data && (
-        <div className="report-metrics" style={{ padding: "1rem 1.1rem" }}>
-          <Metric label="Planned complete" value={fmtPct(data.pct_planned)} />
-          <Metric label="Earned complete" value={fmtPct(data.pct_earned)} />
-          <Metric
-            label="SPI"
-            value={fmtNum(data.spi)}
-            note={data.spi != null && data.spi < 1 ? "Behind schedule" : "At or ahead of plan"}
-          />
-          <Metric
-            label="CPI"
-            value={fmtNum(data.cpi)}
-            note={data.cpi != null && data.cpi < 1 ? "Over spent" : "At or under budget"}
-          />
-          <Metric label="Schedule variance" value={`${fmtNum(data.sv, 0)} h`} />
-          <Metric label="Cost variance" value={`${fmtNum(data.cv, 0)} h`} />
-          <Metric label="BAC" value={`${fmtNum(data.bac, 0)} h`} />
-          <Metric label="EAC" value={`${fmtNum(data.eac, 0)} h`} />
-        </div>
+        <>
+          <div className="pvp-top">
+            <div className="pvp-bars">
+              {(
+                [
+                  ["Planned", planned, "pvp-fill-planned", "Baseline plan, work due before the data date"],
+                  ["Actual", actual, "pvp-fill-actual", "Current schedule, work earned to date"],
+                ] as const
+              ).map(([label, value, fill, hint]) => (
+                <div className="pvp-row" key={label}>
+                  <div className="pvp-label">
+                    <span className="pvp-label-name">{label}</span>
+                    <span className="pvp-label-hint">{hint}</span>
+                  </div>
+                  <div
+                    className="pvp-track"
+                    role="meter"
+                    aria-label={`${label} complete`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={value ?? 0}
+                  >
+                    <div className={`pvp-fill ${fill}`} style={{ width: `${Math.min(Math.max(value ?? 0, 0), 100)}%` }} />
+                    {label === "Actual" && planned != null && (
+                      <div className="pvp-marker" style={{ left: `${Math.min(planned, 100)}%` }} title="Planned" />
+                    )}
+                  </div>
+                  <div className="pvp-value num">{fmtPct(value)}</div>
+                </div>
+              ))}
+              {gap != null && (
+                <div className="pvp-gap">
+                  {Math.abs(gap) < 0.05
+                    ? "Exactly on the baseline plan."
+                    : `${fmtNum(Math.abs(gap), 1)} percentage points ${gap < 0 ? "behind" : "ahead of"} the baseline plan.`}
+                </div>
+              )}
+            </div>
+
+            <div className="pvp-kpi">
+              <div className="pvp-kpi-label">Forecast finish delay</div>
+              <div className={`pvp-kpi-value num tone-${delay == null ? "neutral" : delay > 30 ? "crit" : delay > 0 ? "warn" : "good"}`}>
+                {delay == null ? "—" : delay <= 0 ? "None" : fmtMonths(delay)}
+              </div>
+              <div className="pvp-kpi-note">
+                {delay == null
+                  ? "No finish date to compare"
+                  : `${delay > 0 ? "+" : ""}${delay} days · ${fmtP6Date(latest?.finish)} vs ${fmtP6Date(baseline?.finish)}`}
+              </div>
+            </div>
+
+            <div className="pvp-kpi">
+              <div className="pvp-kpi-label">Schedule performance</div>
+              <div className={`pvp-kpi-value num tone-${spiTone(data.spi)}`}>{fmtNum(data.spi)}</div>
+              <div className="pvp-kpi-note">SPI = actual ÷ planned · {spiNote(data.spi)}</div>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table className="pvp-versions">
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>File</th>
+                  <th>Data date</th>
+                  <th>Start</th>
+                  <th>Finish</th>
+                  <th>Duration</th>
+                  <th>Milestones (remaining)</th>
+                  <th>Tasks (remaining)</th>
+                  <th>Max WBS level</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.versions.map((v) => (
+                  <tr key={v.kind}>
+                    <td>
+                      <span className={`pvp-swatch ${v.kind === "baseline" ? "pvp-fill-planned" : "pvp-fill-actual"}`} />
+                      <span className="subname">{v.kind === "baseline" ? "Baseline (planned)" : "Latest (actual)"}</span>
+                      <div className="actid">{v.label ?? "—"}</div>
+                    </td>
+                    <td className="mono pvp-file" title={v.filename ?? undefined}>
+                      {v.filename ?? "—"}
+                    </td>
+                    <td className="num">{fmtP6Date(v.data_date)}</td>
+                    <td className="num">{fmtP6Date(v.start)}</td>
+                    <td className="num">{fmtP6Date(v.finish)}</td>
+                    <td className="num">{fmtMonths(daysBetween(v.start, v.finish))}</td>
+                    <td className="num">
+                      {fmtNum(v.milestones_total, 0)} ({fmtNum(v.milestones_remaining, 0)})
+                    </td>
+                    <td className="num">
+                      {fmtNum(v.tasks_total, 0)} ({fmtNum(v.tasks_remaining, 0)})
+                    </td>
+                    <td className="num">{v.max_wbs_level || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="report-note">
+            Baseline remaining counts what the baseline still had open at the current data date; latest remaining
+            is what is actually still open. {data.basis}.
+          </p>
+        </>
       )}
     </BlockShell>
   );
@@ -346,7 +616,11 @@ function ScurveBlock({ project, options }: BlockContext) {
       state={state}
       unavailable="Lock a baseline in Planning > Baselines to generate the planned-value curve."
     >
-      {data && <ScurveChart series={data.series} />}
+      {data && (
+        <div className="report-chart">
+          <ScurveChart series={data.series} />
+        </div>
+      )}
     </BlockShell>
   );
 }
@@ -382,11 +656,12 @@ function WbsProgressBlock({ project }: BlockContext) {
     <BlockShell
       title="Progress by WBS"
       subtitle="Percent complete weighted by original duration"
+      hint={countLabel(data?.length, "branch")}
       state={state}
       unavailable="No activities in the current programme."
     >
       <div className="table-wrap">
-        <table>
+        <table className="report-wbs">
           <thead>
             <tr>
               <th>WBS branch</th>
@@ -401,10 +676,20 @@ function WbsProgressBlock({ project }: BlockContext) {
                 <td>{r.branch}</td>
                 <td className="num">{r.count}</td>
                 <td className="num">{fmtNum(r.hours, 0)}</td>
-                <td className="num">
-                  <div className="report-bar">
-                    <div className="report-bar-fill" style={{ width: `${Math.min(r.pct, 100)}%` }} />
-                    <span>{fmtPct(r.pct)}</span>
+                <td>
+                  {/* Earned-to-date, so it wears the S-curve's EV hue (--good). */}
+                  <div className="report-meter">
+                    <div
+                      className="report-meter-track"
+                      role="meter"
+                      aria-label={`${r.branch} complete`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(r.pct * 10) / 10}
+                    >
+                      <div className="report-meter-fill report-fill-good" style={{ width: `${Math.min(Math.max(r.pct, 0), 100)}%` }} />
+                    </div>
+                    <span className="report-meter-value num">{fmtPct(r.pct)}</span>
                   </div>
                 </td>
               </tr>
@@ -436,6 +721,7 @@ function CriticalPathBlock({ project, options }: BlockContext) {
     <BlockShell
       title="Critical path"
       subtitle="Incomplete activities on the longest path or at zero float, in date order"
+      hint={countLabel(data?.length, "activity")}
       state={state}
       unavailable="No incomplete critical activities — either the programme has no CPM results yet or the critical work is done."
     >
@@ -500,6 +786,7 @@ function FloatPathsBlock({ project, options }: BlockContext) {
           ? `Driving chains into ${data.end_activity_external_id} — ${data.end_activity_name ?? ""}`
           : undefined
       }
+      hint={countLabel(data?.paths.length, "path")}
       state={state}
       unavailable="No schedule logic to walk — import a programme with relationships first."
     >
@@ -561,19 +848,38 @@ function BaselineVarianceBlock({ project, options }: BlockContext) {
     <BlockShell
       title="Baseline variance"
       subtitle={data ? `Against baseline ${data.version_label}, worst slip first` : undefined}
+      hint={countLabel(rows.length, "row")}
       state={state}
       unavailable="Lock a baseline in Planning > Baselines to compare dates against it."
     >
       {data && (
         <>
-          <div className="report-metrics" style={{ padding: "1rem 1.1rem 0" }}>
-            <Metric label="Behind" value={String(data.summary.behind)} note="activities" />
-            <Metric label="On track" value={String(data.summary.on_track)} note="activities" />
-            <Metric label="Ahead" value={String(data.summary.ahead)} note="activities" />
+          <div className="report-top">
+            <div className="report-panel">
+              <div className="report-panel-title">Finish date against baseline</div>
+              {/* Late reads through --warn, early through --good (the Schedule
+                  Simulation convention); red is kept for the critical rows below. */}
+              <DistributionStrip
+                label="Activities by finish variance"
+                unit="activities"
+                segments={[
+                  { label: "Behind", value: data.summary.behind, fill: "warn" },
+                  { label: "On track", value: data.summary.on_track, fill: "neutral" },
+                  { label: "Ahead", value: data.summary.ahead, fill: "good" },
+                ]}
+              />
+            </div>
             <Metric
               label="Project finish"
               value={fmtDays(data.summary.project_finish_variance_days)}
-              note={fmtP6Date(data.summary.forecast_finish)}
+              note={`Forecast ${fmtP6Date(data.summary.forecast_finish)}`}
+              tone={slipTone(data.summary.project_finish_variance_days)}
+            />
+            <Metric
+              label="Worst slip"
+              value={fmtDays(data.summary.worst_slip_days)}
+              note={`${data.summary.critical_slip_count} critical ${data.summary.critical_slip_count === 1 ? "activity" : "activities"} slipping`}
+              tone={(data.summary.worst_slip_days ?? 0) > 0 ? "warn" : "neutral"}
             />
           </div>
           <div className="table-wrap">
@@ -650,21 +956,24 @@ function ScheduleChangesBlock({ project }: BlockContext) {
       unavailable="Needs two schedule updates to compare — upload the next .xer from Program Library."
     >
       {data && (
-        <div className="report-metrics" style={{ padding: "1rem 1.1rem" }}>
-          <Metric label="Added" value={String(data.summary.activities_added)} note="activities" />
-          <Metric label="Removed" value={String(data.summary.activities_removed)} note="activities" />
-          <Metric label="Modified" value={String(data.summary.activities_modified)} note="activities" />
-          <Metric label="Activity IDs changed" value={String(data.summary.activities_renamed)} />
-          <Metric
-            label="Logic changed"
-            value={String(
-              data.summary.relationships_added +
-                data.summary.relationships_removed +
-                data.summary.relationships_modified,
-            )}
-            note={`${data.summary.relationships_added} added, ${data.summary.relationships_removed} removed, ${data.summary.relationships_modified} retyped`}
+        <div className="report-section">
+          <BarList
+            rows={[
+              { label: "Activities added", value: data.summary.activities_added },
+              { label: "Activities removed", value: data.summary.activities_removed },
+              { label: "Activities modified", value: data.summary.activities_modified },
+              { label: "Activity IDs changed", value: data.summary.activities_renamed },
+              {
+                label: "Logic changed",
+                value:
+                  data.summary.relationships_added +
+                  data.summary.relationships_removed +
+                  data.summary.relationships_modified,
+                note: `${data.summary.relationships_added} added, ${data.summary.relationships_removed} removed, ${data.summary.relationships_modified} retyped`,
+              },
+              { label: "Criticality changed", value: data.summary.criticality_changes },
+            ]}
           />
-          <Metric label="Criticality changed" value={String(data.summary.criticality_changes)} />
         </div>
       )}
     </BlockShell>
@@ -700,6 +1009,7 @@ function LookaheadBlock({ project, header, options }: BlockContext) {
     <BlockShell
       title={`${weeks}-week lookahead`}
       subtitle={`Activities starting or finishing within ${weeks} weeks of the data date`}
+      hint={countLabel(data?.length, "activity")}
       state={state}
       unavailable={`Nothing starts or finishes in the next ${weeks} weeks.`}
     >
@@ -758,6 +1068,7 @@ function RiskTopBlock({ project, options }: BlockContext) {
     <BlockShell
       title={`Top ${count} risks`}
       subtitle="Open risks by score, with owner and mitigation status"
+      hint={countLabel(data?.length, "risk")}
       state={state}
       unavailable="No open risks on the register."
     >
@@ -799,6 +1110,97 @@ function RiskTopBlock({ project, options }: BlockContext) {
   );
 }
 
+const DAY_MS = 86_400_000;
+
+/** P10–P90 finish range on a date axis: the shaded band is the 80% spread,
+ *  each percentile a tick. Labels alternate above and below the track so
+ *  neighbouring percentiles (P80 and P90 often sit days apart) never collide;
+ *  the exact dates are in the tiles underneath, not only on hover. */
+function FinishRange({ data }: { data: MonteCarloResult }) {
+  const points = (
+    [
+      ["P10", data.project_finish_p10, "below"],
+      ["P50", data.project_finish_p50, "above"],
+      ["P80", data.project_finish_p80, "below"],
+      ["P90", data.project_finish_p90, "above"],
+    ] as const
+  ).map(([label, iso, row]) => ({ label, iso, row, t: new Date(iso).getTime() }));
+  if (points.some((p) => Number.isNaN(p.t))) return null;
+
+  const first = Math.min(...points.map((p) => p.t));
+  const last = Math.max(...points.map((p) => p.t));
+  const pad = Math.max((last - first) * 0.08, 7 * DAY_MS);
+  const lo = first - pad;
+  const hi = last + pad;
+  const x = (t: number) => ((t - lo) / (hi - lo)) * 100;
+
+  // Month gridlines, thinned to at most five labelled ticks, and kept off the
+  // very edges so a label never hangs outside the strip.
+  const months: number[] = [];
+  const start = new Date(lo);
+  for (
+    let t = Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1);
+    t <= hi;
+    t = Date.UTC(new Date(t).getUTCFullYear(), new Date(t).getUTCMonth() + 1, 1)
+  ) {
+    months.push(t);
+  }
+  const step = Math.max(1, Math.ceil(months.length / 5));
+  const ticks = months.filter((t, i) => i % step === 0 && x(t) > 5 && x(t) < 95);
+  const spreadDays = Math.round((last - first) / DAY_MS);
+
+  const labelRow = (row: "above" | "below") => (
+    <div className={`report-range-labels is-${row}`} aria-hidden="true">
+      {points
+        .filter((p) => p.row === row)
+        .map((p) => (
+          <span key={p.label} style={{ left: `${x(p.t)}%` }}>
+            {p.label}
+          </span>
+        ))}
+    </div>
+  );
+
+  return (
+    <div className="report-section">
+      <div className="report-panel">
+        <div className="report-panel-title">
+          Finish date range <span className="report-panel-sub">P10 to P90 spread: {spreadDays} days</span>
+        </div>
+        <div
+          className="report-range"
+          role="img"
+          aria-label={`Probabilistic finish: ${points.map((p) => `${p.label} ${fmtP6Date(p.iso)}`).join(", ")}`}
+        >
+          {labelRow("above")}
+          <div className="report-range-track">
+            {ticks.map((t) => (
+              <span key={t} className="report-range-grid" style={{ left: `${x(t)}%` }} />
+            ))}
+            <span className="report-range-band" style={{ left: `${x(first)}%`, width: `${x(last) - x(first)}%` }} />
+            {points.map((p) => (
+              <span
+                key={p.label}
+                className={`report-range-tick${p.label === "P50" ? " is-median" : ""}`}
+                style={{ left: `${x(p.t)}%` }}
+                title={`${p.label}: ${fmtP6Date(p.iso)}`}
+              />
+            ))}
+          </div>
+          {labelRow("below")}
+          <div className="report-range-axis" aria-hidden="true">
+            {ticks.map((t) => (
+              <span key={t} style={{ left: `${x(t)}%` }}>
+                {fmtP6Date(new Date(t).toISOString()).slice(3)}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MonteCarloBlock({ project }: BlockContext) {
   const { data, state } = useBlockData<MonteCarloResult>(
     () => api.post<MonteCarloResult>(`/projects/${project.id}/risk/monte-carlo`, {}),
@@ -814,14 +1216,21 @@ function MonteCarloBlock({ project }: BlockContext) {
     >
       {data && (
         <>
-          <div className="report-metrics" style={{ padding: "1rem 1.1rem" }}>
-            <Metric label="P10" value={fmtP6Date(data.project_finish_p10)} />
-            <Metric label="P50" value={fmtP6Date(data.project_finish_p50)} />
-            <Metric label="P80" value={fmtP6Date(data.project_finish_p80)} />
-            <Metric label="P90" value={fmtP6Date(data.project_finish_p90)} />
+          <FinishRange data={data} />
+          <div className="report-kpis report-kpis-dates">
+            {(
+              [
+                ["P10", data.project_finish_p10, 10],
+                ["P50", data.project_finish_p50, 50],
+                ["P80", data.project_finish_p80, 80],
+                ["P90", data.project_finish_p90, 90],
+              ] as const
+            ).map(([label, iso, pct]) => (
+              <Metric key={label} label={label} value={fmtP6Date(iso)} note={`${pct}% of runs finish by then`} />
+            ))}
           </div>
           <p className="report-note">
-            {data.iterations.toLocaleString()} iterations. The simulation&rsquo;s forward pass does not
+            {data.iterations.toLocaleString("en-US")} iterations. The simulation&rsquo;s forward pass does not
             apply calendars, so these dates are indicative of spread rather than exact working dates.
           </p>
         </>
@@ -829,6 +1238,14 @@ function MonteCarloBlock({ project }: BlockContext) {
     </BlockShell>
   );
 }
+
+const DCMA_LABEL: Record<DcmaReport["overall_status"], string> = { pass: "Pass", warn: "Warn", fail: "Fail" };
+const DCMA_CHIP: Record<DcmaReport["overall_status"], string> = {
+  pass: "chip-good",
+  warn: "chip-warn",
+  fail: "chip-crit",
+};
+const DCMA_TONE: Record<DcmaReport["overall_status"], Tone> = { pass: "good", warn: "warn", fail: "crit" };
 
 function DcmaBlock({ project }: BlockContext) {
   const { data, state } = useBlockData<DcmaReport>(
@@ -840,9 +1257,38 @@ function DcmaBlock({ project }: BlockContext) {
     <BlockShell
       title="DCMA 14-point check"
       subtitle={data ? `Score ${fmtNum(data.overall_score, 0)} / 100 over ${data.in_scope} activities` : undefined}
+      meta={data ? <span className={`chip ${DCMA_CHIP[data.overall_status]}`}>{DCMA_LABEL[data.overall_status]}</span> : undefined}
+      hint={countLabel(data?.checks.length, "check")}
       state={state}
       unavailable="Import a schedule to run the quality checks."
     >
+      {data && (
+        <div className="report-top is-single">
+          <div className="report-panel">
+            <div className="report-panel-title">Checks by result</div>
+            <DistributionStrip
+              label="DCMA checks by result"
+              unit="checks"
+              segments={[
+                { label: "Pass", value: data.checks.filter((c) => c.status === "pass").length, fill: "good" },
+                { label: "Warn", value: data.checks.filter((c) => c.status === "warn").length, fill: "warn" },
+                { label: "Fail", value: data.checks.filter((c) => c.status === "fail").length, fill: "crit" },
+                {
+                  label: "Not tracked",
+                  value: data.checks.filter((c) => c.status === "not_tracked").length,
+                  fill: "neutral",
+                },
+              ]}
+            />
+          </div>
+          <Metric
+            label="Overall score"
+            value={`${fmtNum(data.overall_score, 0)} / 100`}
+            note={`${DCMA_LABEL[data.overall_status]} · ${data.in_scope} of ${data.total_activities} activities in scope`}
+            tone={DCMA_TONE[data.overall_status]}
+          />
+        </div>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -879,7 +1325,7 @@ function DcmaBlock({ project }: BlockContext) {
                             : "chip-neutral"
                     }`}
                   >
-                    {c.status === "not_tracked" ? "not tracked" : c.status}
+                    {c.status === "not_tracked" ? "Not tracked" : DCMA_LABEL[c.status]}
                   </span>
                 </td>
               </tr>

@@ -26,9 +26,11 @@ export function fmtDays(days: number | null | undefined): string {
   return `${rounded > 0 ? "+" : ""}${rounded}d`;
 }
 
+/** Always en-US grouping — an issued report must not switch to "0,00" /
+ *  "153.128" because the reader's browser is set to another locale. */
 export function fmtNum(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return "—";
-  return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 export function fmtPct(value: number | null | undefined): string {
