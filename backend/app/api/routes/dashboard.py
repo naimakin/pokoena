@@ -18,8 +18,9 @@ from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
 from app.models.user_tenant_role import TenantRole
-from app.services.progress_summary import compute_progress_summary, evm_point_at
+from app.services.progress_summary import compute_current_update, compute_progress_summary, evm_point_at
 from app.schemas.dashboard import (
+    CurrentUpdateOut,
     DashboardLayoutOut,
     DashboardLayoutUpdate,
     DashboardSummary,
@@ -124,6 +125,36 @@ def dashboard_summary(
             )
         )
 
+    open_change_requests = (
+        db.query(ChangeRequest)
+        .join(UpdatePeriod, UpdatePeriod.id == ChangeRequest.update_period_id)
+        .filter(
+            UpdatePeriod.tenant_id == ctx.tenant_id,
+            UpdatePeriod.project_id == project_id,
+            ChangeRequest.status == ChangeRequestStatus.pending,
+        )
+        .count()
+    )
+
+    current_update = None
+    update = compute_current_update(db, ctx.tenant_id, project_id)
+    if update is not None:
+        current_update = CurrentUpdateOut(**update.__dict__)
+        baseline = (
+            db.query(Baseline)
+            .filter(
+                Baseline.tenant_id == ctx.tenant_id,
+                Baseline.project_id == project_id,
+                Baseline.status == BaselineStatus.active,
+            )
+            .first()
+        )
+        if baseline is not None:
+            progress = compute_progress_summary(db, ctx.tenant_id, project_id, baseline)
+            current_update.planned_pct = progress.planned_pct
+            current_update.actual_pct = progress.actual_pct
+            current_update.spi = progress.spi
+
     return DashboardSummary(
         active_period_id=period.id if period else None,
         active_period_label=period.label if period else None,
@@ -132,6 +163,8 @@ def dashboard_summary(
         orgs_total=len(orgs),
         orgs_submitted=len(submitted_ids),
         flagged_pending=flagged_pending,
+        open_change_requests=open_change_requests,
+        current_update=current_update,
         scope_status=scope_status,
     )
 

@@ -57,13 +57,20 @@ from app.schemas.evm import (
     LockBaselineRequest,
     LockBaselineResultOut,
     ProgressBatchIn,
+    ProgressCurveOut,
+    ProgressCurvePointOut,
     ProgressEntryOut,
     ProgressSubmitResultOut,
     ProgressSummaryOut,
     ProgressVersionOut,
     QuickEvmOut,
 )
-from app.services.progress_summary import PROGRESS_BASIS, compute_progress_summary, evm_point_at
+from app.services.progress_summary import (
+    PROGRESS_BASIS,
+    compute_progress_curve,
+    compute_progress_summary,
+    evm_point_at,
+)
 from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/evm", tags=["evm"])
@@ -713,6 +720,26 @@ def get_progress_summary(
                 "latest", s.current_import.revision_label if s.current_import else None,
                 s.current_import, s.latest_facts,
             ),
+        ],
+    )
+
+
+@router.get("/progress-curve", response_model=ProgressCurveOut)
+def get_progress_curve(
+    project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> ProgressCurveOut:
+    """Monthly planned / actual / forecast % complete — the progress S-curve.
+    Same basis as /progress-summary (engine/evm/progress_engine.py)."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx)
+    baseline = _require_active_baseline(db, ctx, project_id)
+
+    data_date, points = compute_progress_curve(db, ctx.tenant_id, project_id, baseline)
+    return ProgressCurveOut(
+        project_id=project_id, baseline_id=baseline.id, version_label=baseline.version_label, data_date=data_date,
+        points=[
+            ProgressCurvePointOut(date=p.date, planned=p.planned, actual=p.actual, forecast=p.forecast)
+            for p in points
         ],
     )
 

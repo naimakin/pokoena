@@ -296,3 +296,21 @@ class ProgressSummaryOut(BaseModel):
     spi: float | None
     finish_variance_days: int | None
     versions: list[ProgressVersionOut]
+
+
+class ProgressCurvePointOut(BaseModel):
+    date: date
+    planned: float | None
+    actual: float | None
+    forecast: float | None
+
+
+class ProgressCurveOut(BaseModel):
+    """Duration-weighted % complete over time: planned from the baseline,
+    actual at each schedule update, forecast from the current schedule."""
+
+    project_id: uuid.UUID
+    baseline_id: uuid.UUID
+    version_label: str
+    data_date: date
+    points: list[ProgressCurvePointOut]

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
@@ -25,8 +25,10 @@ from app.engine.evm.progress_engine import (
     VersionRow,
     actual_percent,
     counts_toward_progress,
+    forecast_percent,
     planned_percent,
     schedule_performance,
+    update_cadence_days,
     version_facts,
     wbs_levels,
 )
@@ -191,4 +193,172 @@ def compute_progress_summary(
         finish_variance_days=variance,
         baseline_facts=baseline_facts,
         latest_facts=latest_facts,
+    )
+
+
+# --- progress curve -----------------------------------------------------------
+
+
+@dataclass
+class CurvePoint:
+    date: date
+    planned: Optional[float] = None
+    actual: Optional[float] = None
+    forecast: Optional[float] = None
+
+
+def _month_ends(start: date, end: date) -> list[date]:
+    out = []
+    y, m = start.year, start.month
+    while True:
+        nxt = date(y + (m == 12), m % 12 + 1, 1)
+        last = nxt - timedelta(days=1)
+        out.append(last)
+        if last >= end:
+            return out
+        y, m = nxt.year, nxt.month
+
+
+def numbered_updates(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> list[ScheduleImport]:
+    """UPD-1, UPD-2… with a data date, oldest first; one per data date (the
+    latest upload wins when an update was re-imported)."""
+    rows = (
+        db.query(ScheduleImport)
+        .filter(
+            ScheduleImport.tenant_id == tenant_id,
+            ScheduleImport.project_id == project_id,
+            ScheduleImport.revision_no.isnot(None),
+            ScheduleImport.data_date.isnot(None),
+        )
+        .order_by(ScheduleImport.imported_at)
+        .all()
+    )
+    by_date: dict[date, ScheduleImport] = {}
+    for r in rows:
+        by_date[to_naive(r.data_date).date()] = r
+    return [by_date[d] for d in sorted(by_date)]
+
+
+def compute_progress_curve(
+    db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, baseline: Baseline
+) -> tuple[date, list[CurvePoint]]:
+    """Planned (baseline), actual (one point per schedule update, from each
+    import's frozen activity snapshot; the current one from the live rows) and
+    forecast (current schedule from the data date on) — all duration-weighted
+    percentages on the same basis as `compute_progress_summary`."""
+    current = get_current_import(db, tenant_id, project_id)
+    as_of = data_date_of(current)
+
+    all_activities = (
+        db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all()
+    )
+    by_id = {a.id: a for a in all_activities}
+    programme = [a for a in current_programme(all_activities, current) if counts_toward_progress(a.task_type)]
+    baseline_rows = db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).all()
+
+    actual_by_date: dict[date, float] = {baseline.target_start_date: 0.0}
+    for imp in numbered_updates(db, tenant_id, project_id):
+        dd = to_naive(imp.data_date).date()
+        if dd >= as_of or not imp.activities_snapshot:
+            continue
+        pct = actual_percent(
+            (e.get("target_duration_hours") or 0.0, float(e.get("percent_complete") or 0))
+            for e in imp.activities_snapshot
+            if counts_toward_progress(e.get("task_type"))
+        )
+        if pct is not None:
+            actual_by_date[dd] = pct
+    live_actual = programme_actual_percent(programme)
+    if live_actual is not None:
+        actual_by_date[as_of] = live_actual
+
+    forecast_rows = [
+        (
+            a.target_duration_hours or 0.0,
+            float(a.percent_complete or 0),
+            a.actual_start or a.early_start or a.planned_start,
+            a.early_finish or a.planned_finish or a.actual_finish,
+        )
+        for a in programme
+    ]
+    finishes = [f for *_, f in forecast_rows if f] + [baseline.target_end_date]
+    end = max(finishes)
+
+    dates = set(_month_ends(baseline.target_start_date, end)) | set(actual_by_date) | {as_of}
+    points = []
+    for d in sorted(dates):
+        points.append(
+            CurvePoint(
+                date=d,
+                planned=baseline_planned_percent(baseline_rows, by_id, d),
+                actual=actual_by_date.get(d),
+                forecast=forecast_percent(forecast_rows, as_of, d) if d >= as_of else None,
+            )
+        )
+    return as_of, points
+
+
+# --- current update (Dashboard) -----------------------------------------------
+
+
+@dataclass
+class CurrentUpdate:
+    revision_label: Optional[str]
+    filename: str
+    data_date: date
+    imported_at: datetime
+    previous_label: Optional[str]
+    previous_data_date: Optional[date]
+    cadence_days: Optional[int]
+    next_data_date: Optional[date]
+    activities_total: int
+    activities_complete: int
+    activities_in_progress: int
+    started_this_update: Optional[int]
+    finished_this_update: Optional[int]
+
+
+def compute_current_update(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> Optional[CurrentUpdate]:
+    """What the latest schedule update says — the Dashboard's fallback when no
+    subcontractor update period is running. "This update" is the window
+    between the previous update's data date and this one's."""
+    current = get_current_import(db, tenant_id, project_id)
+    if current is None or current.data_date is None:
+        return None
+    as_of = to_naive(current.data_date).date()
+
+    updates = numbered_updates(db, tenant_id, project_id)
+    earlier = [u for u in updates if to_naive(u.data_date).date() < as_of]
+    previous = earlier[-1] if earlier else None
+    prev_dd = to_naive(previous.data_date).date() if previous else None
+    cadence = update_cadence_days(
+        [to_naive(u.data_date).date() for u in updates if to_naive(u.data_date).date() <= as_of]
+    )
+
+    programme = [
+        a
+        for a in current_programme(
+            db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all(),
+            current,
+        )
+        if counts_toward_progress(a.task_type)
+    ]
+
+    def in_window(d: Optional[date]) -> bool:
+        return d is not None and prev_dd is not None and prev_dd <= d < as_of
+
+    return CurrentUpdate(
+        revision_label=current.revision_label,
+        filename=current.filename,
+        data_date=as_of,
+        imported_at=current.imported_at,
+        previous_label=previous.revision_label if previous else None,
+        previous_data_date=prev_dd,
+        cadence_days=cadence,
+        next_data_date=as_of + timedelta(days=cadence) if cadence else None,
+        activities_total=len(programme),
+        activities_complete=sum(a.status == ActivityStatus.complete for a in programme),
+        activities_in_progress=sum(a.status == ActivityStatus.in_progress for a in programme),
+        started_this_update=sum(in_window(a.actual_start) for a in programme) if prev_dd else None,
+        finished_this_update=sum(in_window(a.actual_finish) for a in programme) if prev_dd else None,
     )

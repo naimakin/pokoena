@@ -3,7 +3,7 @@
 // Reusable "expand to a larger popup" wrapper for chart cards — reuses the
 // existing .modal-overlay/.act-btn idiom (see FlagReviewModal.tsx) with a
 // wider .modal-lg panel instead of the confirmation-dialog-sized .modal.
-// Charts in this project (ScurveChart, TrendLine, MiniSCurve) scale via SVG
+// Charts in this project (ScurveChart, TrendLine) scale via SVG
 // viewBox, so the same children render larger inside the wider panel with no
 // separate "large" chart variant needed — no data is refetched.
 

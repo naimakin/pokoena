@@ -77,3 +77,24 @@ def test_wbs_levels_count_the_project_root_as_level_one():
     assert levels["P"] == 1
     assert levels["C"] == 4
     assert levels["X"] == 2  # a malformed cycle stops instead of looping
+
+
+def test_forecast_keeps_earned_work_and_spreads_the_rest_after_the_data_date():
+    from app.engine.evm.progress_engine import forecast_percent
+
+    dd = date(2026, 1, 11)
+    rows = [
+        (100.0, 50, date(2026, 1, 1), date(2026, 1, 20)),  # 50h earned, 50h over 11th..20th
+        (100.0, 0, date(2026, 1, 21), date(2026, 1, 30)),
+    ]
+    assert forecast_percent(rows, dd, dd) == 25.0
+    assert forecast_percent(rows, dd, date(2026, 1, 21)) == 50.0
+    assert forecast_percent(rows, dd, date(2026, 2, 1)) == 100.0
+
+
+def test_update_cadence_is_the_median_recent_gap():
+    from app.engine.evm.progress_engine import update_cadence_days
+
+    dates = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26), date(2026, 3, 5), date(2026, 3, 5)]
+    assert update_cadence_days(dates) == 28
+    assert update_cadence_days([date(2026, 1, 1)]) is None

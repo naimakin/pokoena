@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -14,6 +14,31 @@ class ScopeSubmissionStatus(BaseModel):
     submitted: bool
 
 
+class CurrentUpdateOut(BaseModel):
+    """The latest schedule update (Program Library's current import) — what the
+    period cards fall back to when no subcontractor update period is running.
+    `*_this_update` counts actual starts/finishes between the previous update's
+    data date and this one's (None on the first update)."""
+
+    revision_label: str | None
+    filename: str
+    data_date: date
+    imported_at: datetime
+    previous_label: str | None
+    previous_data_date: date | None
+    cadence_days: int | None
+    next_data_date: date | None
+    activities_total: int
+    activities_complete: int
+    activities_in_progress: int
+    started_this_update: int | None
+    finished_this_update: int | None
+    # Against the locked baseline (None without one) — services/progress_summary.py.
+    planned_pct: float | None = None
+    actual_pct: float | None = None
+    spi: float | None = None
+
+
 class DashboardSummary(BaseModel):
     active_period_id: uuid.UUID | None
     active_period_label: str | None
@@ -22,6 +47,10 @@ class DashboardSummary(BaseModel):
     orgs_total: int
     orgs_submitted: int
     flagged_pending: int
+    # Change requests still awaiting a decision across every period, not just
+    # the latest one.
+    open_change_requests: int = 0
+    current_update: CurrentUpdateOut | None = None
     scope_status: list[ScopeSubmissionStatus]
 
 

@@ -11,7 +11,7 @@ import type {
   DashboardThemeKey,
   DashboardWidgetConfig,
   DashboardWidgetKey,
-  EvmScurve,
+  ProgressCurve,
   ProjectHealth,
   RiskHighlight,
 } from "@/lib/types";
@@ -19,10 +19,12 @@ import { AlertTriangleIcon, BellIcon, CheckIcon, SettingsIcon } from "@/componen
 import {
   WIDGET_REGISTRY,
   WIDGET_ORDER,
+  type CurveStatus,
   type WidgetContext,
 } from "@/components/dashboard/DashboardWidgets";
 import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
 import { NoProjectIllo } from "@/components/illustrations";
+import { fmtP6Date } from "@/components/reporting/format";
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
@@ -45,8 +47,8 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [health, setHealth] = useState<ProjectHealth | null>(null);
   const [risks, setRisks] = useState<RiskHighlight[] | null>(null);
-  const [scurve, setScurve] = useState<EvmScurve | null>(null);
-  const [scurveLocked, setScurveLocked] = useState(false);
+  const [curve, setCurve] = useState<ProgressCurve | null>(null);
+  const [curveStatus, setCurveStatus] = useState<CurveStatus>("idle");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,13 +58,27 @@ export default function DashboardPage() {
   // Auto-open the configure modal once per project when no layout is saved yet.
   const firstRunPromptedFor = useRef<string | null>(null);
 
+  // A layout the user never saved is shown in the recommended WIDGET_ORDER
+  // (progress curve under the KPI row, Health beside Top Risks); a saved one
+  // keeps exactly the order the user chose. The configure modal starts from
+  // the same list, so what it shows matches the page.
+  const widgets = useMemo<DashboardWidgetConfig[]>(() => {
+    const base = layout?.widgets ?? DEFAULT_LAYOUT_WIDGETS;
+    if (layout && !layout.is_default) return base;
+    const rank = (key: DashboardWidgetKey) => {
+      const i = WIDGET_ORDER.indexOf(key);
+      return i < 0 ? WIDGET_ORDER.length : i;
+    };
+    return [...base].sort((a, b) => rank(a.key) - rank(b.key)).map((w, i) => ({ ...w, order: i }));
+  }, [layout]);
+
   const enabledKeys = useMemo<DashboardWidgetKey[]>(
     () =>
-      (layout?.widgets ?? DEFAULT_LAYOUT_WIDGETS)
+      widgets
         .filter((w) => w.enabled)
         .sort((a, b) => a.order - b.order)
         .map((w) => w.key),
-    [layout],
+    [widgets],
   );
 
   const load = useCallback(async () => {
@@ -101,16 +117,16 @@ export default function DashboardPage() {
           .catch(() => setRisks(null));
       }
       if (wanted.has("s-curve")) {
-        setScurveLocked(false);
+        setCurveStatus("loading");
         api
-          .get<EvmScurve>(`/projects/${project.id}/evm/scurve?granularity=monthly`)
+          .get<ProgressCurve>(`/projects/${project.id}/evm/progress-curve`)
           .then((res) => {
-            setScurve(res);
-            setScurveLocked(false);
+            setCurve(res);
+            setCurveStatus("ready");
           })
           .catch((err) => {
-            setScurve(null);
-            setScurveLocked(err instanceof ApiError && err.status === 423);
+            setCurve(null);
+            setCurveStatus(err instanceof ApiError && err.status === 423 ? "locked" : "error");
           });
       }
     } catch (err) {
@@ -123,7 +139,8 @@ export default function DashboardPage() {
   useEffect(() => {
     setHealth(null);
     setRisks(null);
-    setScurve(null);
+    setCurve(null);
+    setCurveStatus("idle");
     load();
   }, [load]);
 
@@ -198,13 +215,26 @@ export default function DashboardPage() {
     summary,
     health,
     risks,
-    scurve,
-    scurveLocked,
+    curve,
+    curveStatus,
     deadlineDays,
   };
 
   const kpiKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span === "kpi");
   const blockKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span !== "kpi");
+  // Half-width cards pair up (the grid packs densely, so a later half fills the
+  // gap beside an earlier one); an odd one out takes the full row instead of
+  // leaving an empty column beside it.
+  const halfKeys = blockKeys.filter((k) => WIDGET_REGISTRY[k].span === "half");
+  const loneHalf = halfKeys.length % 2 === 1 ? halfKeys[halfKeys.length - 1] : null;
+
+  const inPeriod = Boolean(summary?.active_period_id);
+  const currentUpdate = summary?.current_update ?? null;
+  const pageDesc = inPeriod
+    ? `${summary?.active_period_label ?? "Update period"} · subcontractor update period`
+    : currentUpdate
+      ? `Schedule ${currentUpdate.revision_label ?? "latest import"} · data date ${fmtP6Date(currentUpdate.data_date)}`
+      : "No open update period and no schedule imported yet";
 
   return (
     <>
@@ -224,22 +254,27 @@ export default function DashboardPage() {
         <div className="page-head">
           <div>
             <div className="page-title">Dashboard</div>
-            <div className="page-desc">{summary?.active_period_label ?? "No open update period"}</div>
+            <div className="page-desc">{pageDesc}</div>
           </div>
-          <div style={{ display: "flex", gap: ".55rem", flexWrap: "wrap" }}>
+          <div className="dash-actions">
             <button className="btn btn-secondary" onClick={() => setConfigOpen(true)}>
               <SettingsIcon className="icon" /> Configure
             </button>
-            <button className="btn btn-secondary" onClick={handleRemind} disabled={!summary?.active_period_id}>
-              <BellIcon className="icon" /> Send Reminder
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowCloseWarning(true)}
-              disabled={!summary?.active_period_id || summary?.active_period_status !== "open"}
-            >
-              <CheckIcon className="icon" /> Close &amp; Run Analysis
-            </button>
+            {/* Period actions only mean something while a period is running. */}
+            {inPeriod && (
+              <>
+                <button className="btn btn-secondary" onClick={handleRemind}>
+                  <BellIcon className="icon" /> Send Reminder
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowCloseWarning(true)}
+                  disabled={summary?.active_period_status !== "open"}
+                >
+                  <CheckIcon className="icon" /> Close &amp; Run Analysis
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -270,7 +305,7 @@ export default function DashboardPage() {
             </p>
           </div>
         ) : (
-          <>
+          <div className="dash-stack">
             {kpiKeys.length > 0 && (
               <div className="kpi-row">
                 {kpiKeys.map((key) => (
@@ -283,27 +318,30 @@ export default function DashboardPage() {
               <div className="dash-grid">
                 {blockKeys.map((key) => {
                   const def = WIDGET_REGISTRY[key];
+                  const full = def.span === "full" || key === loneHalf;
+                  const action = def.action ? def.action(ctx) : null;
                   return (
-                    <div key={key} className={`card${def.span === "full" ? " dash-cell-full" : ""}`}>
+                    <section key={key} className={`card dash-card${full ? " dash-cell-full" : ""}`}>
                       <div className="card-head">
                         <div>
                           <div className="card-title">{def.title}</div>
                           <div className="card-title-sub">{def.description}</div>
                         </div>
+                        {action}
                       </div>
-                      {def.pad ? <div style={{ padding: "1.1rem" }}>{def.render(ctx)}</div> : def.render(ctx)}
-                    </div>
+                      <div className={`dash-card-body${def.pad ? " is-padded" : ""}`}>{def.render(ctx)}</div>
+                    </section>
                   );
                 })}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
       <DashboardConfigModal
         open={configOpen}
-        initialWidgets={layout?.widgets ?? DEFAULT_LAYOUT_WIDGETS}
+        initialWidgets={widgets}
         initialTheme={layout?.theme_key ?? "calm"}
         saving={savingConfig}
         onCancel={() => setConfigOpen(false)}

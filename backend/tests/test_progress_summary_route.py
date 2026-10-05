@@ -43,3 +43,30 @@ def test_evm_summary_is_measured_at_the_data_date(client, db_session):
     progress = client.get(f"/projects/{project.id}/evm/progress-summary").json()
 
     assert summary["as_of_date"] == progress["data_date"]
+
+
+def test_progress_curve_has_planned_throughout_and_actual_at_the_data_date(client, db_session):
+    project = _setup(client, db_session, "progress-summary-3")
+
+    body = client.get(f"/projects/{project.id}/evm/progress-curve").json()
+
+    points = body["points"]
+    assert len(points) >= 2
+    assert all(p["planned"] is not None for p in points)
+    assert points[-1]["planned"] == 100.0
+    at_dd = next(p for p in points if p["date"] == body["data_date"])
+    assert at_dd["actual"] is not None and at_dd["forecast"] is not None
+    assert all(p["forecast"] is None for p in points if p["date"] < body["data_date"])
+
+
+def test_dashboard_summary_falls_back_to_the_current_update(client, db_session):
+    project = _setup(client, db_session, "progress-summary-4")
+
+    body = client.get(f"/dashboard/summary?project_id={project.id}").json()
+
+    assert body["active_period_id"] is None
+    update = body["current_update"]
+    assert update is not None
+    assert update["activities_total"] > 0
+    assert update["filename"] == "synthetic_project.xer"
+    assert body["open_change_requests"] == 0

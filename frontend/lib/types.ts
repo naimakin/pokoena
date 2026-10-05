@@ -750,6 +750,49 @@ export interface ScopeSubmissionStatus {
   submitted: boolean;
 }
 
+/** The latest schedule update — what the period KPI cards fall back to when
+ *  no subcontractor update period is running (backend schemas/dashboard.py). */
+export interface CurrentUpdate {
+  revision_label: string | null;
+  filename: string;
+  data_date: string;
+  imported_at: string;
+  previous_label: string | null;
+  previous_data_date: string | null;
+  /** Typical gap between updates (median of the last three), days. */
+  cadence_days: number | null;
+  /** data_date + cadence_days — when the next update is expected. */
+  next_data_date: string | null;
+  activities_total: number;
+  activities_complete: number;
+  activities_in_progress: number;
+  /** Actual starts/finishes since the previous update's data date; null on the first update. */
+  started_this_update: number | null;
+  finished_this_update: number | null;
+  /** Against the locked baseline; null without one. */
+  planned_pct: number | null;
+  actual_pct: number | null;
+  spi: number | null;
+}
+
+/** GET /projects/{id}/evm/progress-curve — duration-weighted % complete:
+ *  planned (baseline, every point), actual (one point per schedule update),
+ *  forecast (current schedule, from the data date on). */
+export interface ProgressCurvePoint {
+  date: string;
+  planned: number | null;
+  actual: number | null;
+  forecast: number | null;
+}
+
+export interface ProgressCurve {
+  project_id: string;
+  baseline_id: string;
+  version_label: string;
+  data_date: string;
+  points: ProgressCurvePoint[];
+}
+
 export interface DashboardSummary {
   active_period_id: string | null;
   active_period_label: string | null;
@@ -758,6 +801,9 @@ export interface DashboardSummary {
   orgs_total: number;
   orgs_submitted: number;
   flagged_pending: number;
+  /** Pending change requests across every period. */
+  open_change_requests: number;
+  current_update: CurrentUpdate | null;
   scope_status: ScopeSubmissionStatus[];
 }
 

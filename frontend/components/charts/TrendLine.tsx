@@ -2,7 +2,7 @@
 
 // Single-series trend line for the Project Status summary cards — one metric
 // (SPI, recovery index, DCMA score) plotted across schedule versions (UPD-n).
-// Hand-rolled inline SVG, same idiom as MiniSCurve.tsx / ScurveChart.tsx — no
+// Hand-rolled inline SVG, same idiom as ScurveChart.tsx — no
 // chart library in this project.
 
 import type { StatusTrendPoint } from "@/lib/types";

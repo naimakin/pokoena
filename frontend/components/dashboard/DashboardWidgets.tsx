@@ -2,24 +2,29 @@
 
 import type { ReactNode } from "react";
 import type {
+  CurrentUpdate,
   DashboardSummary,
   DashboardWidgetKey,
-  EvmScurve,
   HealthFactorKey,
+  HealthStatus,
+  ProgressCurve,
   Project,
   ProjectHealth,
   RiskHighlight,
 } from "@/lib/types";
-import { MiniSCurve } from "@/components/charts/MiniSCurve";
-import { CheckIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
+import { ProgressCurveChart, curveReadout } from "@/components/charts/ProgressCurveChart";
+import { fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
+import { CalendarIcon, CheckIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
+
+export type CurveStatus = "idle" | "loading" | "ready" | "locked" | "error";
 
 export interface WidgetContext {
   project: Project;
   summary: DashboardSummary | null;
   health: ProjectHealth | null;
   risks: RiskHighlight[] | null;
-  scurve: EvmScurve | null;
-  scurveLocked: boolean;
+  curve: ProgressCurve | null;
+  curveStatus: CurveStatus;
   deadlineDays: number | null;
 }
 
@@ -30,8 +35,12 @@ interface WidgetDef {
   // true → page wraps the body in card padding; false → widget draws edge-to-edge
   // (tables, lists, self-padded blocks).
   pad?: boolean;
+  /** Optional right-hand side of the card header (a chip, a link). */
+  action?: (ctx: WidgetContext) => ReactNode;
   render: (ctx: WidgetContext) => ReactNode;
 }
+
+type Tone = "good" | "warn" | "crit" | "info" | "neutral";
 
 // Where each Project Health factor's detail lives. Project Activities takes a
 // preset filter (see progress/page.tsx) so the critical-path / overdue rows
@@ -45,29 +54,123 @@ const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
   overdue: "/progress?filter=overdue",
 };
 
+const HEALTH_STATUS_TEXT: Record<HealthStatus, string> = {
+  good: "Healthy",
+  warn: "Needs attention",
+  crit: "At risk",
+  unknown: "Not enough data",
+};
+
+const RISK_SEVERITY_TEXT: Record<RiskHighlight["severity"], string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+const DAY_MS = 86_400_000;
+
+/** Whole calendar days from today to an ISO date; negative once it has passed. */
+function daysFromToday(iso: string | null): number | null {
+  if (!iso) return null;
+  const target = Date.parse(iso.slice(0, 10));
+  if (Number.isNaN(target)) return null;
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / DAY_MS);
+}
+
+/** Same bands as the report's progress block and the health factors. */
+function spiTone(spi: number | null): Tone {
+  if (spi == null) return "neutral";
+  if (spi >= 0.95) return "good";
+  if (spi >= 0.85) return "warn";
+  return "crit";
+}
+
+function spiNote(spi: number | null): string {
+  if (spi == null) return "Not enough data";
+  if (spi >= 1.05) return "Ahead of plan";
+  if (spi >= 0.95) return "On plan";
+  return "Behind plan";
+}
+
+/** The latest schedule import stands in for the period cards only while no
+ *  subcontractor update period is running — that workflow wins when it is. */
+function fallbackUpdate(summary: DashboardSummary | null): CurrentUpdate | null {
+  if (!summary || summary.active_period_id) return null;
+  return summary.current_update;
+}
+
 function Kpi({
   label,
   icon,
-  tint,
+  tone,
+  title,
   children,
   footer,
 }: {
   label: string;
   icon: ReactNode;
-  tint: string;
+  tone: Tone;
+  title?: string;
   children: ReactNode;
-  footer: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
-    <div className="card kpi">
+    <div className="card kpi" title={title}>
       <div className="kpi-top">
         <span className="kpi-label">{label}</span>
-        <div className="kpi-icon" style={{ background: `var(--${tint}-soft)`, color: `var(--${tint})` }}>
-          {icon}
-        </div>
+        <div className={`kpi-icon is-${tone}`}>{icon}</div>
       </div>
       {children}
-      {footer}
+      {footer && <div className="kpi-foot">{footer}</div>}
+    </div>
+  );
+}
+
+function ProgressStats({
+  planned,
+  actual,
+  spi,
+}: {
+  planned: number | null;
+  actual: number | null;
+  spi: number | null;
+}) {
+  if (planned == null && actual == null) return null;
+  const gap = planned != null && actual != null ? actual - planned : null;
+  const effSpi = spi ?? (planned != null && actual != null && planned > 0 ? actual / planned : null);
+  const tone = spiTone(effSpi);
+  return (
+    <div className="dash-progress-stats">
+      <div className="dash-stat">
+        <span className="dash-stat-label">
+          <i className="dash-swatch is-planned" />
+          Planned
+        </span>
+        <span className="dash-stat-value num">{fmtPct(planned)}</span>
+        <span className="dash-stat-note">Baseline, due by the data date</span>
+      </div>
+      <div className="dash-stat">
+        <span className="dash-stat-label">
+          <i className="dash-swatch is-actual" />
+          Actual
+        </span>
+        <span className="dash-stat-value num">{fmtPct(actual)}</span>
+        <span className="dash-stat-note">Current schedule, earned to date</span>
+      </div>
+      <div className="dash-stat">
+        <span className="dash-stat-label">Gap</span>
+        <span className={`dash-stat-value num tone-${tone}`}>
+          {gap == null ? "—" : `${gap > 0 ? "+" : ""}${fmtNum(gap, 1)} pts`}
+        </span>
+        <span className="dash-stat-note">{spiNote(effSpi)}</span>
+      </div>
+      <div className="dash-stat">
+        <span className="dash-stat-label">SPI</span>
+        <span className={`dash-stat-value num tone-${tone}`}>{fmtNum(effSpi)}</span>
+        <span className="dash-stat-note">Actual ÷ planned</span>
+      </div>
     </div>
   );
 }
@@ -78,20 +181,57 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     description: "Current period and its status",
     span: "kpi",
     render: ({ summary }) => {
+      const cu = fallbackUpdate(summary);
+      if (cu) {
+        const hasPrevious = Boolean(cu.previous_label || cu.previous_data_date);
+        return (
+          <Kpi
+            label="Current update"
+            tone="info"
+            icon={<CalendarIcon className="icon" />}
+            title={cu.filename}
+            footer={
+              <>
+                <div className="kpi-sub">
+                  Data date <span className="num">{fmtP6Date(cu.data_date)}</span>
+                </div>
+                {hasPrevious && (
+                  <div className="kpi-sub kpi-sub-muted">
+                    Previous {cu.previous_label ?? "update"} ·{" "}
+                    <span className="num">{fmtP6Date(cu.previous_data_date)}</span>
+                  </div>
+                )}
+              </>
+            }
+          >
+            <div className="kpi-value kpi-value-text">{cu.revision_label ?? "Latest import"}</div>
+          </Kpi>
+        );
+      }
+
       const status = summary?.active_period_status;
       const deadline = summary?.deadline_at;
+      const inPeriod = Boolean(summary?.active_period_id);
       return (
         <Kpi
-          label="Update Period"
-          tint="good"
+          label="Update period"
+          tone={status === "open" ? "good" : "neutral"}
           icon={<CheckIcon className="icon" />}
           footer={
             <div className="kpi-sub">
-              {deadline ? `Deadline ${new Date(deadline).toLocaleDateString()}` : "No deadline set"}
+              {deadline ? (
+                <>
+                  Deadline <span className="num">{fmtP6Date(deadline)}</span>
+                </>
+              ) : inPeriod ? (
+                "No deadline set"
+              ) : (
+                "No open period or schedule upload yet"
+              )}
             </div>
           }
         >
-          <div className="kpi-value" style={{ fontSize: "1.4rem" }}>
+          <div className="kpi-value kpi-value-text">
             {status === "open" ? "Open" : status === "closed" ? "Closed" : "—"}
           </div>
         </Kpi>
@@ -103,21 +243,71 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     title: "Deadline Countdown",
     description: "Days until the period closes",
     span: "kpi",
-    render: ({ deadlineDays }) => (
-      <Kpi
-        label="Deadline Countdown"
-        tint="warn"
-        icon={<ClockIcon className="icon" />}
-        footer={<div className="kpi-sub">Until this period closes</div>}
-      >
-        <div className="kpi-value">
-          {deadlineDays ?? "—"}
-          {deadlineDays !== null && (
-            <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)" }}> days</span>
-          )}
-        </div>
-      </Kpi>
-    ),
+    render: ({ summary, deadlineDays }) => {
+      const cu = fallbackUpdate(summary);
+      if (cu) {
+        const days = daysFromToday(cu.next_data_date);
+        const cadence = cu.cadence_days != null ? Math.round(cu.cadence_days) : null;
+        let value: ReactNode;
+        let tone: Tone = "info";
+        if (days === null) {
+          value = "—";
+          tone = "neutral";
+        } else if (days > 0) {
+          value = (
+            <>
+              {fmtNum(days, 0)}
+              <span className="kpi-unit"> {days === 1 ? "day" : "days"}</span>
+            </>
+          );
+        } else if (days === 0) {
+          value = "Due";
+          tone = "warn";
+        } else {
+          value = (
+            <>
+              {fmtNum(-days, 0)}
+              <span className="kpi-unit"> {days === -1 ? "day" : "days"} overdue</span>
+            </>
+          );
+          // A week late is a slipping cadence; beyond that the dashboard is stale.
+          tone = days >= -7 ? "warn" : "crit";
+        }
+        return (
+          <Kpi
+            label="Next update"
+            tone={tone}
+            icon={<ClockIcon className="icon" />}
+            footer={
+              days === null ? (
+                <div className="kpi-sub kpi-sub-muted">Not enough updates to estimate a cycle</div>
+              ) : (
+                <div className="kpi-sub">
+                  Expected <span className="num">{fmtP6Date(cu.next_data_date)}</span>
+                  {cadence != null && ` · ${cadence}-day cycle`}
+                </div>
+              )
+            }
+          >
+            <div className={`kpi-value${tone === "warn" || tone === "crit" ? ` tone-${tone}` : ""}`}>{value}</div>
+          </Kpi>
+        );
+      }
+
+      return (
+        <Kpi
+          label="Deadline countdown"
+          tone="warn"
+          icon={<ClockIcon className="icon" />}
+          footer={<div className="kpi-sub">Until this period closes</div>}
+        >
+          <div className="kpi-value">
+            {deadlineDays ?? "—"}
+            {deadlineDays !== null && <span className="kpi-unit"> {deadlineDays === 1 ? "day" : "days"}</span>}
+          </div>
+        </Kpi>
+      );
+    },
   },
 
   "scopes-submitted": {
@@ -125,23 +315,65 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     description: "Subcontractor submission progress",
     span: "kpi",
     render: ({ summary }) => {
+      const cu = fallbackUpdate(summary);
+      if (cu) {
+        const total = cu.activities_total;
+        const done = cu.activities_complete;
+        const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+        const firstUpdate = cu.finished_this_update == null;
+        return (
+          <Kpi
+            label="This update"
+            tone="good"
+            icon={<CheckIcon className="icon" />}
+            footer={
+              <>
+                <div className="progress" aria-hidden="true">
+                  <span style={{ width: `${pct}%`, background: "var(--good)" }} />
+                </div>
+                <div className="kpi-sub">
+                  {firstUpdate
+                    ? `${fmtPct(pct)} complete · ${fmtNum(cu.activities_in_progress, 0)} in progress`
+                    : `${fmtNum(done, 0)} of ${fmtNum(total, 0)} complete · ${fmtNum(cu.activities_in_progress, 0)} in progress`}
+                </div>
+              </>
+            }
+          >
+            {firstUpdate ? (
+              <div className="kpi-value">
+                {fmtNum(done, 0)}
+                <span className="kpi-unit"> / {fmtNum(total, 0)}</span>
+              </div>
+            ) : (
+              <div className="kpi-value-row">
+                <div className="kpi-value">
+                  {fmtNum(cu.finished_this_update, 0)}
+                  <span className="kpi-unit"> finished</span>
+                </div>
+                <span className="kpi-aside">{fmtNum(cu.started_this_update, 0)} started</span>
+              </div>
+            )}
+          </Kpi>
+        );
+      }
+
       const total = summary?.orgs_total ?? 0;
       const done = summary?.orgs_submitted ?? 0;
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       return (
         <Kpi
-          label="Scopes Submitted"
-          tint="info"
+          label="Scopes submitted"
+          tone="info"
           icon={<UsersIcon className="icon" />}
           footer={
-            <div className="progress">
+            <div className="progress" aria-hidden="true">
               <span style={{ width: `${pct}%`, background: "var(--info)" }} />
             </div>
           }
         >
           <div className="kpi-value">
             {done}
-            <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-secondary)" }}> / {total}</span>
+            <span className="kpi-unit"> / {total}</span>
           </div>
         </Kpi>
       );
@@ -152,16 +384,28 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     title: "Flagged for Review",
     description: "Change requests awaiting a decision",
     span: "kpi",
-    render: ({ summary }) => (
-      <Kpi
-        label="Flagged for Review"
-        tint="crit"
-        icon={<FlagIcon className="icon" />}
-        footer={<div className="kpi-sub">Awaiting admin decision</div>}
-      >
-        <div className="kpi-value">{summary?.flagged_pending ?? 0}</div>
-      </Kpi>
-    ),
+    render: ({ summary }) => {
+      const inPeriod = Boolean(summary?.active_period_id);
+      const count = (inPeriod ? summary?.flagged_pending : summary?.open_change_requests) ?? 0;
+      return (
+        <Kpi
+          label={inPeriod ? "Flagged for review" : "Open change requests"}
+          tone={count > 0 ? "warn" : "neutral"}
+          icon={<FlagIcon className="icon" />}
+          footer={
+            <div className={`kpi-sub${count > 0 ? "" : " kpi-sub-muted"}`}>
+              {count > 0
+                ? inPeriod
+                  ? "Awaiting admin decision"
+                  : "Awaiting admin decision · all periods"
+                : "Nothing awaiting review"}
+            </div>
+          }
+        >
+          <div className="kpi-value">{fmtNum(count, 0)}</div>
+        </Kpi>
+      );
+    },
   },
 
   "health-badge": {
@@ -175,14 +419,22 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
         <div className="health-badge">
           <div className="health-badge-top">
             <div className={`health-grade ${s}`}>{health.grade}</div>
-            <div>
+            <div className="health-summary">
               <div className="health-score">
                 {health.score ?? "—"}
                 {health.score !== null && <small> / 100</small>}
               </div>
-              <div className="kpi-sub" style={{ textTransform: "capitalize" }}>
-                {s === "unknown" ? "Not enough data" : s}
-              </div>
+              <div className={`health-status tone-${s === "unknown" ? "neutral" : s}`}>{HEALTH_STATUS_TEXT[s]}</div>
+              {health.score !== null && (
+                <div className="progress health-meter" aria-hidden="true">
+                  <span
+                    style={{
+                      width: `${Math.min(Math.max(health.score, 0), 100)}%`,
+                      background: s === "unknown" ? "var(--border-strong)" : `var(--${s})`,
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
           <div className="health-factors">
@@ -195,9 +447,11 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
                 rel="noopener noreferrer"
                 title="Open details in a new tab"
               >
-                <span className={`dot ${f.status}`} />
-                <span className="fl">{f.label}</span>
-                <span className="fd">{f.detail}</span>
+                <span className={`dot ${f.status}`} aria-hidden="true" />
+                <span className="hf-text">
+                  <span className="fl">{f.label}</span>
+                  <span className="fd">{f.detail}</span>
+                </span>
               </a>
             ))}
           </div>
@@ -207,25 +461,43 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "s-curve": {
-    title: "S-Curve",
-    description: "Planned vs earned vs actual value",
+    title: "Progress Curve",
+    description: "Planned vs actual % complete against the baseline",
     span: "full",
-    pad: true,
-    render: ({ scurve, scurveLocked, project }) => {
-      if (scurveLocked) {
-        return (
+    action: ({ curve }) =>
+      curve ? <span className="chip chip-neutral">Baseline {curve.version_label}</span> : null,
+    render: ({ curve, curveStatus, project, summary }) => {
+      const cu = summary?.current_update ?? null;
+      const readout = curve ? curveReadout(curve.points, curve.data_date) : null;
+      const planned = cu?.planned_pct ?? readout?.planned ?? null;
+      const actual = cu?.actual_pct ?? readout?.actual ?? null;
+
+      let body: ReactNode;
+      if (curveStatus === "locked") {
+        body = (
           <p className="empty-state">
-            Lock a baseline for <b>{project.name}</b> to see the S-curve.
+            Lock a baseline for <b>{project.name}</b> to see the progress curve.
           </p>
         );
+      } else if (curveStatus === "loading" || curveStatus === "idle") {
+        body = <p className="empty-state">Loading the progress curve…</p>;
+      } else if (!curve) {
+        body = <p className="empty-state">Progress curve unavailable.</p>;
+      } else if (curve.points.length < 2) {
+        body = (
+          <p className="empty-state">
+            Not enough dated points yet — the curve fills in as schedule updates are uploaded.
+          </p>
+        );
+      } else {
+        body = <ProgressCurveChart points={curve.points} dataDate={curve.data_date} />;
       }
-      if (!scurve || scurve.series.length < 2) {
-        return <p className="empty-state">No progress recorded against the baseline yet.</p>;
-      }
+
       return (
-        <MiniSCurve
-          series={scurve.series.map((p) => ({ date: p.date, pv: p.pv, ev: p.ev, ac: p.ac }))}
-        />
+        <div className="dash-progress">
+          <ProgressStats planned={planned} actual={actual} spi={cu?.spi ?? null} />
+          {body}
+        </div>
       );
     },
   },
@@ -241,11 +513,14 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
         <div className="risk-list">
           {risks.map((r, i) => (
             <div key={`${r.title}-${i}`} className="risk-item">
-              <span className={`risk-sev ${r.severity}`} />
-              <div>
+              <span className={`risk-sev ${r.severity}`} aria-hidden="true" />
+              <div className="risk-body">
                 <div className="risk-title">{r.title}</div>
                 <div className="risk-detail">{r.detail}</div>
-                <div className="risk-source">{r.source}</div>
+                <div className="risk-meta">
+                  <span className={`risk-sev-label ${r.severity}`}>{RISK_SEVERITY_TEXT[r.severity]}</span>
+                  <span>{r.source}</span>
+                </div>
               </div>
             </div>
           ))}
@@ -286,8 +561,8 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
                       {row.submitted ? "Submitted" : "Pending"}
                     </span>
                   </td>
-                  <td className="num">{row.activity_count}</td>
-                  <td className="num">{row.avg_percent_complete}%</td>
+                  <td className="num">{fmtNum(row.activity_count, 0)}</td>
+                  <td className="num">{fmtPct(row.avg_percent_complete)}</td>
                 </tr>
               ))
             ) : (
@@ -304,13 +579,15 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 };
 
+// Recommended order — also what an unsaved (default) layout is shown in: the
+// KPI row, the progress curve full width, then Health and Top Risks side by side.
 export const WIDGET_ORDER: DashboardWidgetKey[] = [
   "update-period",
   "deadline",
   "scopes-submitted",
   "flagged",
-  "health-badge",
   "s-curve",
+  "health-badge",
   "risk-top3",
   "scope-table",
 ];

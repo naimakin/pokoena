@@ -155,3 +155,40 @@ def version_facts(rows: Iterable[VersionRow]) -> VersionFacts:
         tasks_remaining=tasks_open,
         max_wbs_level=max_level,
     )
+
+
+def forecast_percent(
+    rows: Iterable[tuple[float, float, Optional[date], Optional[date]]], data_date: date, as_of: date
+) -> Optional[float]:
+    """The current schedule's own progress curve from the data date on.
+    `rows` — (target hours, percent complete 0-100, start, finish) per activity.
+    What is earned stays earned; each activity's unearned hours are spread
+    over the part of its current dates that lies after the data date (an
+    in-progress activity's remaining work can't land before it)."""
+    total = done = 0.0
+    for hours, pct, start, finish in rows:
+        if not hours or hours <= 0:
+            continue
+        earned = hours * min(max(pct or 0.0, 0.0), 100.0) / 100.0
+        total += hours
+        done += earned
+        remaining = hours - earned
+        if remaining <= 0:
+            continue
+        rem_start = max(start, data_date) if start else data_date
+        rem_finish = max(finish, rem_start) if finish else rem_start
+        done += remaining * planned_fraction(rem_start, rem_finish, as_of)
+    if total <= 0:
+        return None
+    return round(done / total * 100.0, 2)
+
+
+def update_cadence_days(data_dates: Iterable[date]) -> Optional[int]:
+    """Typical gap between schedule updates — the median of the last three
+    gaps between distinct data dates. None with fewer than two updates."""
+    distinct = sorted(set(data_dates))
+    gaps = [(b - a).days for a, b in zip(distinct, distinct[1:]) if (b - a).days > 0][-3:]
+    if not gaps:
+        return None
+    gaps.sort()
+    return gaps[len(gaps) // 2]
