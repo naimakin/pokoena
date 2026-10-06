@@ -348,7 +348,7 @@ function sentenceCase(value: string): string {
   return value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : "—";
 }
 
-/** Same mapping as Execution > Project Status (toneFor): Low/Medium/High mean
+/** Same mapping as Reports > Project Status (toneFor): Low/Medium/High mean
  *  opposite things for risk and for quality. */
 function verdictTone(kind: "progress" | "risk" | "quality", verdict: string): Tone {
   if (kind === "quality") return verdict === "HIGH" ? "good" : verdict === "MEDIUM" ? "warn" : "crit";
@@ -489,7 +489,7 @@ function ProgressVsPlanBlock({ project }: BlockContext) {
         data ? `Against baseline ${data.version_label} · data date ${fmtP6Date(data.data_date)}` : undefined
       }
       state={state}
-      unavailable="Lock a baseline in Planning > Baselines — planned progress has nothing to measure against until then."
+      unavailable="Lock a baseline in Programme > Baselines — planned progress has nothing to measure against until then."
     >
       {data && (
         <>
@@ -614,7 +614,7 @@ function ScurveBlock({ project, options }: BlockContext) {
       title="S-curve"
       subtitle={`Cumulative planned value, earned value and actual cost — ${granularity}`}
       state={state}
-      unavailable="Lock a baseline in Planning > Baselines to generate the planned-value curve."
+      unavailable="Lock a baseline in Programme > Baselines to generate the planned-value curve."
     >
       {data && (
         <div className="report-chart">
@@ -850,7 +850,7 @@ function BaselineVarianceBlock({ project, options }: BlockContext) {
       subtitle={data ? `Against baseline ${data.version_label}, worst slip first` : undefined}
       hint={countLabel(rows.length, "row")}
       state={state}
-      unavailable="Lock a baseline in Planning > Baselines to compare dates against it."
+      unavailable="Lock a baseline in Programme > Baselines to compare dates against it."
     >
       {data && (
         <>
@@ -953,7 +953,7 @@ function ScheduleChangesBlock({ project }: BlockContext) {
           : undefined
       }
       state={state}
-      unavailable="Needs two schedule updates to compare — upload the next .xer from Program Library."
+      unavailable="Needs two schedule updates to compare — upload the next .xer from Programs."
     >
       {data && (
         <div className="report-section">

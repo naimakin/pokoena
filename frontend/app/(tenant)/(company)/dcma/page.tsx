@@ -191,13 +191,13 @@ export default function DcmaPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <PageState kind="loading" section="Reporting" title="DCMA 14-Point" />;
-  if (error) return <PageState kind="error" section="Reporting" title="DCMA 14-Point" message={error} />;
+  if (loading) return <PageState kind="loading" section="Reports" title="DCMA 14-Point" />;
+  if (error) return <PageState kind="error" section="Reports" title="DCMA 14-Point" message={error} />;
 
   return (
     <>
       <div className="a-topbar">
-        <span className="crumb">Reporting</span>
+        <span className="crumb">Reports</span>
       </div>
       <div className="a-content">
         <div className="page-head">
@@ -212,10 +212,10 @@ export default function DcmaPage() {
             <EmptyState
               art={<UploadScheduleIllo />}
               title="No schedule imported yet"
-              body="Upload a Primavera P6 .xer from Program Library to run the DCMA check."
+              body="Upload a Primavera P6 .xer from Programs to run the DCMA check."
               action={
                 <Link className="btn btn-primary btn-sm" href="/project-files">
-                  Go to Program Library
+                  Go to Programs
                 </Link>
               }
             />

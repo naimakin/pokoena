@@ -1,6 +1,6 @@
 "use client";
 
-// Planning > Schedule Simulation: edit activities the way Project Activities
+// Planning > Schedule Simulation: edit activities the way Activity Ledger
 // does (mark one complete, change its %, push its finish out three weeks) on a
 // copy of the current programme at a chosen data date, and see what moves, by
 // how much, and why. Runs are read-only on the server
@@ -37,8 +37,8 @@ import {
   type SimScenario,
 } from "@/lib/simulation";
 
-const SECTION = "Planning";
-const TITLE = "Schedule Simulation";
+const SECTION = "Programme";
+const TITLE = "Scenario Lab";
 
 type Modal = { kind: "save" | "rename"; name: string } | { kind: "delete" } | null;
 
@@ -341,7 +341,7 @@ export default function ScheduleSimulationPage() {
         art={<UploadScheduleIllo />}
         action={
           <Link className="btn btn-primary btn-sm" href="/project-files">
-            Go to Program Library
+            Go to Programs
           </Link>
         }
       />

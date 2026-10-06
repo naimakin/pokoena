@@ -134,17 +134,17 @@ export default function EvmPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Reporting" title="S-Curve & EVM" />;
+    return <PageState kind="loading" section="Reports" title="S-Curve & EVM" />;
   }
   if (error) {
-    return <PageState kind="error" section="Reporting" title="S-Curve & EVM" message={error} />;
+    return <PageState kind="error" section="Reports" title="S-Curve & EVM" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Reporting
+          Reports
         </span>
       </div>
       <div className="a-content">
@@ -260,7 +260,7 @@ export default function EvmPage() {
                 {scurve && scurve.series.length > 0 ? (
                   <ScurveChart series={scurve.series} />
                 ) : (
-                  <p className="empty-state">No progress entries yet — submit progress from the Project Activities page.</p>
+                  <p className="empty-state">No progress entries yet — submit progress from the Activity Ledger page.</p>
                 )}
               </ExpandableChartCard>
             </div>

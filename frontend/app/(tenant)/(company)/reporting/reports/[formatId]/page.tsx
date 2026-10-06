@@ -59,10 +59,10 @@ export default function ReportPage() {
   }, [load]);
 
   if (loading) {
-    return <PageState kind="loading" section="Reporting" title="Report" />;
+    return <PageState kind="loading" section="Reports" title="Report" />;
   }
   if (error || !format || !project) {
-    return <PageState kind="error" section="Reporting" title="Report" message={error ?? "Report not found."} />;
+    return <PageState kind="error" section="Reports" title="Report" message={error ?? "Report not found."} />;
   }
 
   const blocks = format.blocks
@@ -107,7 +107,7 @@ export default function ReportPage() {
     <>
       <div className="a-topbar no-print">
         <span className="crumb">
-          Reporting / <Link href="/reporting/reports">Reports</Link>
+          Reports / <Link href="/reporting/reports">Reports</Link>
         </span>
       </div>
       <div className={`a-content report-sheet${landscape ? " is-landscape" : ""}`}>

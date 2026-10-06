@@ -189,13 +189,13 @@ export default function FloatPathPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Reporting" title="Float Path" />;
+    return <PageState kind="loading" section="Reports" title="Float Path" />;
   }
   if (!project) {
     return (
       <PageState
         kind="empty"
-        section="Reporting"
+        section="Reports"
         title="Float Path"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -210,7 +210,7 @@ export default function FloatPathPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Reporting
+          Reports
         </span>
       </div>
       <div className="a-content">
@@ -232,7 +232,7 @@ export default function FloatPathPage() {
         {candidates.length === 0 ? (
           <div className="card">
             <p className="empty-state">
-              Import a schedule from Program Library first — float paths are read off the current
+              Import a schedule from Programs first — float paths are read off the current
               programme&rsquo;s logic and dates.
             </p>
           </div>

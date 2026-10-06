@@ -27,7 +27,7 @@ function fmtDate(iso: string | null | undefined): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${MONTHS[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
 }
 
-// Same short form as Program Library / Planning > WBS, for the Program picker.
+// Same short form as Programs / Planning > WBS, for the Program picker.
 function fmtDateShort(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -333,17 +333,17 @@ export default function ProgressPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Execution" title="Project Activities" />;
+    return <PageState kind="loading" section="Delivery" title="Activity Ledger" />;
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="Project Activities" message={error} />;
+    return <PageState kind="error" section="Delivery" title="Activity Ledger" message={error} />;
   }
   if (!project) {
     return (
       <PageState
         kind="empty"
-        section="Execution"
-        title="Project Activities"
+        section="Delivery"
+        title="Activity Ledger"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
         art={<NoProjectIllo />}
@@ -360,7 +360,7 @@ export default function ProgressPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Execution
+          Delivery
         </span>
         <div className="spacer" />
         {totalDirty > 0 && <span className="chip chip-warn">{totalDirty} unsaved</span>}
@@ -368,7 +368,7 @@ export default function ProgressPage() {
       <div ref={contentRef} className={`a-content fill-viewport${isFullscreen ? " is-fullscreen" : ""}`}>
         <div className="page-head">
           <div>
-            <div className="page-title">Project Activities</div>
+            <div className="page-title">Activity Ledger</div>
             <div className="page-desc">
               {dataLoading
                 ? "Loading…"
@@ -483,7 +483,7 @@ export default function ProgressPage() {
           <div className="card">
             <p className="empty-state">
               {isViewingCurrent
-                ? "No activities yet — import a schedule from Program Library."
+                ? "No activities yet — import a schedule from Programs."
                 : "No activities recorded for this program."}
             </p>
           </div>

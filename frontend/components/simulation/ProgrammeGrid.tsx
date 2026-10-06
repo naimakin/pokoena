@@ -1,6 +1,6 @@
 "use client";
 
-// The programme, as Project Activities shows it (WBS bands, Status / Start /
+// The programme, as Activity Ledger shows it (WBS bands, Status / Start /
 // Finish / Total Float / %), to pick and edit the activities of a scenario.
 // A changed activity shows its scenario values; after a run, the last column
 // shows where every moved activity now finishes.
@@ -78,7 +78,7 @@ export function ProgrammeGrid({
         <div>
           <div className="card-title">Programme</div>
           <div className="card-title-sub">
-            {activities.length.toLocaleString()} activities, as in Project Activities. Click one to change it in the scenario.
+            {activities.length.toLocaleString()} activities, as in Activity Ledger. Click one to change it in the scenario.
           </div>
         </div>
       </div>

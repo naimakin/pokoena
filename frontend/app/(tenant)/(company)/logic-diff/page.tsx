@@ -75,17 +75,17 @@ export default function LogicDiffPage() {
   const filteredChanges = report ? report.changes.filter((c) => typeFilter === "all" || c.change_type === typeFilter) : [];
 
   if (loading) {
-    return <PageState kind="loading" section="Reporting" title="Logic Diff" />;
+    return <PageState kind="loading" section="Reports" title="Logic Diff" />;
   }
   if (error) {
-    return <PageState kind="error" section="Reporting" title="Logic Diff" message={error} />;
+    return <PageState kind="error" section="Reports" title="Logic Diff" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Reporting
+          Reports
         </span>
       </div>
       <div className="a-content">

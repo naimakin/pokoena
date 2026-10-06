@@ -185,8 +185,8 @@ export default function PortfolioDashboardPage() {
     router.push("/dashboard");
   }
 
-  if (loading) return <PageState kind="loading" section="Portfolio" title="Portfolio Dashboard" />;
-  if (error) return <PageState kind="error" section="Portfolio" title="Portfolio Dashboard" message={error} />;
+  if (loading) return <PageState kind="loading" section="Projects" title="Portfolio Dashboard" />;
+  if (error) return <PageState kind="error" section="Projects" title="Portfolio Dashboard" message={error} />;
 
   const summary = data?.summary;
   const scheduledCount = kpis.scheduled || 1;
@@ -194,7 +194,7 @@ export default function PortfolioDashboardPage() {
   return (
     <>
       <div className="a-topbar">
-        <span className="crumb">Portfolio</span>
+        <span className="crumb">Projects</span>
       </div>
       <div className="a-content">
         <div className="page-head">
@@ -212,10 +212,10 @@ export default function PortfolioDashboardPage() {
             <EmptyState
               art={<UploadScheduleIllo />}
               title="No programmes in the portfolio yet"
-              body="Import a Primavera P6 .xer into a project from Program Library and it appears here."
+              body="Import a Primavera P6 .xer into a project from Programs and it appears here."
               action={
                 <Link className="btn btn-primary btn-sm" href="/project-files">
-                  Go to Program Library
+                  Go to Programs
                 </Link>
               }
             />

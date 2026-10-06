@@ -97,17 +97,17 @@ export default function ReviewQueuePage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Execution" title="Flag Reviews" />;
+    return <PageState kind="loading" section="Delivery" title="Flag Reviews" />;
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="Flag Reviews" message={error} />;
+    return <PageState kind="error" section="Delivery" title="Flag Reviews" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Execution
+          Delivery
         </span>
       </div>
 

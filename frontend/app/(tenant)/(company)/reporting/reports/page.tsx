@@ -144,16 +144,16 @@ export default function ReportsPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Reporting" title="Reports" />;
+    return <PageState kind="loading" section="Reports" title="Reports" />;
   }
   if (error) {
-    return <PageState kind="error" section="Reporting" title="Reports" message={error} />;
+    return <PageState kind="error" section="Reports" title="Reports" message={error} />;
   }
   if (!project) {
     return (
       <PageState
         kind="empty"
-        section="Reporting"
+        section="Reports"
         title="Reports"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -170,7 +170,7 @@ export default function ReportsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Reporting
+          Reports
         </span>
       </div>
       <div className="a-content">
@@ -206,7 +206,7 @@ export default function ReportsPage() {
           <div className="banner warn">
             <span className="banner-text">
               No schedule imported yet. Reports will render, but most blocks will have nothing to show
-              until a .xer is uploaded from Program Library.
+              until a .xer is uploaded from Programs.
             </span>
           </div>
         )}

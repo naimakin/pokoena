@@ -45,7 +45,7 @@ export function BaselineGate({ gated, children }: { gated: boolean; children: Re
           <EmptyState
             art={<NoBaselineIllo />}
             title="This project has no baseline yet"
-            body="Execution, Reporting, EVM and Risk measure the project against a locked baseline programme."
+            body="Delivery, Reports, EVM and Risk measure the project against a locked baseline programme."
           />
           <ol className="setup-steps">
             <li className="is-done">
@@ -59,7 +59,7 @@ export function BaselineGate({ gated, children }: { gated: boolean; children: Re
               <span className="setup-num">2</span>
               Upload the schedule (.xer)
               <Link className="btn btn-secondary btn-sm" href="/project-files">
-                Program Library
+                Programs
               </Link>
             </li>
             <li>

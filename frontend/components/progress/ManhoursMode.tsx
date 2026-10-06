@@ -78,7 +78,7 @@ export function ManhoursMode({
         {!hasActiveBaseline && (
           <div className="banner warn" style={{ marginBottom: "1rem" }}>
             <span className="banner-text">
-              No active baseline — burned-hours entry needs one locked (Planning → Baselines).
+              No active baseline — burned-hours entry needs one locked (Programme → Baselines).
             </span>
           </div>
         )}

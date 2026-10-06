@@ -260,7 +260,7 @@ export default function BaselinesPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Planning
+          Programme
         </span>
       </div>
       <div className="a-content">
@@ -269,7 +269,7 @@ export default function BaselinesPage() {
             <div className="page-title">Baselines</div>
             <div className="page-desc">
               The baseline programme is the project&apos;s frozen plan. Every update programme uploaded to
-              Program Library is measured back against it — for date variance and the S-curve.
+              Programs is measured back against it — for date variance and the S-curve.
             </div>
           </div>
         </div>
@@ -299,7 +299,7 @@ export default function BaselinesPage() {
                     <div className="banner warn" style={{ marginBottom: "1rem" }}>
                       <LockIcon className="icon" />
                       <div className="banner-text">
-                        No baseline yet. Execution, Reporting, EVM, Risk and AI stay locked until one is set.
+                        No baseline yet. Delivery, Reports, EVM, Risk and AI stay locked until one is set.
                       </div>
                     </div>
                     {isAdmin ? (

@@ -158,16 +158,16 @@ export default function ProjectStatusPage() {
   const hasFilters = Boolean(wbsId || codeIds.length || q);
 
   if (loading && !status) {
-    return <PageState kind="loading" section="Execution" title="Project Status" />;
+    return <PageState kind="loading" section="Reports" title="Project Status" />;
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="Project Status" message={error} />;
+    return <PageState kind="error" section="Reports" title="Project Status" message={error} />;
   }
   if (!project || !status) {
     return (
       <PageState
         kind="empty"
-        section="Execution"
+        section="Reports"
         title="Project Status"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -187,7 +187,7 @@ export default function ProjectStatusPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Execution
+          Reports
         </span>
         <div className="spacer" />
         {status.latest_revision_label && (
@@ -201,7 +201,7 @@ export default function ProjectStatusPage() {
             <div className="page-title">Project Status</div>
             <div className="page-desc">
               {noSchedule
-                ? "No schedule imported yet — upload a .xer from Program Library."
+                ? "No schedule imported yet — upload a .xer from Programs."
                 : `${status.latest_filename} · data date ${fmtDate(status.data_date)}`}
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function ProjectStatusPage() {
                 </div>
                 <div className="card-title-sub">
                   <Link href="/progress" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
-                    View in Project Activities →
+                    View in Activity Ledger →
                   </Link>
                 </div>
               </div>

@@ -201,17 +201,17 @@ export default function ExportSyncP6Page() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Planning" title="Export / Sync to P6" />;
+    return <PageState kind="loading" section="Programme" title="Export / Sync to P6" />;
   }
   if (error) {
-    return <PageState kind="error" section="Planning" title="Export / Sync to P6" message={error} />;
+    return <PageState kind="error" section="Programme" title="Export / Sync to P6" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Planning
+          Programme
         </span>
       </div>
       <div className="a-content">
@@ -254,7 +254,7 @@ export default function ExportSyncP6Page() {
                     </li>
                     <li>Open it in Primavera P6 and run F9 (schedule recalculation).</li>
                     <li>
-                      Re-upload the F9 result via Program Library. Link it back to this export there so the sync
+                      Re-upload the F9 result via Programs. Link it back to this export there so the sync
                       log shows the round-trip.
                     </li>
                   </ol>
@@ -308,7 +308,7 @@ export default function ExportSyncP6Page() {
                 )}
                 {exportCount === 0 && (
                   <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
-                    Import a schedule from Program Library before exporting.
+                    Import a schedule from Programs before exporting.
                   </p>
                 )}
                 {exportError && <p className="login-error">{exportError}</p>}

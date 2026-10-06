@@ -224,7 +224,7 @@ export default function ProgramLibraryPage() {
       );
     }
     if (unlocking) {
-      notes.push("Unlock: Execution, Reporting, EVM, Risk and AI stay locked until a baseline is set again. Tick Baseline again to restore it.");
+      notes.push("Unlock: Delivery, Reports, EVM, Risk and AI stay locked until a baseline is set again. Tick Baseline again to restore it.");
     }
     if (notes.length > 0 && !window.confirm(`${notes.join("\n\n")}\n\nContinue?`)) return;
 
@@ -252,27 +252,27 @@ export default function ProgramLibraryPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Planning" title="Program Library" />;
+    return <PageState kind="loading" section="Programme" title="Programs" />;
   }
   if (error) {
-    return <PageState kind="error" section="Planning" title="Program Library" message={error} />;
+    return <PageState kind="error" section="Programme" title="Programs" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Planning
+          Programme
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Program Library</div>
+            <div className="page-title">Programs</div>
             <div className="page-desc">
               Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
               float, and critical path. Set the baseline by editing an import below and ticking <b>Baseline</b> (or on{" "}
-              <b>Planning → Baselines</b>) — later uploads update the live schedule and are compared back to it.
+              <b>Programme → Baselines</b>) — later uploads update the live schedule and are compared back to it.
             </div>
           </div>
         </div>
@@ -300,7 +300,7 @@ export default function ProgramLibraryPage() {
                 <LockIcon className="icon" />
                 <div className="banner-text">
                   No baseline programme yet — edit an import below and tick <b>Baseline</b>, or set one on{" "}
-                  <b>Planning → Baselines</b>.
+                  <b>Programme → Baselines</b>.
                 </div>
               </div>
             )}

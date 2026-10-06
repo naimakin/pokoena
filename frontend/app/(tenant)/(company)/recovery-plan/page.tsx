@@ -148,16 +148,16 @@ export default function RecoveryPlanPage() {
   }, [grouping, rows]);
 
   if (loading) {
-    return <PageState kind="loading" section="Execution" title="Recovery Plan" />;
+    return <PageState kind="loading" section="Delivery" title="Recovery Plan" />;
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="Recovery Plan" message={error} />;
+    return <PageState kind="error" section="Delivery" title="Recovery Plan" message={error} />;
   }
   if (!project || !report) {
     return (
       <PageState
         kind="empty"
-        section="Execution"
+        section="Delivery"
         title="Recovery Plan"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -172,7 +172,7 @@ export default function RecoveryPlanPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Execution
+          Delivery
         </span>
       </div>
       <div className="a-content recovery-print">
@@ -197,7 +197,7 @@ export default function RecoveryPlanPage() {
         {report.comparison_basis === "none" ? (
           <div className="card">
             <p className="empty-state">
-              Upload at least two schedule updates (UPD-1, UPD-2…) from Program Library. The
+              Upload at least two schedule updates (UPD-1, UPD-2…) from Programs. The
               recovery plan compares the two most recent.
             </p>
           </div>

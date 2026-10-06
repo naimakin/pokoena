@@ -896,23 +896,23 @@ export default function GanttPage() {
   const contentHeight = HEAD_H + rows.length * ROW_H;
 
   if (loading) {
-    return <PageState kind="loading" section="Planning" title="Schedule" />;
+    return <PageState kind="loading" section="Programme" title="Chart" />;
   }
   if (error) {
-    return <PageState kind="error" section="Planning" title="Schedule" message={error} />;
+    return <PageState kind="error" section="Programme" title="Chart" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Planning
+          Programme
         </span>
       </div>
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Schedule</div>
+            <div className="page-title">Chart</div>
             <div className="page-desc">
               {dataLoading
                 ? "Loading…"
@@ -1208,7 +1208,7 @@ export default function GanttPage() {
             <p className="empty-state">
               {activities.length === 0
                 ? isViewingCurrent
-                  ? "No schedule imported yet — upload a .xer file from Program Library."
+                  ? "No schedule imported yet — upload a .xer file from Programs."
                   : "No activities recorded for this program."
                 : "No activities match your filters."}
             </p>

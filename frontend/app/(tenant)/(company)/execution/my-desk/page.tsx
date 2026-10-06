@@ -217,13 +217,13 @@ export default function MyDeskPage() {
   // ---------------------------------------------------------------- render
 
   if (projectsLoading || (!loaded && !error && (project || scope === "all"))) {
-    return <PageState kind="loading" section="Execution" title="My Desk" />;
+    return <PageState kind="loading" section="Delivery" title="My Desk" />;
   }
   if (projects.length === 0) {
     return (
       <PageState
         kind="empty"
-        section="Execution"
+        section="Delivery"
         title="My Desk"
         emptyTitle="No project yet"
         message="Once you're on a project, what waits on you, what you pin and your private notes collect here."
@@ -232,7 +232,7 @@ export default function MyDeskPage() {
     );
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="My Desk" message={error} />;
+    return <PageState kind="error" section="Delivery" title="My Desk" message={error} />;
   }
 
   const allMode = scope === "all";
@@ -240,7 +240,7 @@ export default function MyDeskPage() {
   return (
     <>
       <div className="a-topbar">
-        <span className="crumb">Execution</span>
+        <span className="crumb">Delivery</span>
         <div className="spacer" />
         <div className="segmented" role="tablist" aria-label="Scope">
           <button role="tab" aria-selected={!allMode} className={!allMode ? "active" : undefined} onClick={() => changeScope("project")}>
@@ -405,8 +405,8 @@ export default function MyDeskPage() {
               ) : (
                 <div className="desk-quiet">
                   {allMode
-                    ? "Nothing pinned on any project yet. Open an activity in Project Activities and press Pin."
-                    : "Nothing pinned yet. Pin a suggestion below, or open any activity in Project Activities and press Pin."}
+                    ? "Nothing pinned on any project yet. Open an activity in Activity Ledger and press Pin."
+                    : "Nothing pinned yet. Pin a suggestion below, or open any activity in Activity Ledger and press Pin."}
                 </div>
               )}
             </div>

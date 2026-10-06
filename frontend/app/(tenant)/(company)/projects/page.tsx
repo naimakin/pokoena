@@ -116,7 +116,7 @@ export default function ProjectsPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Portfolio
+          Projects
         </span>
       </div>
 

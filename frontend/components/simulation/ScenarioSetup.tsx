@@ -1,7 +1,7 @@
 "use client";
 
 // The scenario being built: the simulation data date and the activities
-// changed in it (edited from the programme grid below, Project Activities
+// changed in it (edited from the programme grid below, Activity Ledger
 // style), with the Run bar.
 
 import { ArrowRightIcon, PencilIcon, XIcon } from "@/components/icons";
@@ -111,7 +111,7 @@ export function ScenarioSetup({
       </div>
       {changes.length === 0 ? (
         <p className="empty-state sim-changes-empty">
-          No changes yet. Click an activity in the programme below and edit it as in Project Activities — mark it complete,
+          No changes yet. Click an activity in the programme below and edit it as in Activity Ledger — mark it complete,
           change its %, push its finish out — or just move the data date.
         </p>
       ) : (

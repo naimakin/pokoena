@@ -158,16 +158,16 @@ export default function ScheduleChangesPage() {
   }
 
   if (loading && !report) {
-    return <PageState kind="loading" section="Execution" title="Changes" />;
+    return <PageState kind="loading" section="Delivery" title="Changes" />;
   }
   if (error) {
-    return <PageState kind="error" section="Execution" title="Changes" message={error} />;
+    return <PageState kind="error" section="Delivery" title="Changes" message={error} />;
   }
   if (!project || !report) {
     return (
       <PageState
         kind="empty"
-        section="Execution"
+        section="Delivery"
         title="Changes"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -191,7 +191,7 @@ export default function ScheduleChangesPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Execution
+          Delivery
         </span>
       </div>
       <div className="a-content changes-print">
@@ -253,8 +253,8 @@ export default function ScheduleChangesPage() {
           <div className="card">
             <p className="empty-state">
               {imports.length >= 2
-                ? "The two updates being compared don't both carry an activity snapshot yet — snapshots are captured from now on, so upload one more .xer from Program Library and the comparison will work."
-                : "Upload at least two schedule updates (.xer) from Program Library. Changes compares the two most recent, or pick a pair above."}
+                ? "The two updates being compared don't both carry an activity snapshot yet — snapshots are captured from now on, so upload one more .xer from Programs and the comparison will work."
+                : "Upload at least two schedule updates (.xer) from Programs. Changes compares the two most recent, or pick a pair above."}
             </p>
           </div>
         ) : (

@@ -42,7 +42,7 @@ interface WidgetDef {
 
 type Tone = "good" | "warn" | "crit" | "info" | "neutral";
 
-// Where each Project Health factor's detail lives. Project Activities takes a
+// Where each Project Health factor's detail lives. Activity Ledger takes a
 // preset filter (see progress/page.tsx) so the critical-path / overdue rows
 // land on the exact activity list behind the number.
 const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {

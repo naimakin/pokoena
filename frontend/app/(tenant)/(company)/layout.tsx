@@ -70,7 +70,7 @@ const TOP_SECTIONS: NavSection[] = [
   { key: "dashboard", label: "Dashboard", icon: GridIcon, href: "/dashboard", visible: always, children: [] },
   {
     key: "portfolio",
-    label: "Portfolio",
+    label: "Projects",
     icon: BuildingIcon,
     href: "/projects",
     visible: always,
@@ -81,28 +81,27 @@ const TOP_SECTIONS: NavSection[] = [
   },
   {
     key: "planning",
-    label: "Planning",
+    label: "Programme",
     icon: CalendarIcon,
     href: "/project-files",
     visible: always,
     children: [
-      { href: "/project-files", label: "Program Library", icon: DatabaseIcon, visible: always },
+      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: always },
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
-      { href: "/gantt", label: "Schedule", icon: GanttIcon, visible: always },
-      { href: "/planning/schedule-simulation", label: "Schedule Simulation", icon: SimulationIcon, visible: always },
+      { href: "/gantt", label: "Chart", icon: GanttIcon, visible: always },
+      { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: always },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
     ],
   },
   {
     key: "execution",
-    label: "Execution",
+    label: "Delivery",
     icon: FlagIcon,
-    href: "/execution/project-status",
+    href: "/execution/my-desk",
     visible: always,
     children: [
       { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: always },
-      { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
-      { href: "/progress", label: "Project Activities", icon: ClockIcon, visible: always },
+      { href: "/progress", label: "Activity Ledger", icon: ClockIcon, visible: always },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
       { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: isCompanyAdmin },
@@ -129,7 +128,7 @@ const TOP_SECTIONS: NavSection[] = [
   },
   {
     key: "reporting",
-    label: "Reporting",
+    label: "Reports",
     icon: BarChartIcon,
     href: "/reporting/reports",
     visible: always,
@@ -138,6 +137,9 @@ const TOP_SECTIONS: NavSection[] = [
     // to someone. They are one page now, and the old routes redirect to it.
     children: [
       { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: always },
+      // A status rollup is something you report, not something you act on —
+      // it moved here from Delivery (route unchanged).
+      { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
       { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: always },
       { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: always },
       { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: always },

@@ -127,7 +127,7 @@ export default function WbsPage() {
 
   const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
   const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
-  // Program Library edits only ever touch the live schedule, so Add/Delete only
+  // Programs edits only ever touch the live schedule, so Add/Delete only
   // make sense while viewing it — a historical program's tree is read-only.
   const isViewingCurrent = selectedImportId !== null && selectedImportId === currentImportId;
 
@@ -275,17 +275,17 @@ export default function WbsPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Planning" title="WBS" />;
+    return <PageState kind="loading" section="Programme" title="WBS" />;
   }
   if (error) {
-    return <PageState kind="error" section="Planning" title="WBS" message={error} />;
+    return <PageState kind="error" section="Programme" title="WBS" message={error} />;
   }
 
   return (
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Planning
+          Programme
         </span>
       </div>
       <div className="a-content">
@@ -471,8 +471,8 @@ export default function WbsPage() {
             <p className="empty-state">
               {isViewingCurrent ? (
                 <>
-                  No WBS imported yet. Upload a P6 <span className="mono">.xer</span> schedule from Planning &rsaquo;
-                  Program Library — its PROJWBS structure loads here automatically, or add nodes manually above.
+                  No WBS imported yet. Upload a P6 <span className="mono">.xer</span> schedule from Programme &rsaquo;
+                  Programs — its PROJWBS structure loads here automatically, or add nodes manually above.
                 </>
               ) : (
                 "This program was imported before WBS history was tracked, so its structure wasn't saved."

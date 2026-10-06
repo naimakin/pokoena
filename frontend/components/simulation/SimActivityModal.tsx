@@ -1,7 +1,7 @@
 "use client";
 
 // Edits one activity in the scenario — the same fields the Activity modal
-// edits in Project Activities (status, actual dates, % complete, remaining
+// edits in Activity Ledger (status, actual dates, % complete, remaining
 // duration), plus the two ways to say "it finishes later": P6's Expected
 // Finish, or N working days later. Nothing is saved to the live schedule.
 
