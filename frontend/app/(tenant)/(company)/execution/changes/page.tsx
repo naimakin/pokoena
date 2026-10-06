@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PageState } from "@/components/PageShell";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { selectStyle } from "@/components/ScurveChart";
-import { ArrowRightIcon, ChevronDownIcon, CompareIcon, DownloadIcon } from "@/components/icons";
+import { fmtNum, fmtP6Date } from "@/components/reporting/format";
+import { ArrowRightIcon, CheckIcon, ChevronDownIcon, DownloadIcon } from "@/components/icons";
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
 import { NoProjectIllo } from "@/components/illustrations";
 
@@ -17,45 +18,102 @@ type SectionKey = "added" | "removed" | "renamed" | "modified" | "logic";
 // away rather than on by default.
 const MUTED_FIELDS = ["start", "finish"];
 
-function fmt(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+// The filter panel groups the change types the diff engine emits
+// (backend engine/diff/schedule_diff.py). A field the engine adds later and
+// this list doesn't know lands in "Other", so it can still be filtered.
+const FIELD_GROUPS: { label: string; fields: string[] }[] = [
+  { label: "Dates", fields: ["start", "finish"] },
+  { label: "Durations & float", fields: ["original_duration", "remaining_duration", "total_float"] },
+  { label: "Progress", fields: ["status", "percent_complete"] },
+  { label: "Structure", fields: ["name", "wbs", "constraint"] },
+  { label: "Logic & critical path", fields: ["logic", "criticality"] },
+];
+const DATE_FIELDS = new Set(["start", "finish"]);
+
+interface SavedFilters {
+  offFields: string[];
+  criticalOnly: boolean;
+  search: string;
+  filtersOpen: boolean;
+  collapsed: SectionKey[];
+}
+
+function storageKey(projectId: string): string {
+  return `poko:changes-filters:${projectId}`;
+}
+
+/** Per-viewer convenience only — the page works the same when storage is
+ *  unavailable (private window, blocked site data). */
+function loadFilters(projectId: string): SavedFilters | null {
+  try {
+    const raw = window.localStorage.getItem(storageKey(projectId));
+    return raw ? (JSON.parse(raw) as SavedFilters) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveFilters(projectId: string, value: SavedFilters) {
+  try {
+    window.localStorage.setItem(storageKey(projectId), JSON.stringify(value));
+  } catch {
+    // ignore — filters just won't survive a reload
+  }
 }
 
 function importOption(i: ScheduleImport): string {
-  return `${i.revision_label ?? i.filename} — ${new Date(i.imported_at).toLocaleDateString()}`;
+  return `${i.revision_label ?? i.filename} — ${fmtP6Date(i.data_date ?? i.imported_at)}`;
 }
 
-function deltaLabel(f: ActivityChange["fields"][number]): string {
-  if (f.delta_days != null) return `${f.delta_days > 0 ? "+" : ""}${f.delta_days}d`;
-  if (f.delta_hours != null) return `${f.delta_hours > 0 ? "+" : ""}${f.delta_hours}h`;
-  return "";
+function fieldValue(field: string, value: string | number | null): string {
+  if (value == null || value === "") return "—";
+  if (DATE_FIELDS.has(field) && typeof value === "string") return fmtP6Date(value);
+  return String(value);
+}
+
+function delta(f: ActivityChange["fields"][number]): { text: string; tone: "crit" | "good" } | null {
+  const value = f.delta_days ?? f.delta_hours;
+  if (value == null || value === 0) return null;
+  const unit = f.delta_days != null ? "d" : "h";
+  // Later dates, longer durations, less float: all read as worse.
+  const worse = f.field === "total_float" ? value < 0 : value > 0;
+  return { text: `${value > 0 ? "+" : ""}${fmtNum(value, 0)}${unit}`, tone: worse ? "crit" : "good" };
+}
+
+function matches(q: string, ...values: (string | null | undefined)[]): boolean {
+  return !q || values.some((v) => (v ?? "").toLowerCase().includes(q));
 }
 
 function Section({
+  id,
   title,
+  count,
   sub,
   collapsed,
   onToggle,
   children,
 }: {
+  id: string;
   title: string;
+  count: number;
   sub?: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
-    <div className="card">
-      <button className="section-head" aria-expanded={!collapsed} onClick={onToggle}>
+    <section className="card chg-section" id={id}>
+      <button className="section-head" aria-expanded={!collapsed} aria-controls={`${id}-body`} onClick={onToggle}>
         <ChevronDownIcon className="icon section-caret" />
         <span>
-          <span className="card-title">{title}</span>
+          <span className="card-title">
+            {title} <span className="card-count">{fmtNum(count, 0)}</span>
+          </span>
           {sub && <span className="card-title-sub">{sub}</span>}
         </span>
       </button>
-      {!collapsed && children}
-    </div>
+      {!collapsed && <div id={`${id}-body`}>{children}</div>}
+    </section>
   );
 }
 
@@ -71,8 +129,11 @@ export default function ScheduleChangesPage() {
   const [comparing, setComparing] = useState(false);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [offFields, setOffFields] = useState<Set<string>>(new Set(MUTED_FIELDS));
+  // Saved filters are restored once per project, before anything is written back.
+  const restoredFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!project) return;
@@ -82,6 +143,28 @@ export default function ScheduleChangesPage() {
       .catch(() => setImports([]));
   }, [project]);
 
+  useEffect(() => {
+    if (!project) return;
+    const saved = loadFilters(project.id);
+    setOffFields(new Set(saved?.offFields ?? MUTED_FIELDS));
+    setCriticalOnly(saved?.criticalOnly ?? false);
+    setSearch(saved?.search ?? "");
+    setFiltersOpen(saved?.filtersOpen ?? true);
+    setCollapsed(new Set(saved?.collapsed ?? []));
+    restoredFor.current = project.id;
+  }, [project]);
+
+  useEffect(() => {
+    if (!project || restoredFor.current !== project.id) return;
+    saveFilters(project.id, {
+      offFields: [...offFields],
+      criticalOnly,
+      search,
+      filtersOpen,
+      collapsed: [...collapsed],
+    });
+  }, [project, offFields, criticalOnly, search, filtersOpen, collapsed]);
+
   const runCompare = useCallback(
     async (from: string, to: string) => {
       if (!project) {
@@ -89,7 +172,7 @@ export default function ScheduleChangesPage() {
         setLoading(false);
         return;
       }
-      setLoading(true);
+      if (from && from === to) return;
       setComparing(true);
       setError(null);
       const params = new URLSearchParams();
@@ -108,36 +191,80 @@ export default function ScheduleChangesPage() {
     [project],
   );
 
-  // Initial view = the default (auto) comparison; the selectors + Compare button re-run it.
+  // Initial view = the default (auto) comparison of the two latest updates.
   useEffect(() => {
     if (project) {
+      setLoading(true);
       setFromId("");
       setToId("");
       runCompare("", "");
     }
   }, [project, runCompare]);
 
-  // Only offer a filter chip for the kinds of change this comparison actually
-  // contains, so the row stays short on a quiet update.
-  const fieldTypes = useMemo(() => {
-    const labels = new Map<string, string>();
+  function pick(side: "from" | "to", value: string) {
+    const nextFrom = side === "from" ? value : fromId;
+    const nextTo = side === "to" ? value : toId;
+    setFromId(nextFrom);
+    setToId(nextTo);
+    runCompare(nextFrom, nextTo);
+  }
+
+  // How many modified activities carry each kind of change — shown on the
+  // filter toggles, and used to offer only the kinds this comparison has.
+  const fieldCounts = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
     for (const r of report?.activities.modified ?? []) {
-      for (const f of r.fields) labels.set(f.field, f.label);
+      for (const f of r.fields) {
+        const entry = counts.get(f.field) ?? { label: f.label, count: 0 };
+        entry.count += 1;
+        counts.set(f.field, entry);
+      }
     }
-    return [...labels].map(([field, label]) => ({ field, label }));
+    return counts;
   }, [report]);
 
-  const modifiedRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (report?.activities.modified ?? [])
-      .filter(
-        (r) =>
-          (!criticalOnly || r.is_critical) &&
-          (!q || r.external_id.toLowerCase().includes(q) || (r.name ?? "").toLowerCase().includes(q)),
-      )
-      .map((r) => ({ ...r, fields: r.fields.filter((f) => !offFields.has(f.field)) }))
-      .filter((r) => r.fields.length > 0);
-  }, [report, criticalOnly, search, offFields]);
+  const groups = useMemo(() => {
+    const known = new Set(FIELD_GROUPS.flatMap((g) => g.fields));
+    const out = FIELD_GROUPS.map((g) => ({
+      label: g.label,
+      fields: g.fields.filter((f) => fieldCounts.has(f)),
+    }));
+    const other = [...fieldCounts.keys()].filter((f) => !known.has(f));
+    if (other.length > 0) out.push({ label: "Other", fields: other });
+    return out.filter((g) => g.fields.length > 0);
+  }, [fieldCounts]);
+
+  const q = search.trim().toLowerCase();
+
+  const added = useMemo(
+    () => (report?.activities.added ?? []).filter((a) => (!criticalOnly || a.is_critical) && matches(q, a.external_id, a.name)),
+    [report, criticalOnly, q],
+  );
+  const removed = useMemo(
+    () => (report?.activities.removed ?? []).filter((a) => (!criticalOnly || a.was_critical) && matches(q, a.external_id, a.name)),
+    [report, criticalOnly, q],
+  );
+  const renamed = useMemo(
+    () => (report?.activities.renamed ?? []).filter((a) => matches(q, a.old_external_id, a.new_external_id, a.name)),
+    [report, q],
+  );
+  const modifiedRows = useMemo(
+    () =>
+      (report?.activities.modified ?? [])
+        .filter((r) => (!criticalOnly || r.is_critical) && matches(q, r.external_id, r.name))
+        .map((r) => ({ ...r, fields: r.fields.filter((f) => !offFields.has(f.field)) }))
+        .filter((r) => r.fields.length > 0),
+    [report, criticalOnly, q, offFields],
+  );
+  const logicRows = useMemo(
+    () =>
+      (report?.relationships.changes ?? []).filter(
+        (c) =>
+          (!criticalOnly || c.pred_was_critical || c.succ_was_critical) &&
+          matches(q, c.pred_external_id, c.succ_external_id, c.pred_name, c.succ_name),
+      ),
+    [report, criticalOnly, q],
+  );
 
   function toggleSection(k: SectionKey) {
     setCollapsed((prev) => {
@@ -146,6 +273,15 @@ export default function ScheduleChangesPage() {
       else next.add(k);
       return next;
     });
+  }
+
+  function jumpTo(k: SectionKey) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(k);
+      return next;
+    });
+    requestAnimationFrame(() => document.getElementById(`chg-${k}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function toggleField(field: string) {
@@ -160,7 +296,7 @@ export default function ScheduleChangesPage() {
   if (loading && !report) {
     return <PageState kind="loading" section="Delivery" title="Changes" />;
   }
-  if (error) {
+  if (error && !report) {
     return <PageState kind="error" section="Delivery" title="Changes" message={error} />;
   }
   if (!project || !report) {
@@ -178,14 +314,26 @@ export default function ScheduleChangesPage() {
 
   const s = report.summary;
   const noData = report.comparison_basis === "none";
+  const allFields = [...fieldCounts.keys()];
+  const shownFields = allFields.filter((f) => !offFields.has(f)).length;
+  const logicTotal = s.relationships_added + s.relationships_removed + s.relationships_modified;
+  const filtering = criticalOnly || q !== "";
 
-  const CHIPS: { key: SectionKey; label: string; count: number; chip: string }[] = [
-    { key: "added", label: "added", count: s.activities_added, chip: "chip-good" },
-    { key: "removed", label: "removed", count: s.activities_removed, chip: "chip-crit" },
-    { key: "renamed", label: "ID changed", count: s.activities_renamed, chip: "chip-neutral" },
-    { key: "modified", label: "modified", count: s.activities_modified, chip: "chip-warn" },
-    { key: "logic", label: "logic changes", count: s.relationships_added + s.relationships_removed + s.relationships_modified, chip: "chip-info" },
+  const STATS: { key: SectionKey; label: string; total: number; shown: number; tone: string }[] = [
+    { key: "added", label: "Added", total: s.activities_added, shown: added.length, tone: "good" },
+    { key: "removed", label: "Removed", total: s.activities_removed, shown: removed.length, tone: "crit" },
+    { key: "renamed", label: "ID changed", total: s.activities_renamed, shown: renamed.length, tone: "neutral" },
+    { key: "modified", label: "Modified", total: s.activities_modified, shown: modifiedRows.length, tone: "warn" },
+    { key: "logic", label: "Logic changes", total: logicTotal, shown: logicRows.length, tone: "info" },
   ];
+
+  const filterSummary = [
+    `${shownFields} of ${allFields.length} change types`,
+    criticalOnly ? "critical only" : null,
+    q ? `“${search.trim()}”` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
@@ -201,9 +349,9 @@ export default function ScheduleChangesPage() {
             <div className="page-desc">
               {noData
                 ? "Need at least two schedule updates with an activity snapshot."
-                : `${report.from_import?.revision_label ?? report.from_import?.filename} (${fmt(
+                : `${report.from_import?.revision_label ?? report.from_import?.filename} (${fmtP6Date(
                     report.from_import?.data_date ?? report.from_import?.imported_at,
-                  )}) → ${report.to_import?.revision_label ?? report.to_import?.filename} (${fmt(
+                  )}) → ${report.to_import?.revision_label ?? report.to_import?.filename} (${fmtP6Date(
                     report.to_import?.data_date ?? report.to_import?.imported_at,
                   )})`}
             </div>
@@ -214,38 +362,39 @@ export default function ScheduleChangesPage() {
         </div>
 
         {imports.length >= 2 && (
-          <div className="card no-print" style={{ padding: "0.8rem 1.1rem", display: "flex", alignItems: "flex-end", gap: ".6rem", flexWrap: "wrap" }}>
-            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
-              From
-              <select value={fromId} onChange={(e) => setFromId(e.target.value)} style={{ ...selectStyle, display: "block", marginTop: ".2rem" }}>
+          <div className="card no-print chg-compare">
+            <label className="chg-field">
+              <span>From</span>
+              <select value={fromId} onChange={(e) => pick("from", e.target.value)} style={selectStyle}>
                 <option value="">Previous update (auto)</option>
                 {imports.map((i) => (
-                  <option key={i.id} value={i.id}>{importOption(i)}</option>
+                  <option key={i.id} value={i.id}>
+                    {importOption(i)}
+                  </option>
                 ))}
               </select>
             </label>
-            <ArrowRightIcon className="icon" style={{ marginBottom: ".5rem" }} />
-            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
-              To
-              <select value={toId} onChange={(e) => setToId(e.target.value)} style={{ ...selectStyle, display: "block", marginTop: ".2rem" }}>
+            <ArrowRightIcon className="icon chg-compare-arrow" />
+            <label className="chg-field">
+              <span>To</span>
+              <select value={toId} onChange={(e) => pick("to", e.target.value)} style={selectStyle}>
                 <option value="">Latest update (auto)</option>
                 {imports.map((i) => (
-                  <option key={i.id} value={i.id}>{importOption(i)}</option>
+                  <option key={i.id} value={i.id}>
+                    {importOption(i)}
+                  </option>
                 ))}
               </select>
             </label>
-            <button
-              className="btn btn-primary"
-              disabled={comparing || (fromId !== "" && fromId === toId)}
-              onClick={() => runCompare(fromId, toId)}
-            >
-              <CompareIcon className="icon" /> {comparing ? "Comparing…" : "Compare"}
-            </button>
-            {fromId !== "" && fromId === toId && (
-              <span style={{ fontSize: ".7rem", color: "var(--text-muted)", marginBottom: ".5rem" }}>
-                Pick two different updates.
-              </span>
-            )}
+            <span className="chg-compare-status" aria-live="polite">
+              {comparing
+                ? "Comparing…"
+                : fromId !== "" && fromId === toId
+                  ? "Pick two different updates."
+                  : error
+                    ? error
+                    : null}
+            </span>
           </div>
         )}
 
@@ -267,209 +416,356 @@ export default function ScheduleChangesPage() {
                 </span>
               </div>
             )}
-            <div className="card" style={{ padding: "0.9rem 1.1rem", display: "flex", gap: ".5rem", alignItems: "center", flexWrap: "wrap" }}>
-              {CHIPS.map((c) => (
+
+            <div className="chg-stats">
+              {STATS.map((st) => (
                 <button
-                  key={c.key}
-                  className={`chip ${c.chip}`}
-                  style={{ border: "none", cursor: "pointer", opacity: collapsed.has(c.key) ? 0.4 : 1 }}
-                  onClick={() => toggleSection(c.key)}
-                  title={`${collapsed.has(c.key) ? "Expand" : "Collapse"} this section`}
+                  key={st.key}
+                  type="button"
+                  className={`chg-stat is-${st.tone}`}
+                  onClick={() => jumpTo(st.key)}
+                  disabled={st.total === 0}
+                  title={st.total === 0 ? undefined : `Show ${st.label.toLowerCase()}`}
                 >
-                  {c.count} {c.label}
+                  <span className="chg-stat-label">{st.label}</span>
+                  <span className="chg-stat-value num">{fmtNum(st.total, 0)}</span>
+                  <span className="chg-stat-note">
+                    {st.total === 0
+                      ? "None"
+                      : st.shown === st.total
+                        ? "All shown"
+                        : `${fmtNum(st.shown, 0)} match the filters`}
+                  </span>
                 </button>
               ))}
-              <span style={{ flex: 1 }} />
-              <label className="no-print" style={{ fontSize: ".75rem", display: "flex", alignItems: "center", gap: ".3rem" }}>
-                <input type="checkbox" checked={criticalOnly} onChange={(e) => setCriticalOnly(e.target.checked)} />
-                Critical only
-              </label>
-              <input
-                className="no-print"
-                placeholder="Search activity…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ ...selectStyle, minWidth: 160 }}
-              />
             </div>
 
-            {fieldTypes.length > 0 && !collapsed.has("modified") && (
-              <div
-                className="card no-print"
-                style={{ padding: "0.7rem 1.1rem", display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap" }}
+            <section className="card no-print chg-filters">
+              <button
+                type="button"
+                className="section-head"
+                aria-expanded={filtersOpen}
+                aria-controls="chg-filters-body"
+                onClick={() => setFiltersOpen((v) => !v)}
               >
-                <span style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
-                  What changed
+                <ChevronDownIcon className="icon section-caret" />
+                <span>
+                  <span className="card-title">Filters</span>
+                  <span className="card-title-sub">{filterSummary}</span>
                 </span>
-                {fieldTypes.map((f) => (
-                  <button
-                    key={f.field}
-                    className="chip chip-neutral"
-                    style={{ border: "none", cursor: "pointer", opacity: offFields.has(f.field) ? 0.4 : 1 }}
-                    onClick={() => toggleField(f.field)}
-                    aria-pressed={!offFields.has(f.field)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            )}
+              </button>
+              {filtersOpen && (
+                <div id="chg-filters-body" className="chg-filters-body">
+                  <div className="chg-filter-row">
+                    <input
+                      type="search"
+                      placeholder="Search activity ID or name…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ ...selectStyle, minWidth: 240, flex: "1 1 240px" }}
+                      aria-label="Search activity ID or name"
+                    />
+                    <label className="chg-switch">
+                      <input type="checkbox" checked={criticalOnly} onChange={(e) => setCriticalOnly(e.target.checked)} />
+                      <span className="chg-switch-track" aria-hidden="true" />
+                      Critical only
+                    </label>
+                    {filtering && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setSearch("");
+                          setCriticalOnly(false);
+                        }}
+                      >
+                        Clear search &amp; critical
+                      </button>
+                    )}
+                  </div>
 
-            {report.activities.added.length > 0 && (
+                  {groups.length > 0 && (
+                    <div className="chg-what">
+                      <div className="chg-what-head">
+                        <span className="chg-what-title">What changed</span>
+                        <span className="chg-what-hint">Modified activities show only the change types ticked here.</span>
+                        <span className="chg-what-actions">
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOffFields(new Set())}>
+                            All
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOffFields(new Set(allFields))}>
+                            None
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOffFields(new Set(MUTED_FIELDS))}>
+                            Default
+                          </button>
+                        </span>
+                      </div>
+                      <div className="chg-groups">
+                        {groups.map((g) => (
+                          <fieldset key={g.label} className="chg-group">
+                            <legend>{g.label}</legend>
+                            {g.fields.map((field) => {
+                              const on = !offFields.has(field);
+                              const info = fieldCounts.get(field);
+                              return (
+                                <button
+                                  key={field}
+                                  type="button"
+                                  className={`chg-toggle${on ? " is-on" : ""}`}
+                                  aria-pressed={on}
+                                  onClick={() => toggleField(field)}
+                                >
+                                  <span className="chg-toggle-box" aria-hidden="true">
+                                    {on && <CheckIcon className="icon" />}
+                                  </span>
+                                  <span className="chg-toggle-label">{info?.label ?? field}</span>
+                                  <span className="chg-toggle-count num">{fmtNum(info?.count ?? 0, 0)}</span>
+                                </button>
+                              );
+                            })}
+                          </fieldset>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {s.activities_added > 0 && (
               <Section
-                title={`Added activities (${report.activities.added.length})`}
+                id="chg-added"
+                title="Added activities"
+                count={added.length}
                 collapsed={collapsed.has("added")}
                 onToggle={() => toggleSection("added")}
               >
-                <div className="table-wrap">
-                  <table>
-                    <tbody>
-                      {report.activities.added.map((a) => (
-                        <tr key={a.external_id} className={a.is_critical ? "critical" : undefined}>
-                          <td className="mono">{a.external_id}</td>
-                          <td>{a.name}</td>
-                          <td className="mono">{fmt(a.planned_finish)}</td>
+                {added.length === 0 ? (
+                  <p className="empty-state">No added activity matches the filters.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Activity</th>
+                          <th>Finish</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {added.map((a) => (
+                          <tr key={a.external_id} className={a.is_critical ? "critical" : undefined}>
+                            <td>
+                              <div className="subname">{a.name}</div>
+                              <div className="actid">
+                                {a.external_id}
+                                {a.wbs_path ? ` · ${a.wbs_path}` : ""}
+                              </div>
+                            </td>
+                            <td className="num">{fmtP6Date(a.planned_finish)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Section>
             )}
 
-            {report.activities.removed.length > 0 && (
+            {s.activities_removed > 0 && (
               <Section
-                title={`Removed activities (${report.activities.removed.length})`}
+                id="chg-removed"
+                title="Removed activities"
+                count={removed.length}
                 collapsed={collapsed.has("removed")}
                 onToggle={() => toggleSection("removed")}
               >
-                <div className="table-wrap">
-                  <table>
-                    <tbody>
-                      {report.activities.removed.map((a) => (
-                        <tr key={a.external_id} className={a.was_critical ? "critical" : undefined}>
-                          <td className="mono">{a.external_id}</td>
-                          <td>{a.name}</td>
+                {removed.length === 0 ? (
+                  <p className="empty-state">No removed activity matches the filters.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Activity</th>
+                          <th>Was critical</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {removed.map((a) => (
+                          <tr key={a.external_id} className={a.was_critical ? "critical" : undefined}>
+                            <td>
+                              <div className="subname">{a.name}</div>
+                              <div className="actid">{a.external_id}</div>
+                            </td>
+                            <td>{a.was_critical ? "Yes" : "No"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Section>
             )}
 
-            {report.activities.renamed.length > 0 && (
+            {s.activities_renamed > 0 && (
               <Section
-                title={`Activity ID changed (${report.activities.renamed.length})`}
+                id="chg-renamed"
+                title="Activity ID changed"
+                count={renamed.length}
                 sub="Same P6 task, new Activity ID — matched on the task's internal id"
                 collapsed={collapsed.has("renamed")}
                 onToggle={() => toggleSection("renamed")}
               >
-                <div className="table-wrap">
-                  <table>
-                    <tbody>
-                      {report.activities.renamed.map((a) => (
-                        <tr key={a.new_external_id}>
-                          <td className="mono">{a.old_external_id} → {a.new_external_id}</td>
-                          <td>{a.name}</td>
+                {renamed.length === 0 ? (
+                  <p className="empty-state">No renamed activity matches the search.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Activity ID</th>
+                          <th>Name</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {renamed.map((a) => (
+                          <tr key={a.new_external_id}>
+                            <td className="mono">
+                              {a.old_external_id} → {a.new_external_id}
+                            </td>
+                            <td>{a.name}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Section>
             )}
 
-            {modifiedRows.length > 0 && (
+            {s.activities_modified > 0 && (
               <Section
-                title={`Modified activities (${modifiedRows.length})`}
+                id="chg-modified"
+                title="Modified activities"
+                count={modifiedRows.length}
+                sub={
+                  modifiedRows.length < s.activities_modified
+                    ? `${fmtNum(s.activities_modified - modifiedRows.length, 0)} more changed only in ways the filters hide`
+                    : undefined
+                }
                 collapsed={collapsed.has("modified")}
                 onToggle={() => toggleSection("modified")}
               >
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Activity</th>
-                        <th>Changes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {modifiedRows.map((r) => (
-                        <tr key={r.external_id} className={r.is_critical ? "critical" : undefined}>
-                          <td>
-                            <div className="subname">{r.name}</div>
-                            <div className="actid">{r.external_id}{r.wbs_path ? ` · ${r.wbs_path}` : ""}</div>
-                          </td>
-                          <td>
-                            {r.fields.map((f, i) => (
-                              <div key={i} style={{ padding: ".1rem 0" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: ".4rem", fontSize: ".8125rem", flexWrap: "wrap" }}>
-                                  <span className="chip chip-neutral" style={{ minWidth: 70, justifyContent: "center" }}>{f.label}</span>
-                                  <span style={{ color: "var(--text-muted)" }}>{String(f.old ?? "—")}</span>
-                                  <ArrowRightIcon className="icon" style={{ width: 11, height: 11 }} />
-                                  <span style={{ fontWeight: 500 }}>{String(f.new ?? "—")}</span>
-                                  {deltaLabel(f) && <span className="mono" style={{ color: "var(--crit)" }}>{deltaLabel(f)}</span>}
-                                </div>
-                                {f.detail && (
-                                  <div className="mono" style={{ fontSize: ".6875rem", color: "var(--text-muted)", paddingLeft: "calc(70px + .4rem)" }}>
-                                    {f.detail.map((line, j) => (
-                                      <div key={j}>{line}</div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </td>
+                {modifiedRows.length === 0 ? (
+                  <p className="empty-state">
+                    {fmtNum(s.activities_modified, 0)} activities changed, but none under the current filters.
+                    {offFields.size > 0 && " Tick more change types under What changed to see them."}
+                  </p>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Activity</th>
+                          <th>Changes</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {modifiedRows.map((r) => (
+                          <tr key={r.external_id} className={r.is_critical ? "critical" : undefined}>
+                            <td className="chg-act">
+                              <div className="subname">{r.name}</div>
+                              <div className="actid">
+                                {r.external_id}
+                                {r.wbs_path ? ` · ${r.wbs_path}` : ""}
+                              </div>
+                            </td>
+                            <td>
+                              <ul className="chg-list">
+                                {r.fields.map((f, i) => {
+                                  const d = delta(f);
+                                  return (
+                                    <li key={i}>
+                                      <span className="chg-kind">{f.label}</span>
+                                      <span className="chg-old">{fieldValue(f.field, f.old)}</span>
+                                      <ArrowRightIcon className="icon chg-arrow" />
+                                      <span className="chg-new">{fieldValue(f.field, f.new)}</span>
+                                      {d && <span className={`chg-delta num tone-${d.tone}`}>{d.text}</span>}
+                                      {f.detail && (
+                                        <span className="chg-detail mono">
+                                          {f.detail.map((line, j) => (
+                                            <span key={j}>{line}</span>
+                                          ))}
+                                        </span>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Section>
             )}
 
             {report.relationships.changes.length > 0 && (
               <Section
-                title={`Logic changes — ${report.relationships.summary.added} added · ${report.relationships.summary.removed} removed · ${report.relationships.summary.modified} modified`}
+                id="chg-logic"
+                title="Logic changes"
+                count={logicRows.length}
+                sub={`${report.relationships.summary.added} added · ${report.relationships.summary.removed} removed · ${report.relationships.summary.modified} modified`}
                 collapsed={collapsed.has("logic")}
                 onToggle={() => toggleSection("logic")}
               >
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr><th>Type</th><th>Predecessor</th><th>Successor</th><th>Change</th></tr>
-                    </thead>
-                    <tbody>
-                      {report.relationships.changes.slice(0, 15).map((c, i) => (
-                        <tr key={i}>
-                          <td>
-                            <span className={`chip ${c.change_type === "ADDED" ? "chip-good" : c.change_type === "REMOVED" ? "chip-crit" : "chip-warn"}`}>
-                              {c.change_type}
-                            </span>
-                          </td>
-                          <td className="mono">{c.pred_external_id}</td>
-                          <td className="mono">{c.succ_external_id}</td>
-                          <td className="mono">
-                            {c.change_type === "MODIFIED"
-                              ? `${c.old_link_type ?? ""}${c.new_link_type ? ` → ${c.new_link_type}` : ""}${
-                                  c.new_lag_hours != null ? ` lag ${c.old_lag_hours}h → ${c.new_lag_hours}h` : ""
-                                }`
-                              : `${c.new_link_type ?? c.old_link_type} · ${c.new_lag_hours ?? c.old_lag_hours}h`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding: ".5rem 1.1rem", fontSize: ".75rem", color: "var(--text-muted)" }}>
-                  {report.relationships.changes.length > 15 && (
-                    <>+{report.relationships.changes.length - 15} more — </>
-                  )}
-                  <Link href="/logic-diff" style={{ color: "var(--accent-strong)", fontWeight: 500 }}>
-                    Open in Logic Diff →
-                  </Link>
-                </div>
+                {logicRows.length === 0 ? (
+                  <p className="empty-state">No logic change matches the filters.</p>
+                ) : (
+                  <>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Type</th>
+                            <th>Predecessor</th>
+                            <th>Successor</th>
+                            <th>Change</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {logicRows.slice(0, 15).map((c, i) => (
+                            <tr key={i}>
+                              <td>
+                                <span
+                                  className={`chip ${c.change_type === "ADDED" ? "chip-good" : c.change_type === "REMOVED" ? "chip-crit" : "chip-warn"}`}
+                                >
+                                  {c.change_type === "ADDED" ? "Added" : c.change_type === "REMOVED" ? "Removed" : "Modified"}
+                                </span>
+                              </td>
+                              <td className="mono">{c.pred_external_id}</td>
+                              <td className="mono">{c.succ_external_id}</td>
+                              <td className="mono">
+                                {c.change_type === "MODIFIED"
+                                  ? `${c.old_link_type ?? ""}${c.new_link_type ? ` → ${c.new_link_type}` : ""}${
+                                      c.new_lag_hours != null ? ` lag ${c.old_lag_hours}h → ${c.new_lag_hours}h` : ""
+                                    }`
+                                  : `${c.new_link_type ?? c.old_link_type} · ${c.new_lag_hours ?? c.old_lag_hours}h`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="chg-more">
+                      {logicRows.length > 15 && <>+{fmtNum(logicRows.length - 15, 0)} more — </>}
+                      <Link href="/logic-diff">Open in Logic Diff →</Link>
+                    </div>
+                  </>
+                )}
               </Section>
             )}
 
@@ -477,15 +773,6 @@ export default function ScheduleChangesPage() {
               <div className="card">
                 <p className="empty-state">
                   No changes between {report.from_import?.revision_label} and {report.to_import?.revision_label}.
-                </p>
-              </div>
-            )}
-
-            {s.activities_modified > 0 && modifiedRows.length === 0 && !collapsed.has("modified") && (
-              <div className="card">
-                <p className="empty-state">
-                  {s.activities_modified} activities changed, but none of them under the filters above.
-                  {offFields.size > 0 && " Start and finish dates are hidden by default."}
                 </p>
               </div>
             )}
