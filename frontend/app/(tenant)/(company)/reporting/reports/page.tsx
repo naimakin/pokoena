@@ -296,7 +296,7 @@ export default function ReportsPage() {
             </div>
 
             <div style={{ padding: "1rem 1.1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                 Format name
                 <input
                   value={draftName}
@@ -316,7 +316,7 @@ export default function ReportsPage() {
                 />
               </label>
 
-              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                 Executive summary narrative
                 <textarea
                   value={draftNarrative}

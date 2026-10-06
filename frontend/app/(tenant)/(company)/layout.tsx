@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
 import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { BaselineGate, BASELINE_GATED_SECTIONS, isBaselineGated } from "@/components/BaselineGate";
-import { TopNavMenu } from "@/components/TopNavMenu";
+import { SideNav, type SideNavSection } from "@/components/SideNav";
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -26,6 +25,7 @@ import {
   LayersIcon,
   LockIcon,
   LogOutIcon,
+  MenuIcon,
   PinIcon,
   SettingsIcon,
   ShieldCheckIcon,
@@ -164,6 +164,40 @@ const ROLE_LABEL: Record<string, string> = {
   company_employee: "Employee",
 };
 
+// Below this width the sidebar is an off-canvas drawer (globals.css uses the
+// same 900px breakpoint).
+const MOBILE_QUERY = "(max-width: 900px)";
+
+// The viewer's expanded/collapsed sidebar choice, per browser. The attribute
+// on <html> is what the CSS reads; the inline script below sets it before the
+// first paint so a collapsed rail doesn't flash open on a full page load.
+const SIDEBAR_STORAGE_KEY = "poko:sidebar";
+const SIDEBAR_BOOT_SCRIPT = `try{if(localStorage.getItem(${JSON.stringify(
+  SIDEBAR_STORAGE_KEY
+)})==="collapsed")document.documentElement.setAttribute("data-sidebar","collapsed")}catch(e){}`;
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? "collapsed" : "expanded");
+  } catch {
+    // Storage unavailable (private mode, blocked site data): the choice just
+    // lasts for this page view.
+  }
+}
+
+function applySidebarAttribute(collapsed: boolean) {
+  if (collapsed) document.documentElement.setAttribute("data-sidebar", "collapsed");
+  else document.documentElement.removeAttribute("data-sidebar");
+}
+
 // Exact match, not a prefix check: several sibling routes share a prefix
 // (e.g. /risk and /risk/register), and every destination here is a static
 // leaf route, so there's no nested-segment case that would need startsWith.
@@ -171,8 +205,8 @@ function isActiveHref(pathname: string | null, href: string): boolean {
   return pathname === href;
 }
 
-// Small lock marker on gated top-nav tabs while the selected project has no
-// baseline. Rendered inside <ProjectProvider>, so it can read the context.
+// Small lock marker on gated sidebar sections while the selected project has
+// no baseline. Rendered inside <ProjectProvider>, so it can read the context.
 function GatedTabLock() {
   const { project, baselineReady } = useProjectContext();
   if (!project || baselineReady !== false) return null;
@@ -233,22 +267,98 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
     ? activeSection.children.find((c) => c.href === pathname)?.label ?? activeSection.label
     : null;
 
-  // Which section's dropdown is open (only one at a time). Every page a section
-  // owns lives in its dropdown now — there is no left sidebar — so a route
-  // change always closes whatever is open.
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const navSections: SideNavSection[] = visibleSections.map((section) => ({
+    key: section.key,
+    label: section.label,
+    icon: section.icon,
+    href: section.href,
+    items: section.children
+      .filter((child) => child.visible(user))
+      .map((child) => ({ href: child.href, label: child.label })),
+    marker: BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null,
+  }));
+
+  // Desktop: expanded sidebar or collapsed icon rail (remembered per viewer).
+  // Below 900px: an off-canvas drawer the hamburger opens and closes.
+  const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    setOpenKey(null);
-  }, [pathname]);
-  const handleOpenChange = useCallback((key: string, open: boolean) => {
-    setOpenKey((prev) => (open ? key : prev === key ? null : prev));
+    const stored = readSidebarCollapsed();
+    setCollapsed(stored);
+    applySidebarAttribute(stored);
+    return () => document.documentElement.removeAttribute("data-sidebar");
   }, []);
+
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY);
+    setIsMobile(mql.matches);
+    function handleChange() {
+      setIsMobile(mql.matches);
+      setDrawerOpen(false);
+    }
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
+
+  // The drawer closes whenever the route changes.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setDrawerOpen(false);
+      burgerRef.current?.focus();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [drawerOpen]);
+
+  function handleBurger() {
+    if (window.matchMedia(MOBILE_QUERY).matches) {
+      setDrawerOpen((open) => !open);
+      return;
+    }
+    const next = !collapsed;
+    setCollapsed(next);
+    applySidebarAttribute(next);
+    writeSidebarCollapsed(next);
+  }
+
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  const burgerLabel = isMobile
+    ? drawerOpen
+      ? "Close navigation"
+      : "Open navigation"
+    : collapsed
+      ? "Expand navigation"
+      : "Collapse navigation";
 
   return (
     <ProjectProvider>
       <DocumentTitle label={pageLabel} />
-      <div className="tenant-shell">
-        <div className="a-topnav">
+      <div className={`tenant-shell${drawerOpen ? " drawer-open" : ""}`}>
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOT_SCRIPT }} />
+        <header className="a-header">
+          <button
+            ref={burgerRef}
+            type="button"
+            className="header-burger"
+            aria-controls="primary-nav"
+            aria-expanded={isMobile ? drawerOpen : !collapsed}
+            aria-label={burgerLabel}
+            title={burgerLabel}
+            onClick={handleBurger}
+          >
+            <MenuIcon className="icon" />
+          </button>
+
           <div className="brand">
             <div className="mark">
               <PokoGlyph />
@@ -258,51 +368,9 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <nav className="a-topnav-tabs" aria-label="Main">
-            {visibleSections.map((section) => {
-              const active = section.key === activeSection?.key;
-              const Icon = section.icon;
-              const marker = BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null;
-
-              // Sections without pages of their own (Dashboard) stay a plain link.
-              if (section.children.length === 0) {
-                return (
-                  <Link
-                    key={section.key}
-                    href={section.href}
-                    className={`topnav-tab${active ? " active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon className="icon topnav-tab-icon" />
-                    <span className="topnav-tab-text">
-                      <span className="topnav-tab-label">{section.label}</span>
-                    </span>
-                    {marker}
-                  </Link>
-                );
-              }
-
-              return (
-                <TopNavMenu
-                  key={section.key}
-                  id={section.key}
-                  label={section.label}
-                  icon={Icon}
-                  items={section.children.filter((child) => child.visible(user))}
-                  pathname={pathname}
-                  active={active}
-                  open={openKey === section.key}
-                  anotherOpen={openKey !== null && openKey !== section.key}
-                  onOpenChange={handleOpenChange}
-                  marker={marker}
-                />
-              );
-            })}
-          </nav>
-
-          <div className="a-topnav-right">
+          <div className="header-right">
             <ProjectSwitcher />
-            <div className="topnav-user">
+            <div className="header-user">
               <div className="avatar" title={user?.full_name}>
                 {initials}
               </div>
@@ -315,9 +383,18 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
         <div className="tenant-body">
+          <SideNav
+            id="primary-nav"
+            sections={navSections}
+            activeKey={activeSection?.key ?? null}
+            pathname={pathname}
+            rail={collapsed && !isMobile}
+            onNavigate={closeDrawer}
+          />
+          {isMobile && drawerOpen && <div className="sidenav-backdrop" aria-hidden="true" onClick={closeDrawer} />}
           <main className="a-main">
             <BaselineGate gated={isBaselineGated(activeSection?.key, pathname)}>{children}</BaselineGate>
           </main>

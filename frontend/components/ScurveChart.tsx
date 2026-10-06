@@ -63,7 +63,7 @@ export function ScurveChart({ series }: { series: EvmScurve["series"] }) {
           const y = yAt(v);
           return (
             <g key={f}>
-              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border)" strokeWidth={1} />
+              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--chart-grid)" strokeWidth={1} />
               <text x={plotLeft - 8} y={y + 3} fontSize="9" fill="var(--text-muted)" textAnchor="end">
                 {v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)}
               </text>
@@ -74,23 +74,23 @@ export function ScurveChart({ series }: { series: EvmScurve["series"] }) {
         {/* vertical ticks + date labels — density visibly reflects the selected granularity */}
         {tickIndices.map((i) => (
           <g key={i}>
-            <line x1={xAt(i)} y1={plotTop} x2={xAt(i)} y2={plotBottom} stroke="var(--border)" strokeWidth={1} />
+            <line x1={xAt(i)} y1={plotTop} x2={xAt(i)} y2={plotBottom} stroke="var(--chart-grid)" strokeWidth={1} />
             <text x={xAt(i)} y={plotBottom + 14} fontSize="9" fill="var(--text-muted)" textAnchor="middle">
               {series[i]?.date}
             </text>
           </g>
         ))}
 
-        <polyline points={toPoints("pv")} fill="none" stroke="var(--info)" strokeWidth={2} />
-        <polyline points={toPoints("ev")} fill="none" stroke="var(--good)" strokeWidth={2} />
-        <polyline points={toPoints("ac")} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        <polyline points={toPoints("pv")} fill="none" stroke="var(--series-planned)" strokeWidth={2} />
+        <polyline points={toPoints("ev")} fill="none" stroke="var(--series-actual)" strokeWidth={2} />
+        <polyline points={toPoints("ac")} fill="none" stroke="var(--series-cost)" strokeWidth={2} />
 
         {showAllMarkers &&
           series.map((p, i) => (
             <g key={i}>
-              <circle cx={xAt(i)} cy={yAt(p.pv)} r={1.8} fill="var(--info)" />
-              <circle cx={xAt(i)} cy={yAt(p.ev)} r={1.8} fill="var(--good)" />
-              <circle cx={xAt(i)} cy={yAt(p.ac)} r={1.8} fill="var(--accent)" />
+              <circle cx={xAt(i)} cy={yAt(p.pv)} r={1.8} fill="var(--series-planned)" />
+              <circle cx={xAt(i)} cy={yAt(p.ev)} r={1.8} fill="var(--series-actual)" />
+              <circle cx={xAt(i)} cy={yAt(p.ac)} r={1.8} fill="var(--series-cost)" />
             </g>
           ))}
 
@@ -119,13 +119,13 @@ export function ScurveChart({ series }: { series: EvmScurve["series"] }) {
       </svg>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", fontSize: ".6875rem", color: "var(--text-muted)", marginTop: ".5rem", flexWrap: "wrap" }}>
         <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
-          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--info)" }} /> Planned Value
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--series-planned)" }} /> Planned Value
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
-          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--good)" }} /> Earned Value
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--series-actual)" }} /> Earned Value
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: ".3rem" }}>
-          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--accent)" }} /> Actual Cost
+          <span style={{ display: "inline-block", width: 14, height: 2, background: "var(--series-cost)" }} /> Actual Cost
         </span>
         <span className="info-tip" tabIndex={0}>
           <InfoIcon className="icon" />
@@ -167,9 +167,9 @@ function HoverTooltip({
   if (boxY < plotTop) boxY = highestY + 14;
 
   const rows: Array<[string, number, string]> = [
-    ["PV", hover.pv, "var(--info)"],
-    ["EV", hover.ev, "var(--good)"],
-    ["AC", hover.ac, "var(--accent)"],
+    ["PV", hover.pv, "var(--series-planned)"],
+    ["EV", hover.ev, "var(--series-actual)"],
+    ["AC", hover.ac, "var(--series-cost)"],
   ];
 
   return (

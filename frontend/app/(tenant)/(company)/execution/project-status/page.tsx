@@ -210,7 +210,7 @@ export default function ProjectStatusPage() {
         {/* --- Filter bar --- */}
         <div className="card" style={{ padding: "0.9rem 1.1rem" }}>
           <div className="filter-bar">
-            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
               Activity
               <input
                 value={q}
@@ -248,7 +248,7 @@ export default function ProjectStatusPage() {
                 >
                   {codes.code_types.map((t) => (
                     <div key={t.id} style={{ marginBottom: ".5rem" }}>
-                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: ".25rem" }}>
+                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500, marginBottom: ".25rem" }}>
                         {t.name}
                       </div>
                       {codes.code_values
@@ -313,7 +313,7 @@ export default function ProjectStatusPage() {
             return (
               <div key={meta.key} className="card" style={{ padding: "1.1rem 1.15rem" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: ".75rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                  <span style={{ fontSize: ".75rem", color: "var(--text-muted)", fontWeight: 500 }}>
                     {meta.title}
                   </span>
                   <span
@@ -405,7 +405,7 @@ export default function ProjectStatusPage() {
                   {focusedQuadrant?.label} · {(focusedQuadrant?.program_count ?? 0) + (focusedQuadrant?.user_count ?? 0)} activities
                 </div>
                 <div className="card-title-sub">
-                  <Link href="/progress" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
+                  <Link href="/progress" style={{ color: "var(--accent-strong)", fontWeight: 500 }}>
                     View in Activity Ledger →
                   </Link>
                 </div>
@@ -440,7 +440,7 @@ export default function ProjectStatusPage() {
                     {previewRows.map((a) => (
                       <tr key={a.activity_id} className={a.is_critical ? "critical" : undefined}>
                         <td>
-                          <div style={{ fontWeight: 600 }}>{a.name}</div>
+                          <div style={{ fontWeight: 500 }}>{a.name}</div>
                           <div className="mono" style={{ fontSize: ".6875rem", color: "var(--text-muted)" }}>
                             {a.external_id} · {a.discipline}
                           </div>

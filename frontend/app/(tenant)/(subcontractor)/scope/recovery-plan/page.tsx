@@ -111,7 +111,7 @@ export default function SubRecoveryPlanPage() {
               const plan = row.plan ? plans[row.plan.id] : null;
               return (
                 <div key={row.external_id} className="card" style={{ padding: "0.9rem 1rem", marginTop: ".8rem" }}>
-                  <div style={{ fontWeight: 600 }}>{row.name}</div>
+                  <div style={{ fontWeight: 500 }}>{row.name}</div>
                   <div className="actid">
                     {row.external_id}
                     {row.is_critical ? " · CRITICAL" : ""}

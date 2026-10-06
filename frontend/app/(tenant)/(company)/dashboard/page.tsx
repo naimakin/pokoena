@@ -320,11 +320,15 @@ export default function DashboardPage() {
                   const def = WIDGET_REGISTRY[key];
                   const full = def.span === "full" || key === loneHalf;
                   const action = def.action ? def.action(ctx) : null;
+                  const count = def.count ? def.count(ctx) : null;
                   return (
                     <section key={key} className={`card dash-card${full ? " dash-cell-full" : ""}`}>
                       <div className="card-head">
                         <div>
-                          <div className="card-title">{def.title}</div>
+                          <div className="card-title">
+                            {def.title}
+                            {count != null && <span className="card-count">{count}</span>}
+                          </div>
                           <div className="card-title-sub">{def.description}</div>
                         </div>
                         {action}

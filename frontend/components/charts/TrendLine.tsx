@@ -58,8 +58,8 @@ export function TrendLine({
         aria-label="Metric trend across schedule versions"
         style={{ width: "100%", height: "auto", minWidth: 280 }}
       >
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--border)" />
-        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--border)" />
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--chart-axis)" />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--chart-axis)" />
         <polyline
           points={polyline}
           fill="none"

@@ -51,7 +51,7 @@ export function FlagReviewModal({
         <div className="modal-body">
           <div className="modal-diff">
             <div className="lbl">Changing</div>
-            <div style={{ fontSize: ".8125rem", fontWeight: 600 }}>{fieldLabel}</div>
+            <div style={{ fontSize: ".8125rem", fontWeight: 500 }}>{fieldLabel}</div>
             <div style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
               {activityLabel} &middot; currently {currentValueLabel}
             </div>

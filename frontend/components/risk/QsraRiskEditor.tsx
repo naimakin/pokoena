@@ -80,7 +80,7 @@ export function QsraRiskEditor({
   return (
     <div className="card" style={{ padding: ".8rem .9rem", display: "flex", flexDirection: "column", gap: ".65rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: ".5rem", flexWrap: "wrap" }}>
-        <label className="checkbox-row" style={{ fontWeight: 600 }}>
+        <label className="checkbox-row" style={{ fontWeight: 500 }}>
           <input type="checkbox" checked={risk.qsra_enabled} onChange={(e) => onPatch({ qsra_enabled: e.target.checked })} />
           Include in QSRA
         </label>
@@ -181,7 +181,7 @@ export function QsraRiskEditor({
 
       <div style={{ display: "flex", flexDirection: "column", gap: ".45rem" }}>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", fontSize: ".75rem" }}>
-          <span style={{ fontWeight: 600 }}>Affects</span>
+          <span style={{ fontWeight: 500 }}>Affects</span>
           <label className="checkbox-row">
             <input type="radio" checked={!risk.apply_to_wbs} onChange={() => onPatch({ apply_to_wbs: false })} />
             Linked activities ({risk.activity_external_ids.length})

@@ -215,7 +215,7 @@ export default function ScheduleChangesPage() {
 
         {imports.length >= 2 && (
           <div className="card no-print" style={{ padding: "0.8rem 1.1rem", display: "flex", alignItems: "flex-end", gap: ".6rem", flexWrap: "wrap" }}>
-            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
               From
               <select value={fromId} onChange={(e) => setFromId(e.target.value)} style={{ ...selectStyle, display: "block", marginTop: ".2rem" }}>
                 <option value="">Previous update (auto)</option>
@@ -225,7 +225,7 @@ export default function ScheduleChangesPage() {
               </select>
             </label>
             <ArrowRightIcon className="icon" style={{ marginBottom: ".5rem" }} />
-            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+            <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
               To
               <select value={toId} onChange={(e) => setToId(e.target.value)} style={{ ...selectStyle, display: "block", marginTop: ".2rem" }}>
                 <option value="">Latest update (auto)</option>
@@ -298,7 +298,7 @@ export default function ScheduleChangesPage() {
                 className="card no-print"
                 style={{ padding: "0.7rem 1.1rem", display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap" }}
               >
-                <span style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                <span style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                   What changed
                 </span>
                 {fieldTypes.map((f) => (
@@ -408,7 +408,7 @@ export default function ScheduleChangesPage() {
                                   <span className="chip chip-neutral" style={{ minWidth: 70, justifyContent: "center" }}>{f.label}</span>
                                   <span style={{ color: "var(--text-muted)" }}>{String(f.old ?? "—")}</span>
                                   <ArrowRightIcon className="icon" style={{ width: 11, height: 11 }} />
-                                  <span style={{ fontWeight: 600 }}>{String(f.new ?? "—")}</span>
+                                  <span style={{ fontWeight: 500 }}>{String(f.new ?? "—")}</span>
                                   {deltaLabel(f) && <span className="mono" style={{ color: "var(--crit)" }}>{deltaLabel(f)}</span>}
                                 </div>
                                 {f.detail && (
@@ -466,7 +466,7 @@ export default function ScheduleChangesPage() {
                   {report.relationships.changes.length > 15 && (
                     <>+{report.relationships.changes.length - 15} more — </>
                   )}
-                  <Link href="/logic-diff" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>
+                  <Link href="/logic-diff" style={{ color: "var(--accent-strong)", fontWeight: 500 }}>
                     Open in Logic Diff →
                   </Link>
                 </div>

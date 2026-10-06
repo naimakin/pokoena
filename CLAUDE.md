@@ -25,13 +25,16 @@ properties in `frontend/app/globals.css` (this project has no Tailwind).
 1. **Color:** Never introduce new colors. Use only the CSS custom properties defined in
    `frontend/app/globals.css` (`--accent`, `--good`/`--warn`/`--crit`/`--info`, etc.) and
    documented in `DESIGN.md`.
-2. **Typography:** Figtree for both display/headers (`var(--font-display)`, weight
+2. **Typography:** Roboto for both display/headers (`var(--font-display)`, weight
    `var(--display-weight)`) and body (`var(--font-ui)`); IBM Plex Mono (`var(--font-mono)`, also
    just `.mono`/`.num` classes) for data cells. Never use `text-transform: uppercase` as a label
-   device — sentence case at weight 600 carries hierarchy instead (see DESIGN.md "Type System v2").
-3. **Accent discipline:** `var(--accent)` (blueprint blue) is the ONLY chromatic accent. Use
-   sparingly — interactive states and CTAs only, plus the one sanctioned non-interactive
-   exception, the WBS hierarchy rail (`--wbs-line-*`).
+   device — sentence case carries hierarchy instead (see DESIGN.md "Type System v3"; Roboto
+   replaced Figtree in 2026-10 at the owner's request, AppDynamics-inspired).
+3. **Accent discipline:** `var(--accent)` (indigo, since the 2026-10 "indigo chrome" palette —
+   DESIGN.md "Color System v3") is the ONLY chromatic accent. Use sparingly — interactive states
+   and CTAs only, plus the sanctioned non-interactive exceptions (the WBS hierarchy rail
+   `--wbs-line-*` and the Gantt data-date line). The deep indigo header bar uses the `--chrome-*`
+   tokens, not `--accent`.
 4. **Critical path / risk:** Red tint (`var(--crit-soft)`) only for genuinely critical/blocking
    states, never decorative.
 5. **Float badges:** When float-health data ships, use the 5-step float color ramp documented in

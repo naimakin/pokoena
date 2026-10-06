@@ -438,7 +438,7 @@ export default function DcmaPage() {
                                 {check.id}
                               </td>
                               <td>
-                                <div style={{ fontWeight: 600 }}>{m.title}</div>
+                                <div style={{ fontWeight: 500 }}>{m.title}</div>
                                 <div className="dcma-table-sub">{m.measures}</div>
                               </td>
                               <td style={{ color: "var(--text-secondary)" }}>

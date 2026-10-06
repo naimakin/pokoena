@@ -225,6 +225,22 @@ export function ChevronDownIcon({ className = "icon", ...rest }: IconProps) {
   );
 }
 
+export function ChevronRightIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  );
+}
+
+export function MenuIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
 export function ChevronUpIcon({ className = "icon", ...rest }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" {...rest}>

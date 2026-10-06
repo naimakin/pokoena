@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type {
   CurrentUpdate,
   DashboardSummary,
@@ -14,7 +15,7 @@ import type {
 } from "@/lib/types";
 import { ProgressCurveChart, curveReadout } from "@/components/charts/ProgressCurveChart";
 import { fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
-import { CalendarIcon, CheckIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
+import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
 
 export type CurveStatus = "idle" | "loading" | "ready" | "locked" | "error";
 
@@ -37,6 +38,8 @@ interface WidgetDef {
   pad?: boolean;
   /** Optional right-hand side of the card header (a chip, a link). */
   action?: (ctx: WidgetContext) => ReactNode;
+  /** Optional count shown beside the title in the muted weight. */
+  count?: (ctx: WidgetContext) => number | null;
   render: (ctx: WidgetContext) => ReactNode;
 }
 
@@ -465,7 +468,12 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     description: "Planned vs actual % complete against the baseline",
     span: "full",
     action: ({ curve }) =>
-      curve ? <span className="chip chip-neutral">Baseline {curve.version_label}</span> : null,
+      curve ? (
+        <span className="chip chip-neutral">
+          {/* A label like "Baseline" or "Baseline v2" already says what it is. */}
+          {/^baseline\b/i.test(curve.version_label) ? curve.version_label : `Baseline ${curve.version_label}`}
+        </span>
+      ) : null,
     render: ({ curve, curveStatus, project, summary }) => {
       const cu = summary?.current_update ?? null;
       const readout = curve ? curveReadout(curve.points, curve.data_date) : null;
@@ -506,6 +514,13 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     title: "Top Risks",
     description: "Highest-signal schedule and delivery risks",
     span: "half",
+    count: ({ risks }) => (risks ? risks.length : null),
+    action: () => (
+      <Link href="/risk/register" className="card-link">
+        Risk register
+        <ChevronRightIcon className="icon" aria-hidden="true" />
+      </Link>
+    ),
     render: ({ risks }) => {
       if (!risks) return <p className="empty-state">Risk highlights unavailable.</p>;
       if (risks.length === 0) return <p className="empty-state">No standout risks right now.</p>;
@@ -533,6 +548,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     title: "Scope Submission Status",
     description: "Per-subcontractor submission and progress",
     span: "full",
+    count: ({ summary }) => (summary ? summary.scope_status.length : null),
     render: ({ summary }) => (
       <div className="table-wrap">
         <table>

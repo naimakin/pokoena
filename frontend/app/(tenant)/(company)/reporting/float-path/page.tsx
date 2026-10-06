@@ -242,7 +242,7 @@ export default function FloatPathPage() {
               className="card"
               style={{ padding: ".8rem 1.1rem", display: "flex", alignItems: "flex-end", gap: ".7rem", flexWrap: "wrap" }}
             >
-              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                 Calculate to
                 <select
                   value={endActivity}
@@ -268,7 +268,7 @@ export default function FloatPathPage() {
                 </select>
               </label>
 
-              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                 Method
                 <select
                   value={method}
@@ -280,7 +280,7 @@ export default function FloatPathPage() {
                 </select>
               </label>
 
-              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              <label style={{ fontSize: ".6875rem", color: "var(--text-muted)", fontWeight: 500 }}>
                 Paths
                 <select
                   value={pathCount}
