@@ -8,6 +8,8 @@ import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { BaselineGate, BASELINE_GATED_SECTIONS, isBaselineGated } from "@/components/BaselineGate";
 import { SideNav, type SideNavSection } from "@/components/SideNav";
+import { UserMenu } from "@/components/UserMenu";
+import { GlobalSearch, type SearchPage } from "@/components/GlobalSearch";
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -24,10 +26,8 @@ import {
   GridIcon,
   LayersIcon,
   LockIcon,
-  LogOutIcon,
   MenuIcon,
   PinIcon,
-  SettingsIcon,
   ShieldCheckIcon,
   SimulationIcon,
   TrendingUpIcon,
@@ -67,16 +67,15 @@ const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 // order below decides which section is treated as "active" when that route is
 // open (first match wins).
 const TOP_SECTIONS: NavSection[] = [
-  { key: "dashboard", label: "Dashboard", icon: GridIcon, href: "/dashboard", visible: always, children: [] },
   {
-    key: "portfolio",
-    label: "Projects",
-    icon: BuildingIcon,
-    href: "/projects",
+    key: "overview",
+    label: "Overview",
+    icon: GridIcon,
+    href: "/dashboard",
     visible: always,
     children: [
-      { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
-      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: GridIcon, visible: always },
+      { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: always },
+      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: BuildingIcon, visible: always },
     ],
   },
   {
@@ -146,18 +145,21 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: always },
     ],
   },
-  {
-    key: "administration",
-    label: "Administration",
-    icon: SettingsIcon,
-    href: "/user-management",
-    visible: canManageTeam,
-    children: [
-      { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
-      { href: "/administration/profile", label: "My Profile", icon: UsersIcon, visible: always },
-    ],
-  },
 ];
+
+// Account and administration pages open from the user menu in the header's
+// top-right corner (components/UserMenu.tsx), not the sidebar.
+const ADMIN_LINKS: NavChild[] = [
+  { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
+  { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
+];
+
+// Browser-tab labels for pages that aren't in the sidebar.
+const ACCOUNT_PAGE_LABELS: Record<string, string> = {
+  "/projects": "Projects",
+  "/user-management": "Users",
+  "/administration/profile": "My Profile",
+};
 
 const ROLE_LABEL: Record<string, string> = {
   company_admin: "Company Admin",
@@ -241,15 +243,6 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const initials = user?.full_name
-    ? user.full_name
-        .split(" ")
-        .map((part) => part[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
-    : "";
-
   const visibleSections = TOP_SECTIONS.filter((section) => {
     if (!section.visible(user)) return false;
     if (section.children.length === 0) return true;
@@ -265,7 +258,18 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
 
   const pageLabel = activeSection
     ? activeSection.children.find((c) => c.href === pathname)?.label ?? activeSection.label
-    : null;
+    : (pathname ? ACCOUNT_PAGE_LABELS[pathname] : undefined) ?? null;
+
+  // Everything the header search can jump to by name.
+  const searchPages: SearchPage[] = [
+    ...visibleSections.flatMap((section) =>
+      section.children
+        .filter((child) => child.visible(user))
+        .map((child) => ({ href: child.href, label: child.label, group: section.label })),
+    ),
+    ...ADMIN_LINKS.filter((l) => l.visible(user)).map((l) => ({ href: l.href, label: l.label, group: "Administration" })),
+    { href: "/administration/profile", label: "My Profile", group: "Account" },
+  ];
 
   const navSections: SideNavSection[] = visibleSections.map((section) => ({
     key: section.key,
@@ -369,19 +373,14 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="header-right">
-            <ProjectSwitcher />
-            <div className="header-user">
-              <div className="avatar" title={user?.full_name}>
-                {initials}
-              </div>
-              <div>
-                <div className="who">{user?.full_name ?? "…"}</div>
-                <div className="role">{user ? (ROLE_LABEL[user.role] ?? user.role) : ""}</div>
-              </div>
-              <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
-                <LogOutIcon className="icon" />
-              </button>
-            </div>
+            <GlobalSearch pages={searchPages} />
+            <ProjectSwitcher manageHref={canManageTeam(user) ? "/projects" : undefined} />
+            <UserMenu
+              user={user}
+              roleLabel={user ? (ROLE_LABEL[user.role] ?? user.role) : ""}
+              adminLinks={ADMIN_LINKS.filter((l) => l.visible(user)).map(({ href, label, icon }) => ({ href, label, icon }))}
+              onSignOut={handleSignOut}
+            />
           </div>
         </header>
 

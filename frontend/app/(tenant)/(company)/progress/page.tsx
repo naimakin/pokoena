@@ -133,7 +133,8 @@ export default function ProgressPage() {
     }
     setLoading(true);
     setError(null);
-    setCriteriaState(EMPTY_CRITERIA);
+    // ?q= (from the header search) prefills the ID/name search.
+    setCriteriaState({ ...EMPTY_CRITERIA, search: new URLSearchParams(window.location.search).get("q") ?? "" });
     setActiveSavedId(null);
     setFilterDirty(false);
     try {

@@ -400,3 +400,21 @@ export function SettingsIcon({ className = "icon", ...rest }: IconProps) {
     </svg>
   );
 }
+
+export function SearchIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.35-4.35" />
+    </svg>
+  );
+}
+
+export function HomeIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
+    </svg>
+  );
+}

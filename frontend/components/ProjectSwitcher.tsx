@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useProjectContext } from "@/lib/project-context";
 import { useToast } from "@/components/Toast";
 import { ApiError } from "@/lib/api";
-import { ChevronDownIcon, FolderPlusIcon } from "@/components/icons";
+import { ChevronDownIcon, FolderPlusIcon, SettingsIcon } from "@/components/icons";
 
-export function ProjectSwitcher() {
+/** `manageHref` adds a "Manage projects" link for users allowed to edit
+ *  projects (rename, delete, team) — the page itself sits in the user menu. */
+export function ProjectSwitcher({ manageHref }: { manageHref?: string } = {}) {
   const { projects, project, loading, selectProject, createProject } = useProjectContext();
   const { showToast } = useToast();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -100,6 +103,11 @@ export function ProjectSwitcher() {
             <button type="button" className="project-switcher-item add" onClick={() => setCreating(true)}>
               <FolderPlusIcon className="icon" /> New project
             </button>
+          )}
+          {manageHref && !creating && (
+            <Link className="project-switcher-item manage" href={manageHref} onClick={() => setOpen(false)}>
+              <SettingsIcon className="icon" /> Manage projects…
+            </Link>
           )}
         </div>
       )}

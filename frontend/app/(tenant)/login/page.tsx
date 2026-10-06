@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { getLandingPage } from "@/lib/landing";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { PokoGlyph } from "@/components/brand";
@@ -25,7 +26,10 @@ export default function TenantLoginPage() {
     setSubmitting(true);
     try {
       const user = await api.post<User>("/auth/login", { email, password });
-      router.push(ROLE_HOME[user.role] ?? "/login");
+      // Company users can pick their own landing page (user menu); subcontractors
+      // only have /scope.
+      const landing = user.role === "subcontractor" ? null : getLandingPage();
+      router.push(landing ?? ROLE_HOME[user.role] ?? "/login");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");

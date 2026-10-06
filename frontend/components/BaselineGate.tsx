@@ -11,7 +11,7 @@ import { NoBaselineIllo } from "@/components/illustrations";
 // baseline programme. Planning / Portfolio / Administration are deliberately
 // left open so the planner can import the schedule and lock the baseline in
 // the first place.
-export const BASELINE_GATED_SECTIONS = new Set(["dashboard", "execution", "risk", "reporting"]);
+export const BASELINE_GATED_SECTIONS = new Set(["overview", "execution", "risk", "reporting"]);
 
 // Pages inside a gated section that measure the programme against itself rather
 // than against a baseline, so the gate would only be in the way. Float Path
@@ -19,7 +19,9 @@ export const BASELINE_GATED_SECTIONS = new Set(["dashboard", "execution", "risk"
 // P6 computed and the .xer import stored, none of which involve a baseline.
 // My Desk is the user's own pins, notes and approval queues — a project with no
 // baseline yet mustn't lock anyone out of their own notes.
-export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path", "/execution/my-desk"]);
+// Portfolio Dashboard spans every project, so one project lacking a baseline
+// mustn't hide it.
+export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path", "/execution/my-desk", "/portfolio/dashboard"]);
 
 export function isBaselineGated(sectionKey: string | undefined, pathname: string | null): boolean {
   if (pathname && BASELINE_UNGATED_PATHS.has(pathname)) return false;
