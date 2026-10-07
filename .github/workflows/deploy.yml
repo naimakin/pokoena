@@ -138,6 +138,17 @@ jobs:
           done
 
           docker service logs "$JOB" || true
+          # A task Swarm Rejected never started, so it has no logs — the reason
+          # (image pull failure, no space left on device, ...) is only in the
+          # task's Error field. Print it, plus disk usage, before removing it.
+          case "$STATE" in
+            Complete*) ;;
+            *)
+              echo "task error(s):"
+              docker service ps --no-trunc --format '{{.CurrentState}} | {{.Error}}' "$JOB" || true
+              docker system df || true
+              ;;
+          esac
           docker service rm "$JOB"
 
           # Fail loudly. Previously any non-Complete outcome (including a failed
