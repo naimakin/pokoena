@@ -12,7 +12,7 @@ from app.models.invite import Invite, InviteStatus
 from app.models.project_membership import ProjectMembership
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.user import User
-from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole, parse_project_roles
 from app.worker.tasks import send_invite_email
 
 INVITE_EXPIRY = timedelta(hours=72)
@@ -214,14 +214,14 @@ def accept_invite(db: Session, raw_token: str, password: str) -> tuple[User, Inv
             user_id=user.id,
             tenant_id=invite.tenant_id,
             role=invite.role,
-            project_roles=invite.project_roles,
+            project_roles=[r.value for r in parse_project_roles(invite.project_roles, invite.role)],
             subcontractor_org_id=uuid.UUID(subcontractor_org_id) if subcontractor_org_id else None,
             is_active=True,
         )
         db.add(membership)
     else:
         membership.role = invite.role
-        membership.project_roles = invite.project_roles
+        membership.project_roles = [r.value for r in parse_project_roles(invite.project_roles, invite.role)]
         membership.is_active = True
         if subcontractor_org_id:
             membership.subcontractor_org_id = uuid.UUID(subcontractor_org_id)

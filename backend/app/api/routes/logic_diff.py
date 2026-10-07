@@ -8,6 +8,7 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.engine.diff.logic_diff import DEFAULT_LAG_THRESHOLD_HOURS, compare_relationship_snapshots
 from app.models.project import Project
 from app.models.schedule_import import ScheduleImport
+from app.models.user_tenant_role import Capability
 from app.schemas.logic_diff import LogicDiffReportOut
 
 router = APIRouter(prefix="/projects/{project_id}/logic-diff", tags=["logic-diff"])
@@ -23,7 +24,7 @@ def get_logic_diff(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> LogicDiffReportOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
 
     from_import = get_tenant_scoped_or_404(db, ScheduleImport, from_import_id, ctx)
     to_import = get_tenant_scoped_or_404(db, ScheduleImport, to_import_id, ctx)

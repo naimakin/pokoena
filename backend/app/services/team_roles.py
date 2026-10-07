@@ -6,6 +6,8 @@ from fastapi import HTTPException, status
 from app.deps import AuthContext
 from app.models.user_tenant_role import (
     ADMIN_GRANTED_PROJECT_ROLES,
+    COMPANY_PROJECT_ROLES,
+    PROJECT_ROLE_LABELS,
     SUBCONTRACTOR_PROJECT_ROLES,
     ProjectRole,
     TenantRole,
@@ -17,10 +19,11 @@ def check_project_roles(role: TenantRole, project_roles: list[ProjectRole], acto
 
     - Subcontractors may only hold Activity Status Updater (or nothing: view
       only) — what they can see is set by their scopes, not by a company role.
-    - Company employees need at least one role.
-    - Only a company admin may hand out the team-admin roles (Project
-      Administrator, User Management): a User Management employee could
-      otherwise mint peers with the same reach, or a Project Administrator.
+    - Company employees need at least one company role (Update progress is
+      the subcontractor one).
+    - Only a company admin may hand out Project Manager, Planner and User
+      Management (they import, set baselines or manage people): a User
+      Management employee could otherwise mint peers with more reach.
     """
     roles = list(dict.fromkeys(project_roles))
     if role == TenantRole.subcontractor:
@@ -32,11 +35,15 @@ def check_project_roles(role: TenantRole, project_roles: list[ProjectRole], acto
         return roles
     if role == TenantRole.company_employee:
         if not roles:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one project_role is required")
-        if actor.role != TenantRole.company_admin and set(roles) & ADMIN_GRANTED_PROJECT_ROLES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one role is required")
+        if set(roles) - COMPANY_PROJECT_ROLES:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a company admin can grant Project Administrator or User Management",
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Update progress is a subcontractor permission"
+            )
+        if actor.role != TenantRole.company_admin and set(roles) & ADMIN_GRANTED_PROJECT_ROLES:
+            names = ", ".join(PROJECT_ROLE_LABELS[r] for r in ADMIN_GRANTED_PROJECT_ROLES & set(roles))
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail=f"Only a company admin can grant {names}"
             )
         return roles
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Company admins don't take project roles")

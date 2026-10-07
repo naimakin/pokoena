@@ -9,6 +9,7 @@ from app.models.project import Project
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.user import User
+from app.models.user_tenant_role import Capability
 from app.schemas.sync import ScheduleExportOut, ScheduleExportUpdate, SyncLogEntry
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["sync"])
@@ -23,7 +24,7 @@ def get_sync_log(
     """Combined Export / Sync to P6 timeline — every .xer exported (EXP-n) and
     imported (UPD-n / Baseline programme) for this project, newest first."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_programme)
 
     exports = (
         db.query(ScheduleExport)
@@ -87,7 +88,7 @@ def _get_export(db: Session, project_id: uuid.UUID, export_id: uuid.UUID, ctx: A
     row = get_tenant_scoped_or_404(db, ScheduleExport, export_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleExport not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.export)
     return row
 
 

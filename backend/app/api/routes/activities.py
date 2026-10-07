@@ -23,7 +23,7 @@ from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
-from app.models.user_tenant_role import ProjectRole, TenantRole
+from app.models.user_tenant_role import VIEW_ANY, Capability, ProjectRole, TenantRole
 from app.schemas.activity import (
     ActivityAssignmentOut,
     ActivityBatchResultOut,
@@ -158,7 +158,7 @@ def _authorize_progress_edit(db: Session, project_id: uuid.UUID, ctx: AuthContex
         if not open_period:
             raise HTTPException(status_code=400, detail="No open update period for this project")
     elif ctx.role == TenantRole.company_employee:
-        require_project_permission(db, project_id, ctx, need_edit=True)
+        require_project_permission(db, project_id, ctx, Capability.edit_progress)
     elif ctx.role != TenantRole.company_admin:
         raise HTTPException(status_code=403, detail="Not permitted")
 
@@ -303,7 +303,7 @@ def list_activities(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[Activity]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
 
     query = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id)
     if mine or ctx.role == TenantRole.subcontractor:
@@ -339,7 +339,7 @@ def list_activity_relationships(
     activity_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> list[ActivityRelationship]:
     activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
-    require_project_permission(db, activity.project_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
     require_scope_access(activity.project_scope_id, ctx)
 
     relationships = (
@@ -378,7 +378,7 @@ def list_activity_assignments(
     """The activity's resource assignments (P6 TASKRSRC) with their units —
     the Activity modal's Details tab."""
     activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
-    require_project_permission(db, activity.project_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
     require_scope_access(activity.project_scope_id, ctx)
 
     rows = (
@@ -506,7 +506,7 @@ def add_activity_comment(
     Unlike an edit this needs no open update period — being unable to say "this
     is blocked on the permit" until a period opens would defeat the point."""
     activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
-    require_project_permission(db, activity.project_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
     require_scope_access(activity.project_scope_id, ctx)
 
     event = ActivityEvent(
@@ -544,7 +544,7 @@ def activity_history(
     the import path stays untouched, and the history works retroactively for
     programmes uploaded before any of this existed."""
     activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
-    require_project_permission(db, activity.project_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
     require_scope_access(activity.project_scope_id, ctx)
 
     items: list[ActivityHistoryItemOut] = []

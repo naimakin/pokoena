@@ -27,6 +27,8 @@ import { ChevronDownIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
 import { ScurveChart } from "@/components/ScurveChart";
 import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -222,7 +224,7 @@ export default function BaselinesPage() {
     e.target.value = "";
   }
 
-  const isAdmin = user?.role === "company_admin";
+  const isAdmin = can(user, "manage_baselines");
   const active = status?.active_baseline ?? null;
   const varRows = variance
     ? slippingOnly

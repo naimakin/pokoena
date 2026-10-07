@@ -27,6 +27,7 @@ from app.models.recovery_plan import RecoveryPlan
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
+from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ActivityOut, ScheduleImportOut, ScheduleImportUpdate
 from app.schemas.wbs import WbsNodeOut
@@ -63,7 +64,7 @@ def list_schedule_imports(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[ScheduleImport]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     return (
         db.query(ScheduleImport)
         # The two frozen snapshots are fat JSONB and never serialized by
@@ -97,7 +98,7 @@ def get_import_wbs_nodes(
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     direct = Counter(
         a["wbs_path"] for a in row.activities_snapshot if a.get("wbs_path") is not None
@@ -134,7 +135,7 @@ def get_import_activities(
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     # Snapshots taken before hours_per_day was frozen into them fall back to
     # the live activity's calendar (same external_id), then the default.
@@ -193,7 +194,7 @@ def upload_schedule(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ScheduleImport:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.import_programme)
 
     if not file.filename or not file.filename.lower().endswith(".xer"):
         raise HTTPException(status_code=400, detail="Only .xer files are supported")
@@ -237,7 +238,7 @@ def update_schedule_import(
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.import_programme)
 
     if payload.revision_label is None and payload.data_date is None:
         raise HTTPException(status_code=422, detail="Nothing to update — send a revision label and/or a data date")
@@ -283,7 +284,7 @@ def set_current_import(
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.import_programme)
 
     current = get_current_import(db, ctx.tenant_id, project_id)
     if current is not None and current.id == import_id:
@@ -325,7 +326,7 @@ def delete_schedule_import(
     row = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if row.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.import_programme)
 
     current = get_current_import(db, ctx.tenant_id, project_id)
     if current is not None and current.id == import_id:

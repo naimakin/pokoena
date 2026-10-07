@@ -18,6 +18,7 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.models.baseline import Baseline, BaselineStatus
 from app.models.project import Project
 from app.models.report_format import ReportFormat
+from app.models.user_tenant_role import Capability
 from app.schemas.report import (
     ReportBlockCatalogueOut,
     ReportBlockConfig,
@@ -263,7 +264,7 @@ def list_report_blocks(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[ReportBlockCatalogueOut]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
     return BLOCK_CATALOGUE
 
 
@@ -277,7 +278,7 @@ def list_report_formats(
     first time a project is looked at, so a new project is never staring at an
     empty builder."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
 
     _seed_presets(db, ctx.tenant_id, project_id, ctx.user.id)
     rows = (
@@ -297,7 +298,7 @@ def create_report_format(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ReportFormatOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_reports)
 
     name = payload.name.strip()
     clash = (
@@ -345,7 +346,7 @@ def get_report_format(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ReportFormatOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
     return _out(_get_format(db, project_id, format_id, ctx))
 
 
@@ -358,7 +359,7 @@ def update_report_format(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ReportFormatOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_reports)
     row = _get_format(db, project_id, format_id, ctx)
 
     if payload.name is not None:
@@ -388,7 +389,7 @@ def delete_report_format(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> None:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_reports)
     db.delete(_get_format(db, project_id, format_id, ctx))
     db.commit()
 
@@ -403,7 +404,7 @@ def get_report_header(
     every block set states the same data date, revision and progress basis —
     a report whose pages disagree about its own data date gets rejected."""
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
 
     current_import = get_current_import(db, ctx.tenant_id, project_id)
     baseline = (

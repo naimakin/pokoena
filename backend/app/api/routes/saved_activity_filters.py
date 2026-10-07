@@ -5,15 +5,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_tenant_scoped_or_404, require_role
+from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability
 from app.models.project import Project
 from app.models.saved_activity_filter import SavedActivityFilter
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability
 from app.schemas.saved_activity_filter import SavedFilterCreate, SavedFilterOut, SavedFilterUpdate
 
 router = APIRouter(prefix="/projects/{project_id}/saved-filters", tags=["saved-filters"])
 
-_ROLE = require_role(TenantRole.company_admin, TenantRole.company_employee)
+_ROLE = require_capability(Capability.view_programme, Capability.view_delivery)
 
 
 def _to_out(row: SavedActivityFilter, ctx: AuthContext) -> SavedFilterOut:

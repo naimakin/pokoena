@@ -65,10 +65,13 @@ DESIGN.md                 ← full design system spec
   before any query against a tenant-scoped table) AND application-level checks in
   `backend/app/deps.py` (`require_tenant_access`, `require_project_permission`, etc.) — never
   rely on just one.
-- A user's capabilities within a tenant come from `project_roles` (a list, not a single value —
-  someone can hold several of Project Administrator / All Access / Execution / User Management /
-  Activity Status Updater at once) plus their coarse `TenantRole` (company_admin/
-  company_employee/subcontractor).
+- A user's access within a tenant = their coarse `TenantRole` (company_admin/company_employee/
+  subcontractor) plus `project_roles`, a list of menu-based roles (Project Manager, Planner, Delivery
+  Team, Viewer, Dashboard Viewer, User Management). Roles map to capabilities in
+  `models/user_tenant_role.py::ROLE_CAPABILITIES`; routes check capabilities
+  (`deps.require_capability` / `require_project_permission(db, pid, ctx, *caps)`), never role names.
+  `/auth/me` returns `capabilities`; the frontend shows menus/buttons with `lib/permissions.ts::can` and
+  the company layout blocks pages the user can't open. Hiding a menu is never the security control.
 - No real transactional email provider is wired up yet — invite links and password-reset links
   are surfaced directly in the UI to whoever creates them (see `services/invites.py`,
   `services/password_reset.py`) rather than emailed.

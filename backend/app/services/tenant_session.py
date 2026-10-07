@@ -8,7 +8,7 @@ from app.core.security import create_tenant_access_token, create_tenant_refresh_
 from app.deps import TENANT_REFRESH_COOKIE, TENANT_SESSION_COOKIE
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.user import User
-from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
+from app.models.user_tenant_role import TenantRole, UserTenantRole, capabilities_for, parse_project_roles
 from app.schemas.user import UserOut
 
 settings = get_settings()
@@ -37,6 +37,7 @@ def issue_tenant_session(
         if membership.role == TenantRole.subcontractor
         else []
     )
+    project_roles = parse_project_roles(membership.project_roles, membership.role)
     access_token = create_tenant_access_token(
         user_id=user.id, tenant_id=membership.tenant_id, role=membership.role.value, scope_ids=scope_ids
     )
@@ -73,6 +74,7 @@ def issue_tenant_session(
         is_active=user.is_active,
         tenant_id=membership.tenant_id,
         role=membership.role,
-        project_roles=[ProjectRole(r) for r in membership.project_roles],
+        project_roles=project_roles,
         scope_ids=scope_ids,
+        capabilities=sorted(capabilities_for(membership.role, project_roles), key=lambda c: c.value),
     )

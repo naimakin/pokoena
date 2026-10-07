@@ -19,6 +19,7 @@ from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_export import ScheduleExport
 from app.models.schedule_import import ScheduleImport
 from app.models.wbs_node import WbsNode
+from app.models.user_tenant_role import Capability
 from app.services.schedule_current import get_current_import, to_naive
 
 router = APIRouter(prefix="/projects/{project_id}/export", tags=["export"])
@@ -58,7 +59,7 @@ def export_xer(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> Response:
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.export)
 
     source_import = _resolve_source_import(db, ctx, project_id, import_id)
     data_date = to_naive(source_import.data_date) if source_import else None

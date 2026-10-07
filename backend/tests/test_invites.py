@@ -103,7 +103,7 @@ def test_invite_cannot_be_accepted_twice(client, db_session, monkeypatch):
             "email": "employee@example.com",
             "full_name": "Employee One",
             "role": "company_employee",
-            "project_roles": ["execution"],
+            "project_roles": ["delivery_team"],
         },
     )
     raw_token = captured["invite_url"].rsplit("/", 1)[-1]
@@ -127,7 +127,7 @@ def test_expired_invite_is_rejected(client, db_session, monkeypatch):
         email="late@example.com",
         full_name="Nobody",
         role=TenantRole.company_employee,
-        project_roles=[ProjectRole.execution],
+        project_roles=[ProjectRole.delivery_team],
         invited_by_user_id=admin.id,
     )
     invite.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -187,7 +187,7 @@ def test_user_management_project_role_can_manage_team(client, db_session, monkey
             "email": "newhire@example.com",
             "full_name": "New Hire",
             "role": "company_employee",
-            "project_roles": ["execution"],
+            "project_roles": ["delivery_team"],
         },
     )
     assert response.status_code == 201
@@ -214,7 +214,7 @@ def test_cannot_invite_an_email_that_already_has_an_account(client, db_session, 
             "email": "victim@example.com",
             "full_name": "Victim",
             "role": "company_employee",
-            "project_roles": ["execution"],
+            "project_roles": ["delivery_team"],
         },
     )
     assert response.status_code == 400

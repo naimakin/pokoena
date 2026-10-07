@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, require_user_management
+from app.deps import AuthContext, require_user_management
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.schemas.subcontractor_organization import SubcontractorOrgCreate, SubcontractorOrgOut
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/subcontractor-organizations", tags=["subcontractor-o
 @router.get("", response_model=list[SubcontractorOrgOut])
 def list_subcontractor_organizations(
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(get_current_tenant_user),
+    ctx: AuthContext = Depends(require_user_management),
 ) -> list[SubcontractorOrganization]:
     return (
         db.query(SubcontractorOrganization)

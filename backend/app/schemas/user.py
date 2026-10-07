@@ -2,7 +2,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models.user_tenant_role import ProjectRole, TenantRole
+from app.models.user_tenant_role import Capability, ProjectRole, TenantRole
 
 
 class UserOut(BaseModel):
@@ -22,6 +22,10 @@ class UserOut(BaseModel):
     role: TenantRole
     project_roles: list[ProjectRole] = []
     scope_ids: list[uuid.UUID] = []
+    # What the roles add up to (models/user_tenant_role.ROLE_CAPABILITIES) —
+    # the frontend shows menus and buttons from this, so the mapping lives in
+    # one place.
+    capabilities: list[Capability] = []
 
 
 class PlatformAdminOut(BaseModel):

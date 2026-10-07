@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
+from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, has_capability, require_project_permission
 from app.engine.quality.dcma import DcmaThresholds, run_dcma, validate_thresholds
 from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
 from app.models.resource_assignment import ResourceAssignment
-from app.models.user_tenant_role import EDIT_CAPABLE_PROJECT_ROLES, TenantRole
+from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.schemas.dcma import DcmaReportOut
 from app.services.schedule_current import get_current_import, to_naive
 
@@ -20,9 +20,7 @@ router = APIRouter(prefix="/projects/{project_id}/dcma", tags=["dcma"])
 
 def _can_edit_thresholds(ctx: AuthContext) -> bool:
     """The project's quality bar is a company call, not a subcontractor's."""
-    if ctx.role == TenantRole.company_admin:
-        return True
-    return ctx.role != TenantRole.subcontractor and bool(set(ctx.project_roles) & EDIT_CAPABLE_PROJECT_ROLES)
+    return has_capability(ctx, Capability.edit_programme)
 
 
 @router.get("", response_model=DcmaReportOut)
@@ -32,7 +30,7 @@ def get_dcma_report(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> DcmaReportOut:
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports, Capability.view_overview, Capability.view_programme)
 
     activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
     activity_ids = [a.id for a in activities]
@@ -79,7 +77,7 @@ def set_dcma_thresholds(
     DCMA's default is not stored, so an empty body (or all defaults) goes back
     to DCMA's own targets."""
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     if not _can_edit_thresholds(ctx):
         raise HTTPException(status_code=403, detail="Only a company admin or a project editor can change the targets")
     errors = validate_thresholds(body)

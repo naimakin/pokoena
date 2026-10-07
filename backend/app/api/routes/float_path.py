@@ -20,6 +20,7 @@ from app.models.activity import Activity
 from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
+from app.models.user_tenant_role import Capability
 from app.schemas.float_path import FloatPathEndCandidateOut, FloatPathReportOut
 from app.services.schedule_current import get_current_import, to_naive
 
@@ -122,7 +123,7 @@ def list_end_candidates(
     the analysis is usually run against), then every other activity, each
     ordered by finish date."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
 
     activities, _rels = _load(db, ctx.tenant_id, project_id)
 
@@ -160,7 +161,7 @@ def get_float_paths(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> FloatPathReportOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports)
 
     activities, relationships = _load(db, ctx.tenant_id, project_id)
     by_id = {a.id: a for a in activities}

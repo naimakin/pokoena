@@ -38,6 +38,8 @@ import {
 } from "@/lib/dcma";
 import { useProjectContext } from "@/lib/project-context";
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 
 type Status = DcmaCheckResult["status"];
 type StatusFilter = "all" | "fail" | "warn" | "pass";
@@ -82,6 +84,7 @@ function ringLabel(check: DcmaCheckResult, t: Thresholds): string {
 
 export default function DcmaPage() {
   const { project } = useProjectContext();
+  const user = useCurrentUser();
   const [report, setReport] = useState<DcmaReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -355,9 +358,11 @@ export default function DcmaPage() {
                   <SettingsIcon className="icon" /> Targets
                 </button>
               )}
-              <button className="btn btn-secondary btn-sm" onClick={downloadCsv} title="Download the 14 checks as CSV">
-                <DownloadIcon className="icon" /> CSV
-              </button>
+              {can(user, "export") && (
+                <button className="btn btn-secondary btn-sm" onClick={downloadCsv} title="Download the 14 checks as CSV">
+                  <DownloadIcon className="icon" /> CSV
+                </button>
+              )}
             </div>
 
             {visible.length === 0 ? (

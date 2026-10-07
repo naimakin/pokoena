@@ -56,6 +56,9 @@ def add_membership(
     if project_roles is None and role == TenantRole.subcontractor:
         # What the invite form gives a subcontractor by default.
         project_roles = [ProjectRole.activity_status_updater]
+    elif project_roles is None and role == TenantRole.company_employee:
+        # What an employee with no role used to be: sees everything, edits nothing.
+        project_roles = [ProjectRole.viewer]
     membership = UserTenantRole(
         id=uuid.uuid4(),
         user_id=user.id,

@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission, require_role
+from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.engine.cpm.calendar_engine import NoWorkingDayError
 from app.engine.cpm.scheduler import CpmCycleError
 from app.engine.evm.evm_engine import calculate_evm
@@ -35,7 +35,7 @@ from app.models.project import Project
 from app.models.resource import LABOR, MATERIAL, NONLABOR
 from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.parser.xer_parser import XerParseError
 from app.services.baseline import (
     BaselineConflictError,
@@ -85,7 +85,7 @@ def get_quick_evm(
     """Live EVM computed from the project's current schedule and resource
     assignments — no baseline required. See engine/evm/evm_engine.py."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
     assignments = (
@@ -224,7 +224,7 @@ def get_baseline_status(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> BaselineStatusOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     baselines = (
         db.query(Baseline)
@@ -247,7 +247,7 @@ def upload_baseline_program(
     file: UploadFile = File(...),
     force: bool = Form(False),
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> BaselineProgramResultOut:
     """Upload the baseline programme (.xer) from Planning → Baselines. First
     use of this endpoint (or the Program Library) locks the baseline; every
@@ -264,6 +264,7 @@ def upload_baseline_program(
     file can therefore no longer silently regress or reclassify the live
     schedule, so `force` only matters for that first-import case now."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.manage_baselines)
 
     if not file.filename or not file.filename.lower().endswith(".xer"):
         raise HTTPException(status_code=400, detail="Only .xer files are supported")
@@ -339,7 +340,7 @@ def get_baseline_resources(
     """The P6 resources frozen against the active baseline, with budgeted
     quantity/cost rolled up per resource from the frozen TASKRSRC lines."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     resources = (
@@ -393,7 +394,7 @@ def get_baseline_variance(
     per-activity start/finish date variance in calendar days, plus a
     project-level slip summary and a distribution histogram for the chart."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     baseline_activities = (
@@ -419,7 +420,7 @@ def lock_baseline(
     project_id: uuid.UUID,
     payload: LockBaselineRequest,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> LockBaselineResultOut:
     """Locks the project's CURRENT schedule as a baseline — we don't keep
     versioned historical schedule snapshots (see services/xer_import.py), so
@@ -428,6 +429,7 @@ def lock_baseline(
     BaselineActivity/BaselinePvCurve writes) lives in services/baseline.py,
     shared with the Program Library page's auto-lock-on-first-import."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.manage_baselines)
 
     last_import = get_current_import(db, ctx.tenant_id, project_id)
     if last_import is None:
@@ -456,7 +458,7 @@ def set_baseline_from_import(
     project_id: uuid.UUID,
     import_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> LockBaselineResultOut:
     """Program Library: make the chosen import the project's baseline, replacing
     the active one (which is kept as `superseded`, not deleted). If this import
@@ -466,6 +468,7 @@ def set_baseline_from_import(
     update, else from its saved activity snapshot (no resources, see
     lock_baseline_from_snapshot)."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.manage_baselines)
     schedule_import = get_tenant_scoped_or_404(db, ScheduleImport, import_id, ctx)
     if schedule_import.project_id != project_id:
         raise HTTPException(status_code=404, detail="ScheduleImport not found")
@@ -519,9 +522,10 @@ def supersede_baseline(
     project_id: uuid.UUID,
     baseline_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> dict:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.manage_baselines)
     baseline = get_tenant_scoped_or_404(db, Baseline, baseline_id, ctx)
     if baseline.project_id != project_id:
         raise HTTPException(status_code=400, detail="Baseline does not belong to this project")
@@ -541,7 +545,7 @@ def submit_progress(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ProgressSubmitResultOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_progress)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     project_activity_ids = {
@@ -611,7 +615,7 @@ def list_progress(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[ProgressEntry]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_delivery, Capability.view_reports)
 
     query = db.query(ProgressEntry).filter(ProgressEntry.tenant_id == ctx.tenant_id, ProgressEntry.project_id == project_id)
     if activity_id:
@@ -627,7 +631,7 @@ def get_scurve(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> EvmScurveOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     pv_series, ac_series = _load_pv_ac_series(db, project_id, baseline.id)
@@ -659,7 +663,7 @@ def get_evm_summary(
     services/progress_summary.py::evm_point_at for why not from the newest
     snapshot row)."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     total_ac = (
@@ -695,7 +699,7 @@ def get_progress_summary(
     """Planned vs actual % at the data date (duration-weighted, LOE/WBS out)
     and the baseline vs latest version table. See engine/evm/progress_engine.py."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     s = compute_progress_summary(db, ctx.tenant_id, project_id, baseline)
@@ -731,7 +735,7 @@ def get_progress_curve(
     """Monthly planned / actual / forecast % complete — the progress S-curve.
     Same basis as /progress-summary (engine/evm/progress_engine.py)."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     data_date, points = compute_progress_curve(db, ctx.tenant_id, project_id, baseline)
@@ -749,7 +753,7 @@ def export_evm_excel(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> Response:
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.export)
     baseline = _require_active_baseline(db, ctx, project_id)
 
     snapshot_rows = (

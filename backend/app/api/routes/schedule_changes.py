@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.models.project import Project
 from app.models.schedule_import import ScheduleImport
+from app.models.user_tenant_role import Capability
 from app.schemas.schedule_change import ScheduleChangeReportOut
 from app.services.schedule_changes import build_change_report
 
@@ -25,7 +26,7 @@ def get_schedule_changes(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ScheduleChangeReportOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_delivery, Capability.view_reports)
 
     for import_id in (from_import_id, to_import_id):
         if import_id is None:

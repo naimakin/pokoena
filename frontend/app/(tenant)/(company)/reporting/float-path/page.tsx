@@ -9,6 +9,8 @@ import { AlertTriangleIcon, CompareIcon, DownloadIcon } from "@/components/icons
 import { FloatBadge, fmtDays, fmtP6Date } from "@/components/reporting/format";
 import { FoldAllControls, FoldCard, FoldKey, FoldProvider } from "@/components/reporting/collapse";
 import { NoProjectIllo } from "@/components/illustrations";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 import type {
   FloatPath,
   FloatPathEndCandidate,
@@ -79,6 +81,7 @@ function PathTable({ path }: { path: FloatPath }) {
 
 export default function FloatPathPage() {
   const { project } = useProjectContext();
+  const user = useCurrentUser();
 
   const [candidates, setCandidates] = useState<FloatPathEndCandidate[]>([]);
   const [report, setReport] = useState<FloatPathReport | null>(null);
@@ -222,7 +225,7 @@ export default function FloatPathPage() {
               today; the paths behind it are what will hold it next.
             </div>
           </div>
-          {report && (
+          {report && can(user, "export") && (
             <button className="btn btn-secondary" onClick={exportCsv}>
               <DownloadIcon className="icon" /> Export CSV
             </button>

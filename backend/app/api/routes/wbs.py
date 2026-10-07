@@ -9,6 +9,7 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.models.activity import Activity
 from app.models.project import Project
 from app.models.wbs_node import WbsNode
+from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.schemas.wbs import WbsNodeCreate, WbsNodeOut
 from app.services.wbs_tree import WbsNodeLite, build_wbs_tree
 
@@ -53,7 +54,7 @@ def list_wbs_nodes(
     is left out — see GET .../wbs-nodes/hidden. To view an earlier program's
     WBS, see GET .../schedule-imports/{id}/wbs-nodes."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     nodes = _drop_hidden_subtrees(
         db.query(WbsNode)
@@ -98,7 +99,7 @@ def list_hidden_wbs_roots(
     counts, so a "N hidden — Manage" control can list what's tucked away and
     offer to unhide it."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     all_nodes = (
         db.query(WbsNode)
@@ -148,7 +149,7 @@ def hide_wbs_root(
     node = get_tenant_scoped_or_404(db, WbsNode, node_id, ctx)
     if node.project_id != project_id:
         raise HTTPException(status_code=404, detail="WbsNode not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
     if node.parent_wbs_id is not None:
         raise HTTPException(status_code=400, detail="Only a top-level WBS node can be hidden")
 
@@ -171,7 +172,7 @@ def unhide_wbs_root(
     node = get_tenant_scoped_or_404(db, WbsNode, node_id, ctx)
     if node.project_id != project_id:
         raise HTTPException(status_code=404, detail="WbsNode not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     node.is_hidden = False
     db.commit()
@@ -195,7 +196,7 @@ def create_wbs_node(
     correct depth/path_ids/outline_code — this response doesn't try to
     recompute those position-derived fields for a single node."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     if payload.parent_wbs_id is not None:
         parent = (
@@ -250,7 +251,7 @@ def delete_wbs_node(
     node = get_tenant_scoped_or_404(db, WbsNode, node_id, ctx)
     if node.project_id != project_id:
         raise HTTPException(status_code=404, detail="WbsNode not found")
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     has_children = (
         db.query(WbsNode.id)

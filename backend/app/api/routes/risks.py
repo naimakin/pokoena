@@ -23,7 +23,7 @@ from app.models.risk_item import (
     RiskStatus,
 )
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.services.risk_analysis import pct_to_score
 from app.schemas.risk_register import (
     ItemOrderIn,
@@ -48,7 +48,7 @@ def _now() -> datetime:
 
 def _require_edit(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
     if ctx.role == TenantRole.company_employee:
-        require_project_permission(db, project_id, ctx, need_edit=True)
+        require_project_permission(db, project_id, ctx, Capability.edit_risk)
     elif ctx.role != TenantRole.company_admin:
         raise HTTPException(status_code=403, detail="Not permitted")
 
@@ -119,7 +119,7 @@ def list_risks(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[RiskItemDetailOut]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk, Capability.view_reports)
 
     q = db.query(RiskItem).filter(
         RiskItem.tenant_id == ctx.tenant_id, RiskItem.project_id == project_id
@@ -154,7 +154,7 @@ def get_risk(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskItemDetailOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk, Capability.view_reports)
     risk = _load_risk(db, project_id, risk_id, ctx)
     _decorate(db, [risk])
     items = (
@@ -176,7 +176,7 @@ def create_risk(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskItemOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
 
     max_n = (
@@ -232,7 +232,7 @@ def update_risk(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskItemOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     risk = _load_risk(db, project_id, risk_id, ctx)
 
@@ -302,7 +302,7 @@ def add_item(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskActionItemOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     risk = _load_risk(db, project_id, risk_id, ctx)
     if risk.mitigation_status not in _MIT_EDITABLE:
@@ -340,7 +340,7 @@ def update_item(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskActionItemOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     item, risk = _load_item(db, project_id, risk_id, item_id, ctx)
 
@@ -375,7 +375,7 @@ def delete_item(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> None:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     item, risk = _load_item(db, project_id, risk_id, item_id, ctx)
     if risk.mitigation_status not in _MIT_EDITABLE:
@@ -393,7 +393,7 @@ def reorder_items(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[RiskActionItemOut]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     risk = _load_risk(db, project_id, risk_id, ctx)
     items = {
@@ -421,7 +421,7 @@ def submit_mitigation(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RiskItemOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
     _require_edit(db, project_id, ctx)
     risk = _load_risk(db, project_id, risk_id, ctx)
 

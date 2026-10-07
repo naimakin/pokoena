@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { Capability, User } from "@/lib/types";
+import { can } from "@/lib/permissions";
+import { CurrentUserProvider } from "@/lib/user-context";
 import { ProjectProvider, useProjectContext } from "@/lib/project-context";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { BaselineGate, BASELINE_GATED_SECTIONS, isBaselineGated } from "@/components/BaselineGate";
@@ -34,6 +36,7 @@ import {
   UsersIcon,
 } from "@/components/icons";
 import { PokoGlyph } from "@/components/brand";
+import { NoAccess } from "@/components/NoAccess";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 type Visible = (user: User | null) => boolean;
@@ -56,10 +59,13 @@ interface NavSection {
 
 const always: Visible = () => true;
 
-// Mirrors deps.require_user_management: only the User Management role (or a
-// company admin) opens the team — Project Administrator is about the programme.
-const canManageTeam: Visible = (user) =>
-  user?.role === "company_admin" || Boolean(user?.project_roles?.includes("user_management"));
+// A menu item shows only when the user holds one of these capabilities
+// (/auth/me; the backend enforces the same on every route). A page the user
+// can't open never appears — in the sidebar, the header search or the user menu.
+const need =
+  (...caps: Capability[]): Visible =>
+  (user) =>
+    can(user, ...caps);
 
 const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 
@@ -74,8 +80,8 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/dashboard",
     visible: always,
     children: [
-      { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: always },
-      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: BuildingIcon, visible: always },
+      { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: need("view_overview") },
+      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: BuildingIcon, visible: need("view_overview") },
     ],
   },
   {
@@ -85,11 +91,11 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/project-files",
     visible: always,
     children: [
-      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: always },
-      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: always },
-      { href: "/gantt", label: "Chart", icon: GanttIcon, visible: always },
-      { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: always },
-      { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: always },
+      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
+      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
+      { href: "/gantt", label: "Chart", icon: GanttIcon, visible: need("view_programme") },
+      { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
+      { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
     ],
   },
   {
@@ -99,11 +105,11 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/execution/my-desk",
     visible: always,
     children: [
-      { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: always },
-      { href: "/progress", label: "Activity Ledger", icon: ClockIcon, visible: always },
-      { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: always },
-      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: always },
-      { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: isCompanyAdmin },
+      { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: need("view_delivery") },
+      { href: "/progress", label: "Activity Ledger", icon: ClockIcon, visible: need("view_delivery") },
+      { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: need("view_delivery") },
+      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_delivery") },
+      { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: need("review_approvals") },
     ],
   },
   {
@@ -116,13 +122,13 @@ const TOP_SECTIONS: NavSection[] = [
       // QSRA / Early Warnings / Resources / Recommendations: the foresight
       // layer — see backend services/risk_analysis.py, risk_signals.py,
       // risk_resources.py.
-      { href: "/risk", label: "QSRA & Forecast", icon: DiceIcon, visible: always },
-      { href: "/risk/register", label: "Risk Register", icon: LayersIcon, visible: always },
-      { href: "/risk/early-warnings", label: "Early Warnings", icon: AlertTriangleIcon, visible: always },
-      { href: "/risk/resources", label: "Resources Analysis", icon: UsersIcon, visible: always },
-      { href: "/risk/recommendations", label: "Recommendations", icon: FlagIcon, visible: always },
-      { href: "/risk/matrix", label: "Risk Matrix", icon: GridIcon, visible: always },
-      { href: "/risk/mitigation-plans", label: "Mitigation Plans", icon: ShieldCheckIcon, visible: always },
+      { href: "/risk", label: "QSRA & Forecast", icon: DiceIcon, visible: need("view_risk") },
+      { href: "/risk/register", label: "Risk Register", icon: LayersIcon, visible: need("view_risk") },
+      { href: "/risk/early-warnings", label: "Early Warnings", icon: AlertTriangleIcon, visible: need("view_risk") },
+      { href: "/risk/resources", label: "Resources Analysis", icon: UsersIcon, visible: need("view_risk") },
+      { href: "/risk/recommendations", label: "Recommendations", icon: FlagIcon, visible: need("view_risk") },
+      { href: "/risk/matrix", label: "Risk Matrix", icon: GridIcon, visible: need("view_risk") },
+      { href: "/risk/mitigation-plans", label: "Mitigation Plans", icon: ShieldCheckIcon, visible: need("view_risk") },
     ],
   },
   {
@@ -135,14 +141,14 @@ const TOP_SECTIONS: NavSection[] = [
     // were four empty slots for the same thing: a report you assemble and hand
     // to someone. They are one page now, and the old routes redirect to it.
     children: [
-      { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: always },
+      { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: need("view_reports") },
       // A status rollup is something you report, not something you act on —
       // it moved here from Delivery (route unchanged).
-      { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: always },
-      { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: always },
-      { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: always },
-      { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: always },
-      { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: always },
+      { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: need("view_reports") },
+      { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: need("view_reports") },
+      { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: need("view_reports") },
+      { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: need("view_reports") },
+      { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: need("view_reports") },
     ],
   },
 ];
@@ -150,9 +156,15 @@ const TOP_SECTIONS: NavSection[] = [
 // Account and administration pages open from the user menu in the header's
 // top-right corner (components/UserMenu.tsx), not the sidebar.
 const ADMIN_LINKS: NavChild[] = [
-  { href: "/projects", label: "Projects", icon: FolderIcon, visible: isCompanyAdmin },
-  { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
-  { href: "/administration/scopes", label: "Subcontractors", icon: LayersIcon, visible: isCompanyAdmin },
+  { href: "/projects", label: "Projects", icon: FolderIcon, visible: need("manage_projects") },
+  { href: "/user-management", label: "Users", icon: UsersIcon, visible: need("manage_users") },
+  { href: "/administration/scopes", label: "Subcontractors", icon: LayersIcon, visible: need("manage_projects") },
+];
+
+// Pages not in any menu, and what opening them needs.
+const EXTRA_ROUTES: { prefix: string; visible: Visible }[] = [
+  { prefix: "/planning/wbs", visible: need("view_programme") },
+  { prefix: "/administration/profile", visible: always },
 ];
 
 // Browser-tab labels for pages that aren't in the sidebar.
@@ -167,6 +179,14 @@ const ROLE_LABEL: Record<string, string> = {
   company_admin: "Company Admin",
   company_employee: "Employee",
 };
+
+function labelFor(href: string): string {
+  for (const section of TOP_SECTIONS) {
+    const child = section.children.find((c) => c.href === href);
+    if (child) return child.label;
+  }
+  return ADMIN_LINKS.find((l) => l.href === href)?.label ?? ACCOUNT_PAGE_LABELS[href] ?? "your start page";
+}
 
 // Below this width the sidebar is an off-canvas drawer (globals.css uses the
 // same 900px breakpoint).
@@ -227,6 +247,36 @@ function DocumentTitle({ label }: { label: string | null }) {
   return null;
 }
 
+function matches(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Whether the user may open `pathname`: the most specific menu entry (or
+ *  extra route) that covers it decides. Unknown routes are let through — the
+ *  backend still refuses their data. */
+function canOpen(user: User | null, pathname: string | null): boolean {
+  if (!pathname) return true;
+  const entries = [
+    ...TOP_SECTIONS.flatMap((s) => s.children),
+    ...ADMIN_LINKS,
+    ...EXTRA_ROUTES.map((r) => ({ href: r.prefix, visible: r.visible })),
+  ]
+    .filter((e) => matches(pathname, e.href))
+    .sort((a, b) => b.href.length - a.href.length);
+  return entries.length === 0 || entries[0].visible(user);
+}
+
+/** The first page in the menu the user may open — where they land when the
+ *  default (/dashboard) isn't theirs. */
+function homeFor(user: User | null): string {
+  for (const section of TOP_SECTIONS) {
+    const child = section.children.find((c) => c.visible(user));
+    if (child) return child.href;
+  }
+  const admin = ADMIN_LINKS.find((l) => l.visible(user));
+  return admin?.href ?? "/administration/profile";
+}
+
 export default function CompanyLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -238,6 +288,14 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => router.push("/login"));
   }, [router]);
+
+  const allowed = user === null || canOpen(user, pathname);
+  const home = homeFor(user);
+  // Landing on the default page without access to it (e.g. a Users-only
+  // account): go to the first page they have instead of a dead end.
+  useEffect(() => {
+    if (user && !allowed && pathname === "/dashboard" && home !== "/dashboard") router.replace(home);
+  }, [user, allowed, pathname, home, router]);
 
   async function handleSignOut() {
     await api.post("/auth/logout");
@@ -397,7 +455,13 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
           />
           {isMobile && drawerOpen && <div className="sidenav-backdrop" aria-hidden="true" onClick={closeDrawer} />}
           <main className="a-main">
-            <BaselineGate gated={isBaselineGated(activeSection?.key, pathname)}>{children}</BaselineGate>
+            {user === null ? null : allowed ? (
+              <CurrentUserProvider user={user}>
+                <BaselineGate gated={isBaselineGated(activeSection?.key, pathname)}>{children}</BaselineGate>
+              </CurrentUserProvider>
+            ) : (
+              <NoAccess homeHref={home} homeLabel={labelFor(home)} />
+            )}
           </main>
         </div>
       </div>

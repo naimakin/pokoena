@@ -14,7 +14,7 @@ from app.models.activity_relationship import ActivityRelationship
 from app.models.calendar import Calendar
 from app.models.project import Project
 from app.models.risk_analysis import RiskSimulationRun
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.schemas.risk import MonteCarloRequest, MonteCarloResultOut
 from app.services import risk_analysis, risk_resources, risk_signals
 from app.services.schedule_current import get_current_import, to_naive
@@ -30,7 +30,7 @@ def run_monte_carlo_simulation(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> MonteCarloResultOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk, Capability.view_reports)
 
     activities = db.query(Activity).filter(Activity.tenant_id == ctx.tenant_id, Activity.project_id == project_id).all()
     activity_ids = {a.id for a in activities}
@@ -86,12 +86,12 @@ def _company_view(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     if ctx.role == TenantRole.subcontractor:
         raise HTTPException(status_code=403, detail="Not permitted")
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_risk)
 
 
 def _company_edit(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
     _company_view(db, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_risk)
 
 
 class QsraSettingsIn(BaseModel):

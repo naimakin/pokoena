@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.models.activity_code import ActivityCodeType, ActivityCodeValue, TaskActivityCode
 from app.models.project import Project
+from app.models.user_tenant_role import VIEW_ANY
 from app.schemas.activity_code import ActivityCodesOut
 
 router = APIRouter(prefix="/projects/{project_id}/activity-codes", tags=["activity-codes"])
@@ -19,7 +20,7 @@ def get_activity_codes(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ActivityCodesOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
 
     code_types = (
         db.query(ActivityCodeType)

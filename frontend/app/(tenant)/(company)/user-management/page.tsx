@@ -6,6 +6,9 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { CheckIcon, LockIcon, PencilIcon, UsersIcon, XIcon } from "@/components/icons";
 import {
+  ADMIN_GRANTED_ROLES,
+  COMPANY_ROLE_OPTIONS,
+  PROJECT_ROLE_DESCRIPTIONS,
   PROJECT_ROLE_LABELS,
   type Invite,
   type InviteCreatePayload,
@@ -20,22 +23,11 @@ import {
   type User,
 } from "@/lib/types";
 
-// Company roles. A subcontractor never holds these — their only permission is
-// whether they may update progress on their scopes (backend: services/team_roles.py).
-const EMPLOYEE_ROLE_OPTIONS = Object.entries(PROJECT_ROLE_LABELS) as [ProjectRole, string][];
+// Company roles follow the menus (backend: models/user_tenant_role.py). A
+// subcontractor never holds these — their only permission is whether they may
+// update progress on their scopes.
 const SUB_UPDATER: ProjectRole = "activity_status_updater";
-
-// What each role actually unlocks (backend: EDIT_CAPABLE_PROJECT_ROLES and
-// USER_MANAGEMENT_CAPABLE_PROJECT_ROLES in models/user_tenant_role.py).
-const ROLE_HELP: Record<ProjectRole, string> = {
-  project_administrator: "Edit the programme, activities and progress on their projects.",
-  all_access: "Edit everything on their projects except threshold settings.",
-  execution: "Update activities and progress on their projects.",
-  user_management: "Open Users: invite people and change their access.",
-  activity_status_updater: "Update activity status and % complete only.",
-};
-// Only a company admin may hand these out (services/team_roles.py).
-const ADMIN_GRANTED: ProjectRole[] = ["project_administrator", "user_management"];
+const DEFAULT_EMPLOYEE_ROLES: ProjectRole[] = ["viewer"];
 
 const selectStyle = {
   background: "var(--surface)",
@@ -81,7 +73,7 @@ export default function UserManagementPage() {
   const [title, setTitle] = useState("");
   const [phone, setPhone] = useState("");
   const [memberType, setMemberType] = useState<MemberType>("employee");
-  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>(["execution"]);
+  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>(DEFAULT_EMPLOYEE_ROLES);
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [canUpdate, setCanUpdate] = useState(true);
 
@@ -138,7 +130,7 @@ export default function UserManagementPage() {
     setTitle(member?.title ?? "");
     setPhone(member?.phone ?? "");
     setMemberType(member?.role === "subcontractor" ? "subcontractor" : "employee");
-    setProjectRoles(member ? member.project_roles : ["execution"]);
+    setProjectRoles(member ? member.project_roles : DEFAULT_EMPLOYEE_ROLES);
     setProjectIds(member?.project_ids ?? []);
     setCanUpdate(member ? member.project_roles.includes(SUB_UPDATER) : true);
     setOrgId(member?.subcontractor_org_id ?? "");
@@ -180,6 +172,9 @@ export default function UserManagementPage() {
   const editingSelf = editing !== null && editing.user_id === me?.id;
   const accessLocked = editingAdmin || editingSelf;
   const subRoles: ProjectRole[] = canUpdate ? [SUB_UPDATER] : [];
+  // Changing a sign-in email is a company admin's call (backend refuses it for
+  // accounts another company also uses).
+  const canEditEmail = editing === null || me?.role === "company_admin";
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -187,6 +182,7 @@ export default function UserManagementPage() {
     try {
       if (editing) {
         const patch: TeamMemberUpdate = { full_name: fullName, title: title || null, phone: phone || null };
+        if (canEditEmail && email.trim().toLowerCase() !== editing.email) patch.email = email.trim();
         if (!accessLocked) {
           if (isSub) {
             patch.project_roles = subRoles;
@@ -528,7 +524,7 @@ export default function UserManagementPage() {
                       type="email"
                       required
                       value={email}
-                      disabled={editing !== null}
+                      disabled={!canEditEmail}
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
@@ -566,8 +562,9 @@ export default function UserManagementPage() {
                   <>
                     <fieldset className="field role-options">
                       <legend>Roles</legend>
-                      {EMPLOYEE_ROLE_OPTIONS.map(([value, label]) => {
-                        const locked = ADMIN_GRANTED.includes(value) && me?.role !== "company_admin";
+                      {COMPANY_ROLE_OPTIONS.map((value) => {
+                        const label = PROJECT_ROLE_LABELS[value];
+                        const locked = ADMIN_GRANTED_ROLES.includes(value) && me?.role !== "company_admin";
                         const on = projectRoles.includes(value);
                         return (
                           <label key={value} className={`role-option${on ? " is-on" : ""}${locked ? " is-locked" : ""}`}>
@@ -580,13 +577,15 @@ export default function UserManagementPage() {
                             <span>
                               <span className="role-option-name">{label}</span>
                               <span className="role-option-help">
-                                {locked ? "Only a company admin can grant this." : ROLE_HELP[value]}
+                                {locked ? "Only a company admin can grant this." : PROJECT_ROLE_DESCRIPTIONS[value]}
                               </span>
                             </span>
                           </label>
                         );
                       })}
-                      <span className="cell-sub">Without an editing role they can view their projects only.</span>
+                      <span className="cell-sub">
+                        Roles add up. Menus a person&rsquo;s roles don&rsquo;t include are hidden from them.
+                      </span>
                     </fieldset>
                     <div className="field">
                       <label>Projects</label>

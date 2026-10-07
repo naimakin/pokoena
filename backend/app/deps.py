@@ -12,11 +12,12 @@ from app.models.project_membership import ProjectMembership
 from app.models.tenant import Tenant, TenantStatus
 from app.models.user import User
 from app.models.user_tenant_role import (
-    EDIT_CAPABLE_PROJECT_ROLES,
-    USER_MANAGEMENT_CAPABLE_PROJECT_ROLES,
+    Capability,
     ProjectRole,
     TenantRole,
     UserTenantRole,
+    capabilities_for,
+    parse_project_roles,
 )
 
 TENANT_SESSION_COOKIE = "poko_tenant_session"
@@ -37,6 +38,10 @@ class AuthContext:
     project_roles: list[ProjectRole] = field(default_factory=list)
     scope_ids: list[uuid.UUID] = field(default_factory=list)
     subcontractor_org_id: uuid.UUID | None = None
+    # What the caller may do, from role + project_roles (models/user_tenant_role.
+    # ROLE_CAPABILITIES): everything for a company admin, nothing for a
+    # subcontractor (their routes go through the scope model instead).
+    capabilities: frozenset[Capability] = frozenset()
 
 
 def _decode_cookie_token(request: Request, cookie_name: str) -> dict:
@@ -105,13 +110,15 @@ def get_current_tenant_user(request: Request, db: Session = Depends(get_db)) -> 
         )
 
     scope_ids = [uuid.UUID(s) for s in payload.get("scope_ids", [])]
+    project_roles = parse_project_roles(membership.project_roles, membership.role)
     return AuthContext(
         user=user,
         tenant_id=tenant_id,
         role=membership.role,
-        project_roles=[ProjectRole(r) for r in membership.project_roles],
+        project_roles=project_roles,
         scope_ids=scope_ids,
         subcontractor_org_id=membership.subcontractor_org_id,
+        capabilities=capabilities_for(membership.role, project_roles),
     )
 
 
@@ -142,16 +149,36 @@ def require_role(*roles: TenantRole):
     return _check
 
 
+def has_capability(ctx: AuthContext, *caps: Capability) -> bool:
+    """True if the caller holds ANY of `caps`."""
+    return any(c in ctx.capabilities for c in caps)
+
+
+def check_capability(ctx: AuthContext, *caps: Capability) -> None:
+    """403 unless the caller holds any of `caps`. For routes that also serve
+    subcontractors call it only on the company branch — a subcontractor holds
+    no capabilities."""
+    if not has_capability(ctx, *caps):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role doesn't allow this")
+
+
+def require_capability(*caps: Capability):
+    """Route dependency: the caller must hold any of `caps`. The frontend
+    hides the matching menus and buttons (lib/navigation.ts); this is what
+    actually enforces it."""
+
+    def _check(ctx: AuthContext = Depends(get_current_tenant_user)) -> AuthContext:
+        check_capability(ctx, *caps)
+        return ctx
+
+    return _check
+
+
 def require_user_management(ctx: AuthContext = Depends(get_current_tenant_user)) -> AuthContext:
-    """Company Admins always manage their tenant's team. A company_employee or
-    employee can too, but only with the User Management project role —
-    everyone else (Project Administrator, Execution, ...) is 403'd. Subcontractors
-    never manage the team, whatever roles an older row may still carry."""
-    if ctx.role == TenantRole.company_admin:
-        return ctx
-    if ctx.role == TenantRole.company_employee and set(ctx.project_roles) & USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
-        return ctx
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
+    """Company Admins always manage their tenant's team; an employee needs the
+    User Management role. Subcontractors never do."""
+    check_capability(ctx, Capability.manage_users)
+    return ctx
 
 
 def require_tenant_access(resource_tenant_id: uuid.UUID, ctx: AuthContext) -> None:
@@ -176,19 +203,32 @@ def require_scope_access(project_scope_id: uuid.UUID | None, ctx: AuthContext) -
 
 
 def require_project_permission(
-    db: Session, project_id: uuid.UUID, ctx: AuthContext, need_edit: bool = False
+    db: Session,
+    project_id: uuid.UUID,
+    ctx: AuthContext,
+    *caps: Capability,
+    need_edit: bool = False,
+    allow_subcontractor: bool = False,
 ) -> None:
     """Company Admins have full tenant-wide project access. Company Employees
-    need a ProjectMembership row for this specific project. Subcontractors
-    aren't gated by this at all: their access is scope-based
-    (require_scope_access), not project-membership-based. Whether the caller
-    may *edit* (as opposed to just view) is no longer per-project — it's
-    derived from their tenant-wide project_roles via EDIT_CAPABLE_PROJECT_ROLES.
-    """
+    need a ProjectMembership row for this specific project, plus — when the
+    route names `caps` — any one of those capabilities. Subcontractors aren't
+    project-gated here (their access is scope-based, require_scope_access),
+    but a route that names `caps` is a company route and refuses them.
+
+    `need_edit=True` is the old spelling of "may change programme or
+    progress data" and maps to edit_programme / edit_progress.
+
+    `allow_subcontractor=True` marks a route that also serves subcontractors:
+    they pass here and the caller applies require_scope_access per row."""
+    if ctx.role == TenantRole.subcontractor and allow_subcontractor:
+        return
+    if need_edit:
+        caps = (*caps, Capability.edit_programme, Capability.edit_progress)
     if ctx.role == TenantRole.company_admin:
         return
-    if need_edit and not (set(ctx.project_roles) & EDIT_CAPABLE_PROJECT_ROLES):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="View-only access to this project")
+    if caps:
+        check_capability(ctx, *caps)
     if ctx.role == TenantRole.subcontractor:
         return
     membership = (

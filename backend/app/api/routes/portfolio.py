@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
+from app.deps import AuthContext, check_capability, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.models.project import Project
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.schemas.portfolio import (
     PortfolioActivityOut,
     PortfolioMonthActivitiesOut,
@@ -38,6 +38,7 @@ def _require_company(ctx: AuthContext) -> None:
     # A portfolio is company-wide data; a subcontractor only ever sees its scopes.
     if ctx.role == TenantRole.subcontractor:
         raise HTTPException(status_code=403, detail="Not permitted")
+    check_capability(ctx, Capability.view_overview)
 
 
 def _activity_out(p: Project, s: ScoredActivity) -> PortfolioActivityOut:
@@ -141,7 +142,7 @@ def get_month_activities(
     timeline's drill-down."""
     _require_company(ctx)
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_overview)
     pp = project_portfolio(db, ctx.tenant_id, project)
     in_month = activities_in_month(pp.scored, month)
     return PortfolioMonthActivitiesOut(

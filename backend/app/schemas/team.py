@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from app.models.user_tenant_role import ProjectRole, TenantRole
 
@@ -28,6 +28,9 @@ class TeamMemberOut(BaseModel):
 class TeamMemberUpdate(BaseModel):
     """PATCH /team/{id}: every field optional; only what's sent changes."""
 
+    # Company admin only; refused for accounts other companies also use
+    # (services/email_change.py).
+    email: EmailStr | None = None
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     title: str | None = None
     phone: str | None = None

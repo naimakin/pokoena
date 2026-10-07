@@ -190,4 +190,5 @@ def me(ctx: AuthContext = Depends(get_current_tenant_user)) -> UserOut:
         role=ctx.role,
         project_roles=ctx.project_roles,
         scope_ids=ctx.scope_ids,
+        capabilities=sorted(ctx.capabilities, key=lambda c: c.value),
     )

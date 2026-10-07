@@ -11,10 +11,11 @@ from app.models.project_scope import ProjectScope
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.user import User
-from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
+from app.models.user_tenant_role import TenantRole, UserTenantRole, parse_project_roles
 from app.schemas.password_reset import PasswordResetLinkOut
 from app.schemas.team import TeamMemberOut, TeamMemberUpdate
 from app.services import audit
+from app.services.email_change import belongs_to_another_tenant, check_email_change
 from app.services.team_roles import check_project_roles
 from app.services.password_reset import create_password_reset
 
@@ -63,7 +64,7 @@ def _member_out(db: Session, ctx: AuthContext, membership: UserTenantRole, user:
         title=user.title,
         phone=user.phone,
         role=membership.role,
-        project_roles=[ProjectRole(r) for r in membership.project_roles],
+        project_roles=parse_project_roles(membership.project_roles, membership.role),
         is_active=membership.is_active,
         created_at=membership.created_at,
         project_ids=project_ids,
@@ -120,6 +121,12 @@ def update_team_member(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only subcontractors have scopes")
 
     changed: list[str] = []
+    old_email = user.email
+    if "email" in sent and payload.email and payload.email.strip().lower() != user.email:
+        if ctx.role != TenantRole.company_admin:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a company admin can change an email")
+        user.email = check_email_change(user, ctx.tenant_id, payload.email)
+        changed.append("email")
     if "full_name" in sent and payload.full_name and payload.full_name.strip():
         user.full_name = payload.full_name.strip()
         changed.append("full_name")
@@ -192,6 +199,15 @@ def update_team_member(
         changed.append("is_active")
 
     db.commit()
+    if "email" in changed:
+        audit.log(
+            "user.email_changed",
+            tenant_id=ctx.tenant_id,
+            actor_user_id=ctx.user.id,
+            target_type="user",
+            target_id=user.id,
+            event_metadata={"old_email": old_email, "new_email": user.email},
+        )
     audit.log(
         "role.updated",
         tenant_id=ctx.tenant_id,
@@ -256,6 +272,11 @@ def create_team_member_reset_link(
     user = db.get(User, membership.user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team member not found")
+    if user.is_platform_admin or belongs_to_another_tenant(user.id, ctx.tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This person also uses their account at another company, so it can't be reset from here",
+        )
 
     _reset, reset_url = create_password_reset(db, user_id=user.id, created_by_user_id=ctx.user.id)
     audit.log(

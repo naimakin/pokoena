@@ -218,7 +218,7 @@ def test_scope_api_create_preview_update_delete(client, db_session):
 def test_only_a_company_admin_manages_scopes(client, db_session):
     tenant, project, _acts = _programme(db_session)
     employee = create_user(db_session, "pm-scopes@example.com", PASSWORD)
-    add_membership(db_session, employee, tenant, TenantRole.company_employee, project_roles=[ProjectRole.project_administrator])
+    add_membership(db_session, employee, tenant, TenantRole.company_employee, project_roles=[ProjectRole.project_manager])
     _login(client, "pm-scopes@example.com")
 
     response = client.post(f"/projects/{project.id}/scopes", json={"name": "X", "wbs_ids": ["SITE"]})
@@ -258,7 +258,7 @@ def _member(db, tenant, email, role, project_roles=None):
 def test_team_list_carries_projects_scopes_and_firm(client, db_session):
     tenant, project, _acts = _programme(db_session)
     _login(client, _admin(db_session, tenant))
-    employee, emp_row = _member(db_session, tenant, "emp-list@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    employee, emp_row = _member(db_session, tenant, "emp-list@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
     db_session.add(ProjectMembership(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=employee.id))
     db_session.commit()
 
@@ -272,7 +272,7 @@ def test_admin_edits_an_employees_details_roles_and_projects(client, db_session)
     tenant, project, _acts = _programme(db_session)
     other = create_project(db_session, tenant, name="Other")
     _login(client, _admin(db_session, tenant))
-    employee, row = _member(db_session, tenant, "emp-edit@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    employee, row = _member(db_session, tenant, "emp-edit@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
     db_session.add(ProjectMembership(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=employee.id))
     db_session.commit()
 
@@ -281,7 +281,7 @@ def test_admin_edits_an_employees_details_roles_and_projects(client, db_session)
         json={
             "full_name": "Emp Renamed",
             "title": "Planner",
-            "project_roles": ["project_administrator", "execution"],
+            "project_roles": ["project_manager", "delivery_team"],
             "project_ids": [str(other.id)],
         },
     )
@@ -289,7 +289,7 @@ def test_admin_edits_an_employees_details_roles_and_projects(client, db_session)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["full_name"] == "Emp Renamed" and body["title"] == "Planner"
-    assert body["project_roles"] == ["project_administrator", "execution"]
+    assert body["project_roles"] == ["project_manager", "delivery_team"]
     assert body["project_ids"] == [str(other.id)]
 
 
@@ -298,7 +298,7 @@ def test_subcontractor_cannot_be_given_company_roles(client, db_session):
     _login(client, _admin(db_session, tenant))
     _sub, row = _member(db_session, tenant, "sub-roles@example.com", TenantRole.subcontractor)
 
-    for role in ["project_administrator", "all_access", "execution", "user_management"]:
+    for role in ["project_manager", "planner", "delivery_team", "viewer", "dashboard_viewer", "user_management"]:
         response = client.patch(f"/team/{row.id}", json={"project_roles": [role]})
         assert response.status_code == 400, role
 
@@ -311,7 +311,7 @@ def test_subcontractor_invite_refuses_company_roles_and_allows_view_only(client,
     _login(client, _admin(db_session, tenant))
     base = {"full_name": "Sub", "role": "subcontractor"}
 
-    refused = client.post("/invites", json={**base, "email": "s1@example.com", "project_roles": ["project_administrator"]})
+    refused = client.post("/invites", json={**base, "email": "s1@example.com", "project_roles": ["project_manager"]})
     view_only = client.post("/invites", json={**base, "email": "s2@example.com", "project_roles": []})
 
     assert refused.status_code == 400
@@ -338,7 +338,7 @@ def test_admin_assigns_a_subcontractors_scopes_and_firm(client, db_session):
 def test_scope_and_project_fields_follow_the_member_type(client, db_session):
     tenant, project, _acts = _programme(db_session)
     _login(client, _admin(db_session, tenant))
-    _emp, emp_row = _member(db_session, tenant, "emp-type@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    _emp, emp_row = _member(db_session, tenant, "emp-type@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
     _sub, sub_row = _member(db_session, tenant, "sub-type@example.com", TenantRole.subcontractor)
 
     assert client.patch(f"/team/{emp_row.id}", json={"scope_ids": []}).status_code == 400
@@ -350,7 +350,7 @@ def test_unknown_project_or_scope_is_refused(client, db_session):
     other_tenant = create_tenant(db_session, name="Else", slug="else-team")
     foreign = create_project(db_session, other_tenant)
     _login(client, _admin(db_session, tenant))
-    _emp, emp_row = _member(db_session, tenant, "emp-foreign@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    _emp, emp_row = _member(db_session, tenant, "emp-foreign@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
 
     assert client.patch(f"/team/{emp_row.id}", json={"project_ids": [str(foreign.id)]}).status_code == 400
 
@@ -361,12 +361,12 @@ def test_user_management_employee_cannot_grant_admin_roles_or_touch_admins(clien
     admin_row = db_session.query(UserTenantRole).filter(UserTenantRole.role == TenantRole.company_admin,
                                                         UserTenantRole.tenant_id == tenant.id).one()
     _mgr, _ = _member(db_session, tenant, "mgr@example.com", TenantRole.company_employee, [ProjectRole.user_management])
-    _emp, emp_row = _member(db_session, tenant, "emp-mgr@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    _emp, emp_row = _member(db_session, tenant, "emp-mgr@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
     assert admin_email
     _login(client, "mgr@example.com")
 
     escalate = client.patch(f"/team/{emp_row.id}", json={"project_roles": ["user_management"]})
-    ordinary = client.patch(f"/team/{emp_row.id}", json={"project_roles": ["execution", "activity_status_updater"]})
+    ordinary = client.patch(f"/team/{emp_row.id}", json={"project_roles": ["delivery_team", "viewer"]})
     edit_admin = client.patch(f"/team/{admin_row.id}", json={"title": "Boss"})
     remove_admin = client.delete(f"/team/{admin_row.id}")
 
@@ -381,14 +381,14 @@ def test_nobody_changes_their_own_access(client, db_session):
     _mgr, mgr_row = _member(db_session, tenant, "self@example.com", TenantRole.company_employee, [ProjectRole.user_management])
     _login(client, "self@example.com")
 
-    assert client.patch(f"/team/{mgr_row.id}", json={"project_roles": ["project_administrator"]}).status_code == 400
+    assert client.patch(f"/team/{mgr_row.id}", json={"project_roles": ["project_manager"]}).status_code == 400
     assert client.patch(f"/team/{mgr_row.id}", json={"title": "Lead"}).status_code == 200
 
 
 def test_removed_member_can_be_restored(client, db_session):
     tenant, _project, _acts = _programme(db_session)
     _login(client, _admin(db_session, tenant))
-    _emp, row = _member(db_session, tenant, "back@example.com", TenantRole.company_employee, [ProjectRole.execution])
+    _emp, row = _member(db_session, tenant, "back@example.com", TenantRole.company_employee, [ProjectRole.delivery_team])
     assert client.delete(f"/team/{row.id}").status_code == 204
 
     response = client.patch(f"/team/{row.id}", json={"is_active": True})
@@ -443,7 +443,7 @@ def test_migration_maps_subcontractor_roles_to_update_or_view_only():
 
 def test_project_administrator_alone_does_not_open_the_team(client, db_session):
     tenant, _project, _acts = _programme(db_session)
-    _member(db_session, tenant, "pa@example.com", TenantRole.company_employee, [ProjectRole.project_administrator])
+    _member(db_session, tenant, "pa@example.com", TenantRole.company_employee, [ProjectRole.project_manager])
     _login(client, "pa@example.com")
 
     assert client.get("/team").status_code == 403

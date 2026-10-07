@@ -16,6 +16,7 @@ from app.models.activity_code import ActivityCodeValue
 from app.models.calendar import Calendar
 from app.models.project import Project
 from app.models.resource import Resource
+from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.schemas.metadata import ActivityCodeValuePatch, CalendarOut, CalendarPatch, ResourceOut, ResourcePatch
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["metadata"])
@@ -26,7 +27,7 @@ def list_calendars(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> list[Calendar]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     return db.query(Calendar).filter(Calendar.tenant_id == ctx.tenant_id, Calendar.project_id == project_id).all()
 
 
@@ -39,7 +40,7 @@ def patch_calendar(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> Calendar:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     calendar = get_tenant_scoped_or_404(db, Calendar, calendar_id, ctx)
     if calendar.project_id != project_id:
@@ -59,7 +60,7 @@ def list_resources(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
 ) -> list[Resource]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, *VIEW_ANY)
     return db.query(Resource).filter(Resource.tenant_id == ctx.tenant_id, Resource.project_id == project_id).all()
 
 
@@ -72,7 +73,7 @@ def patch_resource(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> Resource:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     resource = get_tenant_scoped_or_404(db, Resource, resource_id, ctx)
     if resource.project_id != project_id:
@@ -96,7 +97,7 @@ def patch_activity_code_value(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> dict:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
     code_value = get_tenant_scoped_or_404(db, ActivityCodeValue, code_value_id, ctx)
     if code_value.project_id != project_id:

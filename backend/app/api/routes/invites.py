@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, require_user_management
 from app.models.invite import Invite
 from app.models.tenant import Tenant
-from app.models.user_tenant_role import ProjectRole, TenantRole, UserTenantRole
+from app.models.user_tenant_role import TenantRole, UserTenantRole, parse_project_roles
 from app.schemas.invite import InviteAccept, InviteCreate, InviteOut, InvitePreview
 from app.schemas.user import UserOut
 from app.services import audit
@@ -67,7 +67,7 @@ def create_tenant_invite(
     )
     return InviteOut(
         id=invite.id, email=invite.email, full_name=invite.full_name, role=invite.role,
-        project_roles=[ProjectRole(r) for r in invite.project_roles], status=invite.status,
+        project_roles=parse_project_roles(invite.project_roles, invite.role), status=invite.status,
         expires_at=invite.expires_at, invite_url=invite_url,
     )
 
@@ -97,7 +97,7 @@ def preview_invite(token: str, db: Session = Depends(get_db)) -> InvitePreview:
         full_name=invite.full_name,
         title=invite.title,
         role=invite.role,
-        project_roles=[ProjectRole(r) for r in invite.project_roles],
+        project_roles=parse_project_roles(invite.project_roles, invite.role),
         tenant_name=tenant.name if tenant else "",
         expires_at=invite.expires_at,
     )

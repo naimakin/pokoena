@@ -26,48 +26,125 @@ class ProjectRole(str, enum.Enum):
     rather than a Postgres ARRAY-of-enum so SQLite, the pytest suite's
     engine, can store it too). company_admin rows never set this: their
     TenantRole already implies unrestricted access, same reasoning as
-    ProjectMembership skipping company admins entirely."""
+    ProjectMembership skipping company admins entirely.
 
-    project_administrator = "project_administrator"
-    all_access = "all_access"
-    execution = "execution"
+    The roles follow the product's menus (Overview / Programme / Delivery /
+    Risk / Reports); what each one unlocks is ROLE_CAPABILITIES below, and the
+    routes check capabilities, never role names (deps.require_capability)."""
+
+    project_manager = "project_manager"
+    planner = "planner"
+    delivery_team = "delivery_team"
+    viewer = "viewer"
+    dashboard_viewer = "dashboard_viewer"
     user_management = "user_management"
+    # Subcontractors only: update progress on their own scope.
     activity_status_updater = "activity_status_updater"
 
 
 PROJECT_ROLE_LABELS: dict[ProjectRole, str] = {
-    ProjectRole.project_administrator: "Project Administrator",
-    ProjectRole.all_access: "All Access (No Threshold Settings)",
-    ProjectRole.execution: "Execution",
+    ProjectRole.project_manager: "Project Manager",
+    ProjectRole.planner: "Planner",
+    ProjectRole.delivery_team: "Delivery Team",
+    ProjectRole.viewer: "Viewer",
+    ProjectRole.dashboard_viewer: "Dashboard Viewer",
     ProjectRole.user_management: "User Management",
-    ProjectRole.activity_status_updater: "Activity Status Updater",
+    ProjectRole.activity_status_updater: "Update progress",
 }
 
-# Roles that may edit schedule/execution data (activities, progress). Kept as
-# a set rather than per-role branching so deps.require_project_permission and
-# any future field-level check share one definition instead of drifting.
-EDIT_CAPABLE_PROJECT_ROLES = {
-    ProjectRole.project_administrator,
-    ProjectRole.all_access,
-    ProjectRole.execution,
-    ProjectRole.activity_status_updater,
+
+class Capability(str, enum.Enum):
+    view_overview = "view_overview"
+    view_programme = "view_programme"
+    edit_programme = "edit_programme"  # WBS, calendars, resources, codes, Scenario Lab, DCMA targets
+    import_programme = "import_programme"  # .xer upload, current import, edit/delete imports
+    manage_baselines = "manage_baselines"
+    export = "export"  # XER, Excel, CSV downloads, Export / Sync to P6
+    view_delivery = "view_delivery"
+    edit_progress = "edit_progress"  # activity progress, EVM progress, recovery-plan authoring
+    view_risk = "view_risk"
+    edit_risk = "edit_risk"
+    view_reports = "view_reports"
+    edit_reports = "edit_reports"  # report designs
+    manage_users = "manage_users"
+    # Company admin only — no role grants these.
+    manage_projects = "manage_projects"
+    review_approvals = "review_approvals"
+
+
+C = Capability
+_SEE_ALL = {C.view_overview, C.view_programme, C.view_delivery, C.view_risk, C.view_reports}
+
+ROLE_CAPABILITIES: dict[ProjectRole, frozenset[Capability]] = {
+    ProjectRole.project_manager: frozenset(
+        _SEE_ALL
+        | {C.edit_programme, C.import_programme, C.manage_baselines, C.export, C.edit_progress, C.edit_risk, C.edit_reports}
+    ),
+    ProjectRole.planner: frozenset(
+        _SEE_ALL | {C.edit_programme, C.import_programme, C.manage_baselines, C.export, C.edit_risk, C.edit_reports}
+    ),
+    ProjectRole.delivery_team: frozenset(_SEE_ALL | {C.edit_progress, C.export, C.edit_reports}),
+    ProjectRole.viewer: frozenset(_SEE_ALL),
+    ProjectRole.dashboard_viewer: frozenset({C.view_overview, C.view_reports}),
+    ProjectRole.user_management: frozenset({C.manage_users}),
+    # A subcontractor's access is their scope (deps.require_scope_access), not capabilities.
+    ProjectRole.activity_status_updater: frozenset(),
 }
 
-# Roles that may manage team members (in addition to company_admin, which
-# always can regardless of project_role). Only User Management: Project
-# Administrator is about the programme, not about who's on the team.
-USER_MANAGEMENT_CAPABLE_PROJECT_ROLES = {ProjectRole.user_management}
+ALL_CAPABILITIES = frozenset(Capability)
+VIEW_ANY = tuple(sorted(_SEE_ALL, key=lambda c: c.value))
 
-# Roles only a company admin may hand out (services/team_roles.py) — a User
-# Management employee could otherwise mint peers with the same reach.
-ADMIN_GRANTED_PROJECT_ROLES = {ProjectRole.project_administrator, ProjectRole.user_management}
+COMPANY_PROJECT_ROLES = {r for r in ProjectRole if r != ProjectRole.activity_status_updater}
+
+# Roles only a company admin may hand out (services/team_roles.py): they
+# import, set baselines or manage people — a User Management employee could
+# otherwise mint peers with more reach than they should.
+ADMIN_GRANTED_PROJECT_ROLES = {ProjectRole.project_manager, ProjectRole.planner, ProjectRole.user_management}
 
 # The only project role a subcontractor may hold: update progress on the
 # activities of their own scopes. Without it they're view only. What they see
 # is decided by their scopes (WBS / activity code rules, services/
-# scope_rules.py), never by a company role — Project Administrator, All
-# Access, Execution and User Management are company-side and refused for them.
+# scope_rules.py), never by a company role.
 SUBCONTRACTOR_PROJECT_ROLES = {ProjectRole.activity_status_updater}
+
+# Roles before the menu-based model (migration 0034). Rows are rewritten by
+# that migration, but code reading a row in the deploy window before it runs
+# (or an old invite) still has to understand them.
+LEGACY_ROLE_MAP: dict[str, list[str]] = {
+    "project_administrator": ["project_manager"],
+    "all_access": ["project_manager"],
+    "execution": ["delivery_team"],
+}
+
+
+def parse_project_roles(raw: list[str] | None, tenant_role: "TenantRole | None" = None) -> list[ProjectRole]:
+    """Stored role strings -> ProjectRole, mapping legacy values and dropping
+    unknown ones (never a 500 on a stale row). A legacy employee holding
+    activity_status_updater is a Delivery Team member now."""
+    out: list[ProjectRole] = []
+    for value in raw or []:
+        mapped = LEGACY_ROLE_MAP.get(value, [value])
+        if value == "activity_status_updater" and tenant_role == TenantRole.company_employee:
+            mapped = ["delivery_team"]
+        for v in mapped:
+            try:
+                role = ProjectRole(v)
+            except ValueError:
+                continue
+            if role not in out:
+                out.append(role)
+    return out
+
+
+def capabilities_for(tenant_role: "TenantRole", project_roles: list[ProjectRole]) -> frozenset[Capability]:
+    if tenant_role == TenantRole.company_admin:
+        return ALL_CAPABILITIES
+    if tenant_role == TenantRole.subcontractor:
+        return frozenset()
+    caps: set[Capability] = set()
+    for role in project_roles:
+        caps |= ROLE_CAPABILITIES.get(role, frozenset())
+    return frozenset(caps)
 
 
 class UserTenantRole(Base):

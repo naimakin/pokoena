@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_tenant_scoped_or_404, require_role
+from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability
 from app.engine.durations import activity_days
 from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineStatus
@@ -17,7 +17,7 @@ from app.models.risk_item import RiskItem, RiskStatus
 from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability
 from app.services.progress_summary import compute_current_update, compute_progress_summary, evm_point_at
 from app.schemas.dashboard import (
     CurrentUpdateOut,
@@ -63,7 +63,7 @@ VALID_THEME_KEYS = {"calm", "high-contrast", "mono-amber"}
 def dashboard_summary(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
 ) -> DashboardSummary:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
@@ -203,7 +203,7 @@ def _merge_with_catalogue(saved: list[dict]) -> list[DashboardWidgetConfig]:
 def get_dashboard_layout(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
 ) -> DashboardLayoutOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
 
@@ -235,7 +235,7 @@ def get_dashboard_layout(
 def put_dashboard_layout(
     payload: DashboardLayoutUpdate,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
 ) -> DashboardLayoutOut:
     get_tenant_scoped_or_404(db, Project, payload.project_id, ctx)
 
@@ -380,7 +380,7 @@ def _negative_float_activities(activities: list[Activity]) -> list[Activity]:
 def get_project_health(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
 ) -> ProjectHealth:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     s = _gather_signals(db, ctx, project_id)
@@ -481,7 +481,7 @@ def get_project_health(
 def get_risk_highlights(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin, TenantRole.company_employee)),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
 ) -> list[RiskHighlight]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     s = _gather_signals(db, ctx, project_id)

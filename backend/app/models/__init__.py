@@ -56,9 +56,8 @@ from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
 from app.models.user_identity import IdentityProvider, UserIdentity
 from app.models.user_tenant_role import (
-    EDIT_CAPABLE_PROJECT_ROLES,
+    Capability,
     PROJECT_ROLE_LABELS,
-    USER_MANAGEMENT_CAPABLE_PROJECT_ROLES,
     ProjectRole,
     TenantRole,
     UserTenantRole,
@@ -131,7 +130,6 @@ __all__ = [
     "UserTenantRole",
     "ProjectRole",
     "PROJECT_ROLE_LABELS",
-    "EDIT_CAPABLE_PROJECT_ROLES",
-    "USER_MANAGEMENT_CAPABLE_PROJECT_ROLES",
+    "Capability",
     "WbsNode",
 ]

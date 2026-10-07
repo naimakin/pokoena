@@ -1,19 +1,66 @@
 export type TenantRole = "company_admin" | "company_employee" | "subcontractor";
 
+// Menu-based roles (backend: models/user_tenant_role.py). A person can hold
+// several; what they add up to comes back from /auth/me as `capabilities`.
 export type ProjectRole =
-  | "project_administrator"
-  | "all_access"
-  | "execution"
+  | "project_manager"
+  | "planner"
+  | "delivery_team"
+  | "viewer"
+  | "dashboard_viewer"
   | "user_management"
+  // Subcontractors only: update progress on their own scope.
   | "activity_status_updater";
 
 export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
-  project_administrator: "Project Administrator",
-  all_access: "All Access (No Threshold Settings)",
-  execution: "Execution",
+  project_manager: "Project Manager",
+  planner: "Planner",
+  delivery_team: "Delivery Team",
+  viewer: "Viewer",
+  dashboard_viewer: "Dashboard Viewer",
   user_management: "User Management",
-  activity_status_updater: "Activity Status Updater",
+  activity_status_updater: "Update progress",
 };
+
+export const PROJECT_ROLE_DESCRIPTIONS: Record<ProjectRole, string> = {
+  project_manager: "Everything in Overview, Programme, Delivery, Risk and Reports — imports, baselines, exports and edits.",
+  planner: "Sees everything; imports programmes, manages baselines, edits Programme and Risk, exports.",
+  delivery_team: "Sees everything; updates progress and writes recovery plans in Delivery; can export.",
+  viewer: "Sees every menu, read only — no imports, exports or edits.",
+  dashboard_viewer: "Overview dashboards and Reports only, read only.",
+  user_management: "Opens Users: invite people and change their access. Add it to another role.",
+  activity_status_updater: "Enter status, dates and % on their scope while an update period is open.",
+};
+
+/** Company roles, in the order the Users page lists them. */
+export const COMPANY_ROLE_OPTIONS: ProjectRole[] = [
+  "project_manager",
+  "planner",
+  "delivery_team",
+  "viewer",
+  "dashboard_viewer",
+  "user_management",
+];
+
+/** Only a company admin may grant these (backend: services/team_roles.py). */
+export const ADMIN_GRANTED_ROLES: ProjectRole[] = ["project_manager", "planner", "user_management"];
+
+export type Capability =
+  | "view_overview"
+  | "view_programme"
+  | "edit_programme"
+  | "import_programme"
+  | "manage_baselines"
+  | "export"
+  | "view_delivery"
+  | "edit_progress"
+  | "view_risk"
+  | "edit_risk"
+  | "view_reports"
+  | "edit_reports"
+  | "manage_users"
+  | "manage_projects"
+  | "review_approvals";
 
 export interface User {
   id: string;
@@ -26,6 +73,7 @@ export interface User {
   role: TenantRole;
   project_roles: ProjectRole[];
   scope_ids: string[];
+  capabilities?: Capability[];
 }
 
 export interface PlatformAdmin {
@@ -942,6 +990,7 @@ export interface TeamMember {
 }
 
 export interface TeamMemberUpdate {
+  email?: string;
   full_name?: string;
   title?: string | null;
   phone?: string | null;

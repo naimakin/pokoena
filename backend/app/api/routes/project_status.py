@@ -17,6 +17,7 @@ from app.models.activity_code import TaskActivityCode
 from app.models.project import Project
 from app.models.schedule_status_snapshot import ScheduleStatusSnapshot
 from app.models.wbs_node import WbsNode
+from app.models.user_tenant_role import Capability
 from app.services.schedule_current import to_naive
 from app.schemas.project_status import (
     PrioritiesOut,
@@ -73,7 +74,7 @@ def get_project_status(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> ProjectStatusOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_reports, Capability.view_overview)
 
     inputs = ps.load_status_inputs(db, ctx.tenant_id, project_id)
     rollup = ps.rollup_from_inputs(inputs)

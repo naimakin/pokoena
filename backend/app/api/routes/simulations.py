@@ -18,7 +18,7 @@ from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_
 from app.models.project import Project
 from app.models.schedule_simulation import ScheduleSimulation
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.services import schedule_simulation as sim
 from app.services.schedule_current import get_current_import, to_naive
 
@@ -69,12 +69,12 @@ def _company_view(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     if ctx.role == TenantRole.subcontractor:
         raise HTTPException(status_code=403, detail="Not permitted")
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_programme)
 
 
 def _company_edit(db: Session, project_id: uuid.UUID, ctx: AuthContext) -> None:
     _company_view(db, project_id, ctx)
-    require_project_permission(db, project_id, ctx, need_edit=True)
+    require_project_permission(db, project_id, ctx, Capability.edit_programme)
 
 
 def _to_edit(e: SimEditIn) -> sim.SimEdit:

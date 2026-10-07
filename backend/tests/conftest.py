@@ -62,6 +62,7 @@ def db_session(monkeypatch):
     monkeypatch.setattr("app.services.invites.BypassSessionLocal", testing_session_local)
     monkeypatch.setattr("app.api.routes.platform.BypassSessionLocal", testing_session_local)
     monkeypatch.setattr("app.api.routes.auth.BypassSessionLocal", testing_session_local)
+    monkeypatch.setattr("app.services.email_change.BypassSessionLocal", testing_session_local)
 
     session = testing_session_local()
     try:

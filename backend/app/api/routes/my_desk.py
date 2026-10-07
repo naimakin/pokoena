@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_tenant_scoped_or_404, require_project_permission, require_role
+from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability, require_project_permission
 from app.models.activity import Activity
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.project import Project
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability
 from app.schemas.my_desk import (
     ActivityDeskOut,
     InboxItemOut,
@@ -32,7 +32,7 @@ from app.services.portfolio import visible_projects
 router = APIRouter(prefix="/my-desk", tags=["my-desk"])
 
 # The company shell's page; subcontractors have their own scope pages.
-_ROLE = require_role(TenantRole.company_admin, TenantRole.company_employee)
+_ROLE = require_capability(Capability.view_delivery)
 
 
 def _projects(db: Session, ctx: AuthContext, project_id: uuid.UUID | None) -> list[Project]:

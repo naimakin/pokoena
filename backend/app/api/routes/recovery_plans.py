@@ -24,7 +24,7 @@ from app.models.recovery_plan import (
 )
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.schemas.recovery_plan import (
     BulkReviewIn,
     ItemOrderIn,
@@ -101,7 +101,7 @@ def get_recovery_report(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> SlipReportOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_delivery, allow_subcontractor=True)
 
     scope_ids = list(ctx.scope_ids) if ctx.role == TenantRole.subcontractor else None
     result = mitigation.build_slip_report(
@@ -127,7 +127,7 @@ def get_plan(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RecoveryPlanDetailOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_delivery, allow_subcontractor=True)
     plan = _load_plan(db, project_id, plan_id, ctx)
     if ctx.role == TenantRole.subcontractor:
         require_scope_access(plan.project_scope_id, ctx)
@@ -151,7 +151,7 @@ def create_plan(
     ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RecoveryPlanDetailOut:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
-    require_project_permission(db, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_delivery, allow_subcontractor=True)
 
     activity = (
         db.query(Activity)
@@ -175,7 +175,7 @@ def create_plan(
         if period is None:
             raise HTTPException(status_code=400, detail="No open update period for this project")
     elif ctx.role == TenantRole.company_employee:
-        require_project_permission(db, project_id, ctx, need_edit=True)
+        require_project_permission(db, project_id, ctx, Capability.edit_progress)
     elif ctx.role != TenantRole.company_admin:
         raise HTTPException(status_code=403, detail="Not permitted")
 

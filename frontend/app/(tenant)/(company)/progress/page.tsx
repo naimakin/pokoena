@@ -13,6 +13,8 @@ import { ManhoursMode } from "@/components/progress/ManhoursMode";
 import { UNGROUPED_KEY } from "@/lib/wbs-tree";
 import { MaximizeIcon, MinimizeIcon } from "@/components/icons";
 import { NoProjectIllo } from "@/components/illustrations";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 
 type Mode = "status" | "manhours";
 const VIEW = "progress";
@@ -48,6 +50,7 @@ const selectStyle: CSSProperties = {
 export default function ProgressPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
+  const user = useCurrentUser();
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [wbsNodes, setWbsNodes] = useState<WbsNode[]>([]);
@@ -355,7 +358,7 @@ export default function ProgressPage() {
   // Editing (status/dates/manhours) only ever applies to the live schedule —
   // a historical program is viewed read-only via its frozen snapshot, same as
   // Planning > WBS/Gantt. Route-level role checks still apply on top.
-  const canEdit = isViewingCurrent;
+  const canEdit = isViewingCurrent && can(user, "edit_progress");
 
   return (
     <>

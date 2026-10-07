@@ -10,6 +10,8 @@ import { ScurveChart, selectStyle } from "@/components/ScurveChart";
 import { ExpandableChartCard } from "@/components/ExpandableChartCard";
 import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 
 const GRANULARITIES = ["daily", "weekly", "monthly"] as const;
 type Granularity = (typeof GRANULARITIES)[number];
@@ -27,6 +29,7 @@ function indexColor(v: number | null | undefined): string {
 
 export default function EvmPage() {
   const { project } = useProjectContext();
+  const user = useCurrentUser();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,9 +182,11 @@ export default function EvmPage() {
                   <label htmlFor="version-label">Version label</label>
                   <input id="version-label" type="text" value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} />
                 </div>
-                <button className="btn btn-primary" onClick={lockBaseline} disabled={locking}>
-                  <LockIcon className="icon" /> {locking ? "Locking…" : "Lock Baseline"}
-                </button>
+                {can(user, "manage_baselines") && (
+                  <button className="btn btn-primary" onClick={lockBaseline} disabled={locking}>
+                    <LockIcon className="icon" /> {locking ? "Locking…" : "Lock Baseline"}
+                  </button>
+                )}
               </div>
               {lockError && <p className="login-error">{lockError}</p>}
             </div>
@@ -197,12 +202,16 @@ export default function EvmPage() {
                 </span>
               </div>
               <div style={{ display: "flex", gap: ".5rem" }}>
-                <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={exporting}>
-                  <DownloadIcon className="icon" /> {exporting ? "Exporting…" : "Export Excel"}
-                </button>
-                <button className="btn btn-danger btn-sm" onClick={supersedeBaseline} disabled={superseding}>
-                  {superseding ? "Superseding…" : "Supersede"}
-                </button>
+                {can(user, "export") && (
+                  <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={exporting}>
+                    <DownloadIcon className="icon" /> {exporting ? "Exporting…" : "Export Excel"}
+                  </button>
+                )}
+                {can(user, "manage_baselines") && (
+                  <button className="btn btn-danger btn-sm" onClick={supersedeBaseline} disabled={superseding}>
+                    {superseding ? "Superseding…" : "Supersede"}
+                  </button>
+                )}
               </div>
             </div>
             {lockError && (

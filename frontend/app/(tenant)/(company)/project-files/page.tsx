@@ -9,6 +9,8 @@ import type { BaselineStatus, ScheduleImport, SyncLogEntry } from "@/lib/types";
 import { CheckIcon, LockIcon, PencilIcon, TrashIcon, UploadCloudIcon, XIcon } from "@/components/icons";
 import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
+import { can } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/user-context";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -64,6 +66,8 @@ function fmtDateTime(iso: string): string {
 export default function ProgramLibraryPage() {
   const { showToast } = useToast();
   const { project } = useProjectContext();
+  const user = useCurrentUser();
+  const canImport = can(user, "import_programme");
   const [imports, setImports] = useState<ScheduleImport[]>([]);
   const [syncExports, setSyncExports] = useState<SyncLogEntry[]>([]);
   const [linkExportId, setLinkExportId] = useState("");
@@ -305,6 +309,7 @@ export default function ProgramLibraryPage() {
               </div>
             )}
 
+            {canImport && (
             <div
               className={`dropzone${dragOver ? " dragover" : ""}`}
               onClick={() => fileInputRef.current?.click()}
@@ -320,6 +325,7 @@ export default function ProgramLibraryPage() {
               <div className="dropzone-sub">Recomputes CPM dates, float, and critical path for this project.</div>
               <input ref={fileInputRef} type="file" accept=".xer" onChange={handleFileInput} disabled={uploading} />
             </div>
+            )}
 
             {syncExports.length > 0 && (
               <div
@@ -493,7 +499,7 @@ export default function ProgramLibraryPage() {
                           </td>
                           <td style={{ textAlign: "right" }}>
                             <div className="actions" style={{ justifyContent: "flex-end" }}>
-                              {editing ? (
+                              {!canImport ? null : editing ? (
                                 <>
                                   <button
                                     className="act-btn act-approve"
