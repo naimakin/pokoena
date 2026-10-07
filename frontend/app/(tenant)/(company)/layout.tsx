@@ -152,12 +152,14 @@ const TOP_SECTIONS: NavSection[] = [
 const ADMIN_LINKS: NavChild[] = [
   { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
   { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
+  { href: "/administration/scopes", label: "Subcontractor scopes", icon: LayersIcon, visible: isCompanyAdmin },
 ];
 
 // Browser-tab labels for pages that aren't in the sidebar.
 const ACCOUNT_PAGE_LABELS: Record<string, string> = {
   "/projects": "Projects",
   "/user-management": "Users",
+  "/administration/scopes": "Subcontractor scopes",
   "/administration/profile": "My Profile",
 };
 

@@ -37,6 +37,7 @@ export default function ScopePage() {
   const { showToast } = useToast();
 
   const [user, setUser] = useState<User | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [period, setPeriod] = useState<UpdatePeriod | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -49,7 +50,7 @@ export default function ScopePage() {
   const [submitted, setSubmitted] = useState(false);
   const [slippedCount, setSlippedCount] = useState(0);
 
-  async function load() {
+  async function load(projectId?: string) {
     setLoading(true);
     setError(null);
     try {
@@ -60,10 +61,16 @@ export default function ScopePage() {
       // already filtered server-side to this subcontractor's assigned
       // scopes (require_scope_access) — there's no "mine" toggle to get
       // wrong here, the backend never returns anything else.
-      const projects = await api.get<Project[]>("/projects");
-      const active = projects[0] ?? null;
+      const projectList = await api.get<Project[]>("/projects");
+      setProjects(projectList);
+      const active = projectList.find((p) => p.id === projectId) ?? projectList[0] ?? null;
       setProject(active);
-      if (!active) return;
+      setSubmitted(false);
+      if (!active) {
+        setActivities([]);
+        setPeriod(null);
+        return;
+      }
 
       const periods = await api.get<UpdatePeriod[]>(`/update-periods?project_id=${active.id}`);
       const openPeriod = periods.find((p) => p.status === "open") ?? null;
@@ -133,7 +140,7 @@ export default function ScopePage() {
       });
       showToast("Flagged for admin review — you'll be notified once it's decided");
       setFlagTarget(null);
-      load();
+      load(project?.id);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to submit the flag.", "error");
     } finally {
@@ -167,6 +174,8 @@ export default function ScopePage() {
   }, [changeRequests, relationships]);
 
   const updatedCount = activities.filter((a) => a.status !== "not_started").length;
+  // Granted by the company on Users: "Update progress" or "View only".
+  const canUpdate = Boolean(user?.project_roles?.includes("activity_status_updater"));
 
   if (loading) {
     return (
@@ -197,7 +206,22 @@ export default function ScopePage() {
               </div>
               <div>
                 <div className="sub-company">{user?.full_name}</div>
-                <div className="sub-project">{project?.name ?? "—"}</div>
+                {projects.length > 1 ? (
+                  <select
+                    className="sub-project-select"
+                    value={project?.id ?? ""}
+                    onChange={(e) => load(e.target.value)}
+                    aria-label="Project"
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="sub-project">{project?.name ?? "No project assigned"}</div>
+                )}
               </div>
             </div>
             <button className="signout" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
@@ -227,14 +251,27 @@ export default function ScopePage() {
               <span className="d">Open ›</span>
             </Link>
           )}
-          {activities.length === 0 && <p className="empty-state">No activities are assigned to your scope yet.</p>}
+          {!canUpdate && activities.length > 0 && (
+            <div className="deadline-banner good" style={{ marginBottom: ".8rem" }}>
+              <ClockIcon className="icon" />
+              View only — ask the project team if you need to update progress.
+            </div>
+          )}
+          {!project && (
+            <p className="empty-state">
+              You haven&rsquo;t been given a scope yet. Ask the project team to assign you one.
+            </p>
+          )}
+          {project && activities.length === 0 && (
+            <p className="empty-state">No activities are in your scope on this project yet.</p>
+          )}
           {activities.map((activity) => (
             <ActivityCard
               key={activity.id}
               activity={activity}
               relationships={relationships[activity.id] ?? []}
               pendingFlag={pendingActivityIds.has(activity.id)}
-              readOnly={!period}
+              readOnly={!period || !canUpdate}
               onCommit={(patch) => handleCommit(activity.id, patch)}
               onFlag={(relationship, fieldLabel, currentValueLabel) =>
                 setFlagTarget({ activity, relationship, fieldLabel, currentValueLabel })
@@ -258,7 +295,7 @@ export default function ScopePage() {
             </div>
           </div>
           <div className="spacer" />
-          <button className="btn btn-primary" onClick={handleSubmitUpdates} disabled={!period || submitted}>
+          <button className="btn btn-primary" onClick={handleSubmitUpdates} disabled={!period || submitted || !canUpdate}>
             {submitted ? "Submitted" : "Submit My Updates"}
           </button>
         </div>

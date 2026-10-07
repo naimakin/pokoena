@@ -53,6 +53,9 @@ def add_membership(
     subcontractor_org_id: uuid.UUID | None = None,
     project_roles: list[ProjectRole] | None = None,
 ) -> UserTenantRole:
+    if project_roles is None and role == TenantRole.subcontractor:
+        # What the invite form gives a subcontractor by default.
+        project_roles = [ProjectRole.activity_status_updater]
     membership = UserTenantRole(
         id=uuid.uuid4(),
         user_id=user.id,

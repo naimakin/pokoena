@@ -60,6 +60,13 @@ USER_MANAGEMENT_CAPABLE_PROJECT_ROLES = {
     ProjectRole.user_management,
 }
 
+# The only project role a subcontractor may hold: update progress on the
+# activities of their own scopes. Without it they're view only. What they see
+# is decided by their scopes (WBS / activity code rules, services/
+# scope_rules.py), never by a company role — Project Administrator, All
+# Access, Execution and User Management are company-side and refused for them.
+SUBCONTRACTOR_PROJECT_ROLES = {ProjectRole.activity_status_updater}
+
 
 class UserTenantRole(Base):
     """One row per (user, tenant) membership. A user could in principle belong

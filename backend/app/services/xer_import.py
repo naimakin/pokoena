@@ -70,6 +70,7 @@ from app.services.baseline import (
 from app.services.activity_progress import apply_units_from_progress, clear_float_if_finished, display_percent
 from app.services.project_status import compute_status_rollup
 from app.services.schedule_current import get_current_import, mark_current, to_naive
+from app.services.scope_rules import apply_scope_rules
 
 _TOL = 0.01
 
@@ -677,6 +678,11 @@ def import_xer(
                     activity_id=activity_row_id, code_value_id=code_value_row_id,
                 )
             )
+        db.flush()
+
+        # --- subcontractor scopes: rule-based scopes (WBS / activity code)
+        # pick up activities the new file added or moved. ---
+        apply_scope_rules(db, ctx.tenant_id, project_id)
     else:
         # --- Non-destructive baseline path: build this import's historical
         # snapshot straight from the parsed file, field-for-field the same

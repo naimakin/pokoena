@@ -93,6 +93,11 @@ DESIGN.md                 ← full design system spec
   `personal_notes` are private per user: RLS isolates the tenant, every query also filters on
   `user_id`, and there is no admin read path. Both key on `activity_external_id` (re-linked on P6
   rename in `xer_import.py`, like recovery plans).
+- Subcontractor access = scopes, never company roles. A `ProjectScope` names its activities by rule
+  (`wbs_ids` with subtree + `code_value_ids`, stored as P6 ids; `services/scope_rules.py`), materialised
+  on `Activity.project_scope_id` after every rule change and every import (oldest scope wins an overlap).
+  A subcontractor may hold only `activity_status_updater` (update progress) or nothing (view only) —
+  enforced in `services/team_roles.py` for both invites and `PATCH /team/{id}`.
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

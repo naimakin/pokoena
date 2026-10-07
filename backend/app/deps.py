@@ -146,10 +146,11 @@ def require_user_management(ctx: AuthContext = Depends(get_current_tenant_user))
     """Company Admins always manage their tenant's team. A company_employee or
     subcontractor can too, but only if they hold at least one of the User
     Management / Project Administrator project_roles — everyone else (e.g.
-    holding only Execution/Activity Status Updater) is 403'd."""
+    holding only Execution/Activity Status Updater) is 403'd. Subcontractors
+    never manage the team, whatever roles an older row may still carry."""
     if ctx.role == TenantRole.company_admin:
         return ctx
-    if set(ctx.project_roles) & USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
+    if ctx.role == TenantRole.company_employee and set(ctx.project_roles) & USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
         return ctx
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
 

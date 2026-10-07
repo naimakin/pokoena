@@ -809,6 +809,7 @@ tr.resolved{opacity:.45}
 .sub-id{display:flex;align-items:center;gap:.5rem}
 .sub-company{font-size:.875rem;font-weight:700}
 .sub-project{font-size:.6875rem;color:var(--text-muted)}
+.sub-project-select{font-size:.75rem;color:var(--text-secondary);background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.1rem .3rem;max-width:220px}
 .deadline-banner{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem;border-radius:var(--radius-md);background:var(--warn-soft);color:var(--warn);font-size:.75rem;font-weight:500}
 .deadline-banner.good{background:var(--good-soft);color:var(--good)}
 .deadline-banner .icon{flex:none}
@@ -2563,3 +2564,35 @@ tbody tr.sim-chain-row,tbody tr.sim-chain-row:hover{background:var(--surface-2)}
 .note-done-toggle:hover{color:var(--accent-strong)}
 .act-private{border-top:1px solid var(--border);padding-top:.9rem;display:flex;flex-direction:column;gap:.5rem}
 .act-private-head{display:flex;align-items:center;gap:.4rem}
+
+/* ---- Administration > Subcontractor scopes: rule editor ---- */
+.scope-editor{min-height:0}
+.scope-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:.9rem;min-height:0}
+.scope-pick{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius-md);min-height:0;overflow:hidden}
+.scope-pick-head{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.6rem .7rem;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.scope-search{flex:1;min-width:160px}
+.scope-list{overflow:auto;max-height:46vh;padding:.3rem 0}
+.scope-row{display:flex;align-items:center;gap:.25rem;padding:.22rem .7rem .22rem 6px;font-size:.8125rem}
+.scope-row:hover{background:var(--surface-2)}
+.scope-row.is-on{background:var(--accent-soft)}
+.scope-row label{display:flex;align-items:center;gap:.45rem;flex:1;min-width:0;cursor:pointer}
+.scope-row input{width:auto;flex:none}
+.scope-row input:disabled + .scope-code,.scope-row input:disabled ~ .scope-name{color:var(--text-secondary)}
+.scope-twisty{width:20px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);color:var(--text-muted)}
+button.scope-twisty:hover{background:var(--surface-3);color:var(--text-primary)}
+.scope-code{font-size:.75rem;color:var(--text-secondary);flex:none}
+.scope-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)}
+.scope-count{font-size:.75rem;color:var(--text-muted);flex:none;min-width:2.5rem;text-align:right}
+.scope-code-group + .scope-code-group{margin-top:.35rem;border-top:1px solid var(--border);padding-top:.35rem}
+.scope-group-label{font-size:.75rem;font-weight:500;color:var(--text-secondary);padding:.3rem .8rem}
+.scope-preview{display:flex;flex-direction:column;gap:.55rem;border:1px solid var(--border);border-radius:var(--radius-md);padding:.75rem .8rem;background:var(--surface-2);min-width:0;overflow:auto;max-height:56vh}
+.scope-preview-label{font-size:.6875rem;font-weight:500;color:var(--text-secondary)}
+.scope-preview-count{font-size:.875rem;color:var(--text-primary)}
+.scope-preview-count .mono{font-size:1.375rem;font-weight:600;margin-right:.25rem}
+.scope-sample{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;color:var(--text-primary)}
+.scope-sample li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scope-sample .mono{color:var(--text-secondary);margin-right:.3rem}
+@media (max-width:760px){
+  .scope-grid{grid-template-columns:1fr}
+  .scope-list{max-height:38vh}
+}

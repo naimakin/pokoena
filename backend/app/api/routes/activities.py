@@ -23,7 +23,7 @@ from app.models.resource_assignment import ResourceAssignment
 from app.models.schedule_import import ScheduleImport
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
 from app.models.user import User
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import ProjectRole, TenantRole
 from app.schemas.activity import (
     ActivityAssignmentOut,
     ActivityBatchResultOut,
@@ -145,6 +145,8 @@ def _authorize_progress_edit(db: Session, project_id: uuid.UUID, ctx: AuthContex
     if ctx.role == TenantRole.subcontractor:
         if not ctx.scope_ids:
             raise HTTPException(status_code=403, detail="Not permitted")
+        if ProjectRole.activity_status_updater not in ctx.project_roles:
+            raise HTTPException(status_code=403, detail="View-only access to your scope")
         open_period = (
             db.query(UpdatePeriod)
             .filter(

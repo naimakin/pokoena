@@ -1,10 +1,14 @@
 import uuid
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+_JSON = sa.JSON().with_variant(postgresql.JSONB, "postgresql")
 
 
 class ProjectScope(Base):
@@ -28,4 +32,10 @@ class ProjectScope(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     discipline: Mapped[str] = mapped_column(String(120), nullable=False)
+    # The rule naming this scope's activities (services/scope_rules.py): P6
+    # PROJWBS.wbs_id values (each with its subtree) and ACTVCODE.actv_code_id
+    # values — P6's ids, not Poko row ids, so the rule survives re-imports.
+    # Both empty = no rule; activities are then assigned some other way.
+    wbs_ids: Mapped[list[str]] = mapped_column(_JSON, nullable=False, default=list)
+    code_value_ids: Mapped[list[str]] = mapped_column(_JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

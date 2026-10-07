@@ -11,6 +11,7 @@ from app.schemas.invite import InviteAccept, InviteCreate, InviteOut, InvitePrev
 from app.schemas.user import UserOut
 from app.services import audit
 from app.services.invites import InviteError, accept_invite, create_invite, get_invite_preview
+from app.services.team_roles import check_project_roles
 from app.services.tenant_session import issue_tenant_session
 
 router = APIRouter(tags=["invites"])
@@ -37,8 +38,7 @@ def create_tenant_invite(
             detail="Additional company admins aren't invited through this endpoint yet",
         )
 
-    if payload.role in (TenantRole.company_employee, TenantRole.subcontractor) and not payload.project_roles:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one project_role is required")
+    project_roles = check_project_roles(payload.role, payload.project_roles, ctx)
 
     tenant = db.get(Tenant, ctx.tenant_id)
     try:
@@ -50,7 +50,7 @@ def create_tenant_invite(
             title=payload.title,
             phone=payload.phone,
             role=payload.role,
-            project_roles=payload.project_roles,
+            project_roles=project_roles,
             invited_by_user_id=ctx.user.id,
             tenant_name=tenant.name if tenant else None,
             payload=invite_payload,

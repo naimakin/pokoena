@@ -106,6 +106,23 @@ export interface ProjectScope {
   subcontractor_org_id: string | null;
   name: string;
   discipline: string;
+  /** The scope's rule: P6 WBS ids (each with its subtree) and activity code ids. */
+  wbs_ids: string[];
+  code_value_ids: string[];
+  activity_count: number;
+  member_count: number;
+}
+
+export interface ScopeRulePayload {
+  wbs_ids: string[];
+  code_value_ids: string[];
+}
+
+export interface ScopePreview {
+  count: number;
+  /** Matched activities an older scope already holds (an activity has one scope). */
+  claimed_elsewhere: number;
+  sample: { external_id: string; name: string; wbs_path: string | null }[];
 }
 
 export type UpdatePeriodStatus = "open" | "closed";
@@ -918,6 +935,21 @@ export interface TeamMember {
   project_roles: ProjectRole[];
   is_active: boolean;
   created_at: string;
+  project_ids: string[];
+  scope_ids: string[];
+  subcontractor_org_id: string | null;
+  subcontractor_org_name: string | null;
+}
+
+export interface TeamMemberUpdate {
+  full_name?: string;
+  title?: string | null;
+  phone?: string | null;
+  project_roles?: ProjectRole[];
+  project_ids?: string[];
+  scope_ids?: string[];
+  subcontractor_org_id?: string | null;
+  is_active?: boolean;
 }
 
 export interface SubcontractorOrg {
