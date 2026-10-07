@@ -5,14 +5,25 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability, require_project_permission
+from app.deps import (
+    AuthContext,
+    get_current_tenant_user,
+    get_tenant_scoped_or_404,
+    require_capability,
+    require_project_permission,
+)
 from app.models.activity import Activity
+from app.models.activity_event import ActivityEvent
+from app.models.mention import Mention
 from app.models.my_desk import ActivityPin, PersonalNote
+from app.models.user import User
 from app.models.project import Project
 from app.models.user_tenant_role import Capability
 from app.schemas.my_desk import (
     ActivityDeskOut,
     InboxItemOut,
+    MentionCountOut,
+    MentionOut,
     NoteCreate,
     NoteOut,
     NoteUpdate,
@@ -61,6 +72,85 @@ def _own_note(db: Session, ctx: AuthContext, note_id: uuid.UUID) -> PersonalNote
 
 def _project_map(db: Session, ctx: AuthContext) -> dict[uuid.UUID, Project]:
     return {p.id: p for p in visible_projects(db, ctx.tenant_id, ctx.user.id, ctx.role)}
+
+
+# ---------------------------------------------------------------- mentions
+# Open to every signed-in tenant user, subcontractors included: being tagged is
+# about you, not about a page. Every query filters on mentioned_user_id.
+
+
+def _mentions_query(db: Session, ctx: AuthContext):
+    return db.query(Mention).filter(Mention.tenant_id == ctx.tenant_id, Mention.mentioned_user_id == ctx.user.id)
+
+
+@router.get("/mentions", response_model=list[MentionOut])
+def list_mentions(
+    unread: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[MentionOut]:
+    query = _mentions_query(db, ctx)
+    if unread:
+        query = query.filter(Mention.read_at.is_(None))
+    rows = query.order_by(Mention.created_at.desc()).limit(limit).all()
+    events = {
+        e.id: e
+        for e in db.query(ActivityEvent).filter(ActivityEvent.id.in_([m.activity_event_id for m in rows]))
+    } if rows else {}
+    names = dict(
+        db.query(User.id, User.full_name).filter(User.id.in_({m.author_user_id for m in rows if m.author_user_id}))
+    ) if rows else {}
+    activities = dict(
+        db.query(Activity.id, Activity.name).filter(Activity.id.in_({m.activity_id for m in rows if m.activity_id}))
+    ) if rows else {}
+    projects = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_({m.project_id for m in rows}))
+    } if rows else {}
+    return [
+        MentionOut(
+            id=m.id,
+            project_id=m.project_id,
+            project_code=projects[m.project_id].code if m.project_id in projects else "",
+            activity_id=m.activity_id,
+            activity_external_id=m.activity_external_id,
+            activity_name=activities.get(m.activity_id),
+            author_name=names.get(m.author_user_id),
+            body=events[m.activity_event_id].body or "" if m.activity_event_id in events else "",
+            event_id=m.activity_event_id,
+            created_at=m.created_at,
+            read_at=m.read_at,
+        )
+        for m in rows
+    ]
+
+
+@router.get("/mentions/count", response_model=MentionCountOut)
+def count_mentions(db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)) -> MentionCountOut:
+    return MentionCountOut(unread=_mentions_query(db, ctx).filter(Mention.read_at.is_(None)).count())
+
+
+@router.post("/mentions/read-all", response_model=MentionCountOut)
+def read_all_mentions(db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)) -> MentionCountOut:
+    _mentions_query(db, ctx).filter(Mention.read_at.is_(None)).update(
+        {Mention.read_at: datetime.now(timezone.utc)}, synchronize_session=False
+    )
+    db.commit()
+    return MentionCountOut(unread=0)
+
+
+@router.post("/mentions/{mention_id}/read", response_model=MentionCountOut)
+def read_mention(
+    mention_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
+) -> MentionCountOut:
+    mention = _mentions_query(db, ctx).filter(Mention.id == mention_id).first()
+    if mention is None:
+        # Someone else's mention doesn't exist as far as the caller can tell.
+        raise HTTPException(status_code=404, detail="Mention not found")
+    if mention.read_at is None:
+        mention.read_at = datetime.now(timezone.utc)
+        db.commit()
+    return MentionCountOut(unread=_mentions_query(db, ctx).filter(Mention.read_at.is_(None)).count())
 
 
 # ---------------------------------------------------------------- inbox / suggestions

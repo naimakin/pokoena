@@ -9,7 +9,7 @@ from app.schemas.activity import ActivityOut
 InboxKind = Literal[
     "recovery_review",
     "recovery_revision",
-    "flag_review",
+    "mention",
     "mitigation_review",
     "mitigation_revision",
     "update_period",
@@ -31,6 +31,27 @@ class InboxItemOut(BaseModel):
     due_at: datetime | None = None
     tone: InboxTone = "info"
     href: str
+
+
+class MentionOut(BaseModel):
+    """Someone tagged the caller in an activity comment."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    project_code: str
+    activity_id: uuid.UUID | None
+    activity_external_id: str
+    activity_name: str | None
+    author_name: str | None
+    # The comment with @[Name](user:id) tokens kept, for the client to render chips.
+    body: str
+    event_id: uuid.UUID
+    created_at: datetime
+    read_at: datetime | None
+
+
+class MentionCountOut(BaseModel):
+    unread: int
 
 
 class PinOut(BaseModel):

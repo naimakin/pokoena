@@ -8,6 +8,9 @@ import { BREAKDOWN_LABELS, criticalityChip, criticalityLabel, SITE_RISK_OPTIONS 
 import { useToast } from "@/components/Toast";
 import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
 import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
+import { MentionTextarea } from "@/components/MentionTextarea";
+import { MentionText } from "@/components/MentionText";
+import { serializeMentions } from "@/lib/mentions";
 import type {
   Activity,
   ActivityAssignment,
@@ -132,6 +135,7 @@ export function ActivityModal({
   canEdit,
   wbsNodes,
   snapshotOnly = false,
+  highlightEventId,
   onClose,
   onSaved,
 }: {
@@ -144,6 +148,8 @@ export function ActivityModal({
   // activity to fetch relationships or history for; say so instead of
   // rendering an empty tab that reads as "this activity has no predecessors".
   snapshotOnly?: boolean;
+  /** A comment to scroll to and mark (opened from a My Desk mention). */
+  highlightEventId?: string | null;
   onClose: () => void;
   onSaved: (updated: Activity) => void;
 }) {
@@ -153,6 +159,7 @@ export function ActivityModal({
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [commentPicked, setCommentPicked] = useState<Record<string, string>>({});
   const [posting, setPosting] = useState(false);
 
   const [relationships, setRelationships] = useState<ActivityRelationship[] | null>(null);
@@ -209,6 +216,11 @@ export function ActivityModal({
       .then(setDesk)
       .catch(() => setDesk(null));
   }, [activityId, snapshotOnly]);
+
+  useEffect(() => {
+    if (!highlightEventId || !history) return;
+    document.getElementById(`comment-${highlightEventId}`)?.scrollIntoView({ block: "center" });
+  }, [highlightEventId, history]);
 
   const comments = useMemo(
     () => (history ?? []).filter((h) => h.kind === "comment"),
@@ -324,12 +336,13 @@ export function ActivityModal({
   }
 
   async function postComment() {
-    const body = commentBody.trim();
+    const body = serializeMentions(commentBody.trim(), commentPicked);
     if (!activity || !body || posting) return;
     setPosting(true);
     try {
       await api.post(`/activities/${activity.id}/comments`, { body });
       setCommentBody("");
+      setCommentPicked({});
       setHistory(null);
       await loadHistory();
     } catch (err) {
@@ -640,11 +653,16 @@ export function ActivityModal({
               <div className="act-comments">
                 <div className="act-section-label">Comments</div>
                 <div className="act-comment-box">
-                  <textarea
+                  <MentionTextarea
+                    activityId={activity.id}
                     rows={2}
-                    placeholder="Add a comment…"
+                    placeholder="Add a comment — type @ to tag someone"
+                    ariaLabel="Comment"
                     value={commentBody}
-                    onChange={(e) => setCommentBody(e.target.value)}
+                    onChange={setCommentBody}
+                    picked={commentPicked}
+                    onPickedChange={setCommentPicked}
+                    onSubmit={postComment}
                   />
                   <button
                     className="btn btn-secondary btn-sm"
@@ -659,11 +677,17 @@ export function ActivityModal({
                 ) : (
                   <ul className="act-comment-list">
                     {comments.map((c, i) => (
-                      <li key={`${c.created_at}-${i}`}>
+                      <li
+                        key={c.event_id ?? `${c.created_at}-${i}`}
+                        id={c.event_id ? `comment-${c.event_id}` : undefined}
+                        className={c.event_id && c.event_id === highlightEventId ? "is-highlighted" : undefined}
+                      >
                         <div className="act-comment-meta">
                           <b>{c.actor_name ?? "Someone"}</b> · {fmtDateTime(c.created_at)}
                         </div>
-                        <div>{c.body}</div>
+                        <div>
+                          <MentionText body={c.body ?? ""} />
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -809,7 +833,9 @@ export function ActivityModal({
                       </span>
                       <div style={{ minWidth: 0 }}>
                         {h.kind === "comment" ? (
-                          <div>{h.body}</div>
+                          <div>
+                            <MentionText body={h.body ?? ""} />
+                          </div>
                         ) : (
                           <div>
                             <b>{FIELD_LABELS[h.field ?? ""] ?? h.field}</b>{" "}

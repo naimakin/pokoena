@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { FlagReviewModal } from "@/components/FlagReviewModal";
+import { MentionText } from "@/components/MentionText";
 import { fmtP6Date } from "@/components/reporting/format";
 import { PokoGlyph } from "@/components/brand";
 import {
@@ -15,7 +15,7 @@ import {
   ChevronRightIcon,
   ClockIcon,
   EyeIcon,
-  FlagIcon,
+  AtSignIcon,
   LockIcon,
   LogOutIcon,
 } from "@/components/icons";
@@ -24,7 +24,7 @@ import type {
   Activity,
   ActivityRelationship,
   ActivityUpdatePayload,
-  ChangeRequest,
+  MyMention,
   Project,
   ProjectScope,
   SlipReport,
@@ -39,13 +39,6 @@ const STATUS: Record<Activity["status"], { label: string; chip: string }> = {
   in_progress: { label: "In progress", chip: "chip-info" },
   complete: { label: "Complete", chip: "chip-good" },
 };
-
-interface FlagTarget {
-  activity: Activity;
-  relationship: ActivityRelationship;
-  fieldLabel: string;
-  currentValueLabel: string;
-}
 
 function daysUntil(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -66,7 +59,7 @@ export default function ScopePage() {
   const [period, setPeriod] = useState<UpdatePeriod | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [relationships, setRelationships] = useState<Record<string, ActivityRelationship[]>>({});
-  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [mentions, setMentions] = useState<MyMention[]>([]);
   const [slippedCount, setSlippedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,8 +68,6 @@ export default function ScopePage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
-  const [flagSubmitting, setFlagSubmitting] = useState(false);
 
   async function load(projectId?: string) {
     setLoading(true);
@@ -106,9 +97,8 @@ export default function ScopePage() {
       setPeriod(openPeriod);
       setActivities(myActivities);
       setScopes(myScopes);
-      setChangeRequests(
-        openPeriod ? await api.get<ChangeRequest[]>(`/change-requests?update_period_id=${openPeriod.id}`) : [],
-      );
+      // People who @-tagged this subcontractor in an activity comment.
+      setMentions(await api.get<MyMention[]>("/my-desk/mentions?unread=true").catch(() => [] as MyMention[]));
       try {
         const slip = await api.get<SlipReport>(`/projects/${active.id}/recovery-plan`);
         setSlippedCount(slip.slipped.length);
@@ -153,20 +143,6 @@ export default function ScopePage() {
       .sort((a, b) => (displayFinish(a) ?? "9999").localeCompare(displayFinish(b) ?? "9999"));
   }, [activities, filter, query]);
 
-  const pendingActivityIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const cr of changeRequests) {
-      if (cr.status !== "pending") continue;
-      if (cr.activity_id) ids.add(cr.activity_id);
-      if (cr.activity_relationship_id) {
-        for (const [activityId, rels] of Object.entries(relationships)) {
-          if (rels.some((r) => r.id === cr.activity_relationship_id)) ids.add(activityId);
-        }
-      }
-    }
-    return ids;
-  }, [changeRequests, relationships]);
-
   async function handleSignOut() {
     await api.post("/auth/logout");
     router.push("/login");
@@ -185,27 +161,9 @@ export default function ScopePage() {
     }
   }
 
-  async function handleFlagSubmit(newValue: string, justification: string) {
-    if (!flagTarget || !period) return;
-    setFlagSubmitting(true);
-    try {
-      const cr = await api.post<ChangeRequest>("/change-requests", {
-        update_period_id: period.id,
-        activity_relationship_id: flagTarget.relationship.id,
-        field_changed: flagTarget.fieldLabel,
-        before_value: flagTarget.currentValueLabel,
-        after_value: newValue,
-        justification,
-        risk_level: "medium",
-      });
-      setChangeRequests((prev) => [...prev, cr]);
-      showToast("Sent to the project team for review");
-      setFlagTarget(null);
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to send the request.", "error");
-    } finally {
-      setFlagSubmitting(false);
-    }
+  async function markMentionRead(id: string) {
+    setMentions((prev) => prev.filter((m) => m.id !== id));
+    await api.post(`/my-desk/mentions/${id}/read`).catch(() => undefined);
   }
 
   async function handleSubmitUpdates() {
@@ -355,6 +313,32 @@ export default function ScopePage() {
               </div>
             )}
 
+            {mentions.length > 0 && (
+              <section className="card sw-mentions" aria-label="Mentions">
+                <div className="sw-mentions-head">
+                  <AtSignIcon className="icon" /> {mentions.length === 1 ? "1 new mention" : `${mentions.length} new mentions`}
+                </div>
+                <ul className="mention-feed">
+                  {mentions.map((m) => (
+                    <li key={m.id} className="mention-item is-unread">
+                      <div className="mention-open">
+                        <span className="mention-meta">
+                          <b>{m.author_name ?? "Someone"}</b> on <span className="mono">{m.activity_external_id}</span>
+                          {m.activity_name ? ` · ${m.activity_name}` : ""}
+                        </span>
+                        <span className="mention-body">
+                          <MentionText body={m.body} />
+                        </span>
+                      </div>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => markMentionRead(m.id)}>
+                        Mark read
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <section className="card sw-list-card">
               <div className="sw-toolbar">
                 <div className="segmented" role="group" aria-label="Status filter">
@@ -397,13 +381,8 @@ export default function ScopePage() {
                     open={openId === a.id}
                     onToggle={() => setOpenId(openId === a.id ? null : a.id)}
                     editable={editable}
-                    pending={pendingActivityIds.has(a.id)}
                     relationships={relationships[a.id]}
-                    canFlag={Boolean(period)}
                     onSave={(patch) => handleSave(a.id, patch)}
-                    onFlag={(relationship, fieldLabel, currentValueLabel) =>
-                      setFlagTarget({ activity: a, relationship, fieldLabel, currentValueLabel })
-                    }
                   />
                 ))}
               </ul>
@@ -439,15 +418,6 @@ export default function ScopePage() {
         </footer>
       )}
 
-      <FlagReviewModal
-        open={flagTarget !== null}
-        activityLabel={flagTarget ? `${flagTarget.activity.external_id} · ${flagTarget.activity.name}` : ""}
-        fieldLabel={flagTarget?.fieldLabel ?? ""}
-        currentValueLabel={flagTarget?.currentValueLabel ?? ""}
-        submitting={flagSubmitting}
-        onCancel={() => setFlagTarget(null)}
-        onSubmit={handleFlagSubmit}
-      />
     </div>
   );
 }
@@ -457,21 +427,15 @@ function ActivityRow({
   open,
   onToggle,
   editable,
-  pending,
   relationships,
-  canFlag,
   onSave,
-  onFlag,
 }: {
   activity: Activity;
   open: boolean;
   onToggle: () => void;
   editable: boolean;
-  pending: boolean;
   relationships: ActivityRelationship[] | undefined;
-  canFlag: boolean;
   onSave: (patch: ActivityUpdatePayload) => Promise<boolean>;
-  onFlag: (relationship: ActivityRelationship, fieldLabel: string, currentValueLabel: string) => void;
 }) {
   const milestone = isMilestone(a);
   const [start, setStart] = useState(a.actual_start ?? "");
@@ -510,11 +474,6 @@ function ActivityRow({
         <span className="sw-row-act">
           <span className="sw-row-name">
             {a.name}
-            {pending && (
-              <span className="chip chip-warn" title="A change you requested is waiting for review">
-                Review pending
-              </span>
-            )}
           </span>
           <span className="sw-row-id mono">
             {a.external_id}
@@ -659,7 +618,7 @@ function ActivityRow({
           <div className="sw-detail-block">
             <div className="sw-detail-label">
               <LockIcon className="icon" /> Logic
-              <span className="cell-sub"> — changed by the project team; request a change if it&rsquo;s wrong</span>
+              <span className="cell-sub"> — set by the project team</span>
             </div>
             {relationships === undefined && <p className="cell-sub">Loading…</p>}
             {relationships && relationships.length === 0 && <p className="cell-sub">No predecessors or successors.</p>}
@@ -668,8 +627,6 @@ function ActivityRow({
                 {relationships.map((rel) => {
                   const isPred = rel.successor_id === a.id;
                   const other = isPred ? rel.predecessor_external_id : rel.successor_external_id;
-                  const label = isPred ? "Predecessor logic & lag" : "Successor logic & lag";
-                  const value = `${rel.link_type} ${isPred ? "←" : "→"} ${other ?? "?"}${rel.lag_days ? `, ${rel.lag_days}d` : ""}`;
                   return (
                     <li key={rel.id}>
                       <span className="sw-logic-kind">{isPred ? "Predecessor" : "Successor"}</span>
@@ -677,11 +634,6 @@ function ActivityRow({
                         {rel.link_type} {other ?? "?"}
                         {rel.lag_days ? ` · lag ${rel.lag_days}d` : ""}
                       </span>
-                      {canFlag && (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onFlag(rel, label, value)}>
-                          <FlagIcon className="icon" /> Request change
-                        </button>
-                      )}
                     </li>
                   );
                 })}

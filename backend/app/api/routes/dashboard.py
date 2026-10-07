@@ -9,7 +9,6 @@ from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability
 from app.engine.durations import activity_days
 from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineStatus
-from app.models.change_request import ChangeRequest, ChangeRequestStatus
 from app.models.dashboard_layout import DashboardLayout
 from app.models.project import Project
 from app.models.project_scope import ProjectScope
@@ -18,6 +17,7 @@ from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
 from app.models.user_tenant_role import Capability
+from app.services.mitigation import build_slip_report
 from app.services.progress_summary import compute_current_update, compute_progress_summary, evm_point_at
 from app.schemas.dashboard import (
     CurrentUpdateOut,
@@ -44,7 +44,7 @@ WIDGET_KEYS = (
     "update-period",
     "deadline",
     "scopes-submitted",
-    "flagged",
+    "recovery",
     "health-badge",
     "s-curve",
     "risk-top3",
@@ -85,7 +85,6 @@ def dashboard_summary(
     )
 
     submitted_ids: set[uuid.UUID] = set()
-    flagged_pending = 0
     if period:
         submitted_ids = {
             row.subcontractor_org_id
@@ -93,14 +92,6 @@ def dashboard_summary(
             .filter(ScopeSubmission.update_period_id == period.id)
             .all()
         }
-        flagged_pending = (
-            db.query(ChangeRequest)
-            .filter(
-                ChangeRequest.update_period_id == period.id,
-                ChangeRequest.status == ChangeRequestStatus.pending,
-            )
-            .count()
-        )
 
     scope_status = []
     for org in orgs:
@@ -125,16 +116,7 @@ def dashboard_summary(
             )
         )
 
-    open_change_requests = (
-        db.query(ChangeRequest)
-        .join(UpdatePeriod, UpdatePeriod.id == ChangeRequest.update_period_id)
-        .filter(
-            UpdatePeriod.tenant_id == ctx.tenant_id,
-            UpdatePeriod.project_id == project_id,
-            ChangeRequest.status == ChangeRequestStatus.pending,
-        )
-        .count()
-    )
+    slip = build_slip_report(db, ctx.tenant_id, project_id)["summary"]
 
     current_update = None
     update = compute_current_update(db, ctx.tenant_id, project_id)
@@ -162,8 +144,8 @@ def dashboard_summary(
         deadline_at=period.deadline_at if period else None,
         orgs_total=len(orgs),
         orgs_submitted=len(submitted_ids),
-        flagged_pending=flagged_pending,
-        open_change_requests=open_change_requests,
+        recovery_required=slip["plans_required"],
+        recovery_acknowledged=slip["plans_accepted"],
         current_update=current_update,
         scope_status=scope_status,
     )
@@ -180,6 +162,8 @@ def _merge_with_catalogue(saved: list[dict]) -> list[DashboardWidgetConfig]:
     any keys no longer in the catalogue, and append catalogue widgets the user
     has never seen as disabled entries so the configure modal can still show
     them."""
+    # "flagged" (Flag Reviews, removed) took the slot "recovery" now fills.
+    saved = [{**w, "key": "recovery"} if w.get("key") == "flagged" else w for w in saved]
     by_key = {w.get("key"): w for w in saved if w.get("key") in WIDGET_KEYS}
     merged = [
         DashboardWidgetConfig(
@@ -307,20 +291,11 @@ def _gather_signals(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> dic
         .count()
     )
     orgs_submitted = 0
-    flagged_pending = 0
     if period:
         orgs_submitted = (
             db.query(ScopeSubmission.subcontractor_org_id)
             .filter(ScopeSubmission.update_period_id == period.id)
             .distinct()
-            .count()
-        )
-        flagged_pending = (
-            db.query(ChangeRequest)
-            .filter(
-                ChangeRequest.update_period_id == period.id,
-                ChangeRequest.status == ChangeRequestStatus.pending,
-            )
             .count()
         )
 
@@ -347,7 +322,6 @@ def _gather_signals(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> dic
         "period": period,
         "orgs_total": orgs_total,
         "orgs_submitted": orgs_submitted,
-        "flagged_pending": flagged_pending,
         "baseline": baseline,
         "performance": performance,
         "today": datetime.now(timezone.utc).date(),
@@ -439,20 +413,6 @@ def get_project_health(
             factors.append(HealthFactor(key="critical_path", label="Critical path", status="good", detail="No negative float on the network"))
     else:
         factors.append(HealthFactor(key="critical_path", label="Critical path", status="unknown", detail="No schedule imported"))
-
-    # 5. Pending change reviews — only a meaningful signal once a period exists
-    # to flag changes against; otherwise "0 pending" isn't really good news.
-    pending = s["flagged_pending"]
-    if s["period"]:
-        factors.append(
-            HealthFactor(
-                key="pending_reviews", label="Pending reviews",
-                status="good" if pending == 0 else "warn" if pending < 5 else "crit",
-                detail=f"{pending} change request{'' if pending == 1 else 's'} awaiting a decision",
-            )
-        )
-    else:
-        factors.append(HealthFactor(key="pending_reviews", label="Pending reviews", status="unknown", detail="No update period opened yet"))
 
     # 6. Overdue activities.
     if activities:
@@ -563,20 +523,6 @@ def get_risk_highlights(
                     ),
                 )
             )
-
-    # Flagged-change backlog.
-    if s["flagged_pending"] >= 3:
-        candidates.append(
-            (
-                200 + s["flagged_pending"],
-                RiskHighlight(
-                    title=f"{s['flagged_pending']} changes awaiting review",
-                    detail="Unreviewed logic/date changes can mask schedule slippage",
-                    severity="medium" if s["flagged_pending"] < 10 else "high",
-                    source="Review queue",
-                ),
-            )
-        )
 
     # No baseline locked while a period is open — EVM is blind.
     if s["baseline"] is None and activities:

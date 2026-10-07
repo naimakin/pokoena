@@ -62,7 +62,12 @@ def resolve_comparison_imports(
 
 
 def _plan_required(row: dict) -> bool:
-    return bool(row["is_critical"]) or bool(row["is_longest_path"]) or row["slip_days"] >= _PLAN_REQUIRED_SLIP_DAYS
+    """A recovery plan is asked for when the slip is big enough to matter:
+    5 days or more, or any slip of a critical activity. A longest-path
+    activity that didn't move needs nothing — it used to, and every update
+    raised plans nobody needed."""
+    slip = row["slip_days"]
+    return slip >= _PLAN_REQUIRED_SLIP_DAYS or (bool(row["is_critical"]) and slip >= 1)
 
 
 def _needs_attention(row: dict, plan: RecoveryPlan | None) -> bool:

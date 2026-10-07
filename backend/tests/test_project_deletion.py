@@ -30,6 +30,7 @@ from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan, RecoveryPlanItem
+from app.models.mention import Mention
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.report_format import ReportFormat
 from app.models.risk_analysis import RiskAnalysisSettings, RiskSimulationRun
@@ -137,6 +138,10 @@ def _populate_everything(client, db_session, tenant, project, admin):
     first_activity = db_session.query(Activity).filter(Activity.project_id == project.id).first()
     if first_activity is not None:
         client.post(f"/activities/{first_activity.id}/comments", json={"body": "Blocked on the permit"})
+        # ... and one that @-tags a colleague, which stores a mention.
+        mate = create_user(db_session, "delete-mate@example.com", "secret123")
+        add_membership(db_session, mate, tenant, TenantRole.company_admin)
+        client.post(f"/activities/{first_activity.id}/comments", json={"body": f"@[Mate](user:{mate.id}) look"})
         client.patch(f"/activities/{first_activity.id}", json={"is_important": True})
 
     # --- recovery plan + item (item cascades via recovery_plan delete) ---
@@ -244,7 +249,7 @@ def _populate_everything(client, db_session, tenant, project, admin):
 
 
 _PROJECT_SCOPED_MODELS = [
-    Activity, ActivityPin, PersonalNote, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
+    Activity, ActivityPin, Mention, PersonalNote, ActivityCodeType, ActivityCodeValue, TaskActivityCode, ActivityRelationship, ActivityEvent,
     Baseline, Calendar, DashboardLayout, EvmSnapshot, ProgressEntry, ProjectMembership, ProjectScope,
     RecoveryPlan, RecoveryPlanItem, Resource, ResourceAssignment, RiskItem, RiskActionItem,
     ReportFormat, RiskAnalysisSettings, RiskSimulationRun, SavedActivityFilter, ScheduleExport, ScheduleSimulation, ScheduleImport, ScheduleStatusSnapshot, UpdatePeriod,

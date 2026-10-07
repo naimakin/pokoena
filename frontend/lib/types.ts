@@ -59,8 +59,7 @@ export type Capability =
   | "view_reports"
   | "edit_reports"
   | "manage_users"
-  | "manage_projects"
-  | "review_approvals";
+  | "manage_projects";
 
 export interface User {
   id: string;
@@ -252,6 +251,8 @@ export type SiteRisk = "high" | "standard" | "low";
 export interface ActivityHistoryItem {
   kind: "change" | "comment" | "version";
   created_at: string;
+  /** The stored comment row (comments only) — a mention points at it. */
+  event_id?: string | null;
   actor_name: string | null;
   field: string | null;
   old_value: string | null;
@@ -783,29 +784,6 @@ export interface ActivityRelationship {
 }
 
 export type RiskLevel = "low" | "medium" | "high";
-export type ChangeRequestStatusValue = "pending" | "approved" | "rejected";
-
-export interface ChangeRequest {
-  id: string;
-  update_period_id: string;
-  activity_id: string | null;
-  activity_relationship_id: string | null;
-  requested_by_user_id: string;
-  field_changed: string;
-  before_value: string;
-  after_value: string;
-  justification: string;
-  risk_level: RiskLevel;
-  status: ChangeRequestStatusValue;
-  reviewed_by_user_id: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  requested_by_name?: string | null;
-  requested_by_org?: string | null;
-  activity_name?: string | null;
-  activity_external_id?: string | null;
-}
-
 export interface ScopeSubmissionStatus {
   subcontractor_org_id: string;
   org_name: string;
@@ -865,9 +843,9 @@ export interface DashboardSummary {
   deadline_at: string | null;
   orgs_total: number;
   orgs_submitted: number;
-  flagged_pending: number;
-  /** Pending change requests across every period. */
-  open_change_requests: number;
+  /** Recovery plans the latest update calls for, and how many are acknowledged. */
+  recovery_required: number;
+  recovery_acknowledged: number;
   current_update: CurrentUpdate | null;
   scope_status: ScopeSubmissionStatus[];
 }
@@ -878,7 +856,7 @@ export type DashboardWidgetKey =
   | "update-period"
   | "deadline"
   | "scopes-submitted"
-  | "flagged"
+  | "recovery"
   | "health-badge"
   | "s-curve"
   | "risk-top3"
@@ -913,7 +891,6 @@ export type HealthFactorKey =
   | "scope_submissions"
   | "evm"
   | "critical_path"
-  | "pending_reviews"
   | "overdue";
 
 export interface HealthFactor {
@@ -1607,9 +1584,9 @@ export interface ResourceAnalysis {
 // ---------- My Desk (Execution → My Desk; backend routes/my_desk.py) ----------
 
 export type DeskInboxKind =
+  | "mention"
   | "recovery_review"
   | "recovery_revision"
-  | "flag_review"
   | "mitigation_review"
   | "mitigation_revision"
   | "update_period";
@@ -1679,4 +1656,28 @@ export interface PersonalNote {
 export interface ActivityDesk {
   pinned: boolean;
   notes: PersonalNote[];
+}
+
+// ---- @mentions (backend: services/mentions.py) ----
+
+/** Someone who can be @-tagged on an activity: name and role, never an email. */
+export interface MentionableUser {
+  id: string;
+  full_name: string;
+  label: string;
+}
+
+/** A comment that tagged the signed-in user (GET /my-desk/mentions). */
+export interface MyMention {
+  id: string;
+  project_id: string;
+  project_code: string;
+  activity_id: string | null;
+  activity_external_id: string;
+  activity_name: string | null;
+  author_name: string | null;
+  body: string;
+  event_id: string;
+  created_at: string;
+  read_at: string | null;
 }

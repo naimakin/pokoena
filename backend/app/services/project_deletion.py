@@ -45,6 +45,7 @@ from app.models.progress_entry import ProgressEntry
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.project_scope import ProjectScope
+from app.models.mention import Mention
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.recovery_plan import RecoveryPlan
 from app.models.report_format import ReportFormat
@@ -101,6 +102,7 @@ def delete_project(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> 
     gone(TaskActivityCode, project_id=project_id)
     gone(ResourceAssignment, project_id=project_id)
     gone(ActivityRelationship, project_id=project_id)
+    gone(Mention, project_id=project_id)  # before activity_events (FK)
     gone(ActivityEvent, project_id=project_id)
     gone(ProgressEntry, project_id=project_id)
     gone(RecoveryPlan, project_id=project_id)  # cascades to recovery_plan_items

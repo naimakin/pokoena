@@ -95,7 +95,7 @@ def test_layout_is_per_user(client, db_session):
         json={
             "project_id": str(project.id),
             "theme_key": "high-contrast",
-            "widgets": [{"key": "flagged", "order": 0, "enabled": True, "options": {}}],
+            "widgets": [{"key": "recovery", "order": 0, "enabled": True, "options": {}}],
         },
     )
 
@@ -172,7 +172,6 @@ def test_risk_highlights_flags_overdue_and_negative_float(client, db_session):
         "scope_submissions",
         "evm",
         "critical_path",
-        "pending_reviews",
         "overdue",
     }
 
@@ -188,3 +187,29 @@ def test_risk_highlights_include_high_score_register_risks(client, db_session):
 
     risks = client.get(f"/dashboard/risk-highlights?project_id={project.id}").json()
     assert any(r["source"] == "Risk register" and "Crane availability" in r["title"] for r in risks)
+
+
+def test_saved_flagged_widget_becomes_recovery(client, db_session):
+    """Flag Reviews were removed; a layout saved with their widget shows the
+    Recovery plans widget in that slot instead of losing it."""
+    import uuid as _uuid
+
+    from app.models.dashboard_layout import DashboardLayout
+
+    tenant, project = _setup(db_session)
+    admin = create_user(db_session, "dash-flagged@example.com", "secret123")
+    add_membership(db_session, admin, tenant, TenantRole.company_admin)
+    db_session.add(
+        DashboardLayout(
+            id=_uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=admin.id, theme_key="calm",
+            widgets=[{"key": "flagged", "order": 0, "enabled": True, "options": {}}],
+        )
+    )
+    db_session.commit()
+    _login(client, email="dash-flagged@example.com")
+
+    widgets = client.get(f"/dashboard/layout?project_id={project.id}").json()["widgets"]
+
+    first = min(widgets, key=lambda w: w["order"])
+    assert first["key"] == "recovery" and first["enabled"] is True
+    assert "flagged" not in {w["key"] for w in widgets}

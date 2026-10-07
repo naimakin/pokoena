@@ -23,9 +23,9 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, true
 from sqlalchemy.orm import Session
 
-from app.deps import AuthContext
+from app.deps import AuthContext, has_capability
 from app.models.activity import Activity, ActivityStatus
-from app.models.change_request import ChangeRequest, ChangeRequestStatus
+from app.models.mention import Mention
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.project import Project
 from app.models.project_scope import ProjectScope
@@ -34,7 +34,7 @@ from app.models.risk_item import MitigationStatus, RiskItem
 from app.models.schedule_import import ScheduleImport
 from app.models.scope_submission import ScopeSubmission
 from app.models.update_period import UpdatePeriod, UpdatePeriodStatus
-from app.models.user_tenant_role import TenantRole
+from app.models.user_tenant_role import Capability, TenantRole
 from app.schemas.activity import ActivityOut
 from app.schemas.my_desk import InboxItemOut, NoteOut, PinOut, SuggestionOut
 from app.services.criticality import annotate_criticality, shown_dates
@@ -97,36 +97,35 @@ def build_inbox(db: Session, ctx: AuthContext, projects: list[Project]) -> list[
         .order_by(RecoveryPlan.activity_external_id)
         .all()
     )
+    can_ack = has_capability(ctx, Capability.edit_progress)
     review: dict[uuid.UUID, list[str]] = defaultdict(list)
     revise: dict[uuid.UUID, list[str]] = defaultdict(list)
     for plan in plans:
-        if plan.status == RecoveryPlanStatus.submitted and is_admin:
+        wrote = me in (plan.created_by_user_id, plan.submitted_by_user_id)
+        if plan.status == RecoveryPlanStatus.submitted and (is_admin or (can_ack and not wrote)):
             review[plan.project_id].append(plan.activity_external_id)
         elif plan.status == RecoveryPlanStatus.needs_revision and me in (plan.created_by_user_id, plan.submitted_by_user_id):
             revise[plan.project_id].append(plan.activity_external_id)
     for pid, codes in review.items():
-        add("recovery_review", pid, f"{_plural(len(codes), 'recovery plan')} awaiting your review",
+        add("recovery_review", pid, f"{_plural(len(codes), 'recovery plan')} to acknowledge",
             detail=_names(codes), count=len(codes), tone="warn", href="/recovery-plan")
     for pid, codes in revise.items():
         add("recovery_revision", pid, f"{_plural(len(codes), 'recovery plan')} sent back for revision",
             detail=_names(codes), count=len(codes), tone="warn", href="/recovery-plan")
 
-    # Flag reviews (subcontractor-flagged logic changes) — company admins only.
-    if is_admin:
-        rows = (
-            db.query(UpdatePeriod.project_id, func.count(ChangeRequest.id))
-            .join(UpdatePeriod, UpdatePeriod.id == ChangeRequest.update_period_id)
-            .filter(
-                ChangeRequest.tenant_id == ctx.tenant_id,
-                ChangeRequest.status == ChangeRequestStatus.pending,
-                UpdatePeriod.project_id.in_(ids),
-            )
-            .group_by(UpdatePeriod.project_id)
-            .all()
+    # People who tagged the caller in an activity comment.
+    for pid, n in (
+        db.query(Mention.project_id, func.count(Mention.id))
+        .filter(
+            Mention.tenant_id == ctx.tenant_id,
+            Mention.mentioned_user_id == me,
+            Mention.read_at.is_(None),
+            Mention.project_id.in_(ids),
         )
-        for pid, n in rows:
-            add("flag_review", pid, f"{_plural(n, 'flagged logic change')} to review",
-                count=n, tone="warn", href="/review-queue")
+        .group_by(Mention.project_id)
+        .all()
+    ):
+        add("mention", pid, f"{_plural(n, 'new mention')}", count=n, tone="info", href="/execution/my-desk#mentions")
 
     # Mitigation plans on the risk register: same review loop as recovery plans.
     risks = (

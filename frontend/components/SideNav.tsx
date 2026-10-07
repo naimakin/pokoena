@@ -21,6 +21,8 @@ type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 export interface SideNavItem {
   href: string;
   label: string;
+  /** A count shown after the label (e.g. unread mentions on My Desk). */
+  badge?: number;
 }
 
 export interface SideNavSection {
@@ -272,6 +274,11 @@ function ChildLink({
       onClick={onNavigate}
     >
       <span>{item.label}</span>
+      {item.badge ? (
+        <span className="sidenav-badge" aria-label={`${item.badge} new`}>
+          {item.badge > 99 ? "99+" : item.badge}
+        </span>
+      ) : null}
     </Link>
   );
 }

@@ -15,7 +15,7 @@ import type {
 } from "@/lib/types";
 import { ProgressCurveChart, curveReadout } from "@/components/charts/ProgressCurveChart";
 import { fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
-import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, FlagIcon, UsersIcon } from "@/components/icons";
+import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "@/components/icons";
 
 export type CurveStatus = "idle" | "loading" | "ready" | "locked" | "error";
 
@@ -53,7 +53,6 @@ const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
   scope_submissions: "/dashboard",
   evm: "/evm",
   critical_path: "/progress?filter=critical",
-  pending_reviews: "/review-queue",
   overdue: "/progress?filter=overdue",
 };
 
@@ -383,29 +382,35 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     },
   },
 
-  flagged: {
-    title: "Flagged for Review",
-    description: "Change requests awaiting a decision",
+  recovery: {
+    title: "Recovery Plans",
+    description: "Slipped activities that need a recovery plan",
     span: "kpi",
     render: ({ summary }) => {
-      const inPeriod = Boolean(summary?.active_period_id);
-      const count = (inPeriod ? summary?.flagged_pending : summary?.open_change_requests) ?? 0;
+      const required = summary?.recovery_required ?? 0;
+      const done = summary?.recovery_acknowledged ?? 0;
+      const open = Math.max(0, required - done);
       return (
         <Kpi
-          label={inPeriod ? "Flagged for review" : "Open change requests"}
-          tone={count > 0 ? "warn" : "neutral"}
-          icon={<FlagIcon className="icon" />}
+          label="Recovery plans"
+          tone={open > 0 ? "warn" : "neutral"}
+          icon={<TrendingUpIcon className="icon" />}
           footer={
-            <div className={`kpi-sub${count > 0 ? "" : " kpi-sub-muted"}`}>
-              {count > 0
-                ? inPeriod
-                  ? "Awaiting admin decision"
-                  : "Awaiting admin decision · all periods"
-                : "Nothing awaiting review"}
+            <div className={`kpi-sub${open > 0 ? "" : " kpi-sub-muted"}`}>
+              {required === 0 ? (
+                "No slip needs a plan this update"
+              ) : (
+                <Link href="/recovery-plan">
+                  {done} of {required} acknowledged
+                </Link>
+              )}
             </div>
           }
         >
-          <div className="kpi-value">{fmtNum(count, 0)}</div>
+          <div className="kpi-value">
+            {fmtNum(open, 0)}
+            <span className="kpi-unit"> open</span>
+          </div>
         </Kpi>
       );
     },
@@ -601,7 +606,7 @@ export const WIDGET_ORDER: DashboardWidgetKey[] = [
   "update-period",
   "deadline",
   "scopes-submitted",
-  "flagged",
+  "recovery",
   "s-curve",
   "health-badge",
   "risk-top3",

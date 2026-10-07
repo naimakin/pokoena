@@ -10,9 +10,10 @@ import { ActivityModal } from "@/components/ActivityModal";
 import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
 import { FloatBadge, fmtDays, fmtP6Date } from "@/components/reporting/format";
 import { useToast } from "@/components/Toast";
-import { CheckIcon, ChevronDownIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
+import { AtSignIcon, CheckIcon, ChevronDownIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
+import { MentionText } from "@/components/MentionText";
 import { NoProjectIllo } from "@/components/illustrations";
-import type { Activity, DeskInboxItem, DeskPin, DeskSuggestion, PersonalNote } from "@/lib/types";
+import type { Activity, DeskInboxItem, DeskPin, DeskSuggestion, MyMention, PersonalNote } from "@/lib/types";
 
 // Execution → My Desk: the one personal, cross-project page. Every other page
 // shows the shared programme of one project; this one shows what waits on the
@@ -71,6 +72,9 @@ export default function MyDeskPage() {
   const [error, setError] = useState<string | null>(null);
   const [pinFilter, setPinFilter] = useState<PinFilter>("all");
   const [openActivity, setOpenActivity] = useState<Activity | null>(null);
+  const [openEventId, setOpenEventId] = useState<string | null>(null);
+  const [mentions, setMentions] = useState<MyMention[]>([]);
+  const [mentionView, setMentionView] = useState<"unread" | "all">("unread");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   // Suggestions stay open by default; folding them is remembered per browser.
@@ -112,12 +116,14 @@ export default function MyDeskPage() {
     setError(null);
     const qs = projectId ? `?project_id=${projectId}` : "";
     try {
-      const [nextInbox, nextPins, nextNotes, nextSuggestions] = await Promise.all([
+      const [nextInbox, nextPins, nextNotes, nextSuggestions, nextMentions] = await Promise.all([
         api.get<DeskInboxItem[]>(`/my-desk/inbox${qs}`),
         api.get<DeskPin[]>(`/my-desk/pins${qs}`),
         api.get<PersonalNote[]>(`/my-desk/notes${qs}`),
         projectId ? api.get<DeskSuggestion[]>(`/my-desk/suggestions?project_id=${projectId}`) : Promise.resolve([]),
+        api.get<MyMention[]>("/my-desk/mentions?limit=100"),
       ]);
+      setMentions(nextMentions);
       setInbox(nextInbox);
       setPins(nextPins);
       setNotes(nextNotes);
@@ -137,11 +143,47 @@ export default function MyDeskPage() {
     () => pins.filter(PIN_FILTERS.find((f) => f.key === pinFilter)!.test),
     [pins, pinFilter],
   );
+  const shownMentions = mentions.filter(
+    (m) => (mentionView === "all" || !m.read_at) && (scope === "all" || !projectId || m.project_id === projectId),
+  );
+  const unreadMentions = mentions.filter((m) => !m.read_at && (scope === "all" || !projectId || m.project_id === projectId)).length;
   const dueReminders = notes.filter((n) => !n.done_at && n.remind_on && n.remind_on <= todayIso()).length;
 
   // ---------------------------------------------------------------- actions
 
+  async function openMention(m: MyMention) {
+    if (!m.activity_id) {
+      showToast(`${m.activity_external_id} is no longer in the programme.`, "error");
+      return;
+    }
+    try {
+      const activity = await api.get<Activity>(`/activities/${m.activity_id}`);
+      setOpenEventId(m.event_id);
+      setOpenActivity(activity);
+      if (!m.read_at) markRead(m.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not open that activity.", "error");
+    }
+  }
+
+  async function markRead(id: string) {
+    const now = new Date().toISOString();
+    setMentions((prev) => prev.map((m) => (m.id === id ? { ...m, read_at: m.read_at ?? now } : m)));
+    await api.post(`/my-desk/mentions/${id}/read`).catch(() => undefined);
+  }
+
+  async function markAllRead() {
+    const now = new Date().toISOString();
+    setMentions((prev) => prev.map((m) => ({ ...m, read_at: m.read_at ?? now })));
+    await api.post("/my-desk/mentions/read-all").catch(() => undefined);
+    load();
+  }
+
   function openInboxItem(item: DeskInboxItem) {
+    if (item.kind === "mention") {
+      document.getElementById("mentions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     if (item.project_id !== project?.id) {
       selectProject(item.project_id);
       showToast(`Switched to ${item.project_code}`);
@@ -302,6 +344,70 @@ export default function MyDeskPage() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* ---------------- Mentions ---------------- */}
+            <div className="card" id="mentions">
+              <div className="card-head">
+                <div>
+                  <div className="card-title">
+                    Mentions{unreadMentions ? <span className="mention-count">{unreadMentions} new</span> : null}
+                  </div>
+                  <div className="card-title-sub">Comments where someone tagged you with @</div>
+                </div>
+                <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
+                  <div className="segmented" role="group" aria-label="Mentions shown">
+                    <button type="button" className={mentionView === "unread" ? "active" : ""} onClick={() => setMentionView("unread")}>
+                      Unread
+                    </button>
+                    <button type="button" className={mentionView === "all" ? "active" : ""} onClick={() => setMentionView("all")}>
+                      All
+                    </button>
+                  </div>
+                  {unreadMentions > 0 && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={markAllRead}>
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+              </div>
+              {shownMentions.length === 0 ? (
+                <div className="desk-quiet">
+                  <AtSignIcon className="icon" />{" "}
+                  {mentionView === "unread" ? "No new mentions." : "Nobody has tagged you yet."}
+                </div>
+              ) : (
+                <ul className="mention-feed">
+                  {shownMentions.map((m) => (
+                    <li key={m.id} className={`mention-item${m.read_at ? "" : " is-unread"}`}>
+                      <button type="button" className="mention-open" onClick={() => openMention(m)}>
+                        <span className="mention-meta">
+                          <b>{m.author_name ?? "Someone"}</b> on <span className="mono">{m.activity_external_id}</span>
+                          {m.activity_name ? ` · ${m.activity_name}` : ""}
+                          {(allMode || m.project_id !== project?.id) && (
+                            <span className="chip chip-neutral mono">{m.project_code}</span>
+                          )}
+                          <span className="mention-when">{fmtP6Date(m.created_at)}</span>
+                        </span>
+                        <span className="mention-body">
+                          <MentionText body={m.body} />
+                        </span>
+                      </button>
+                      {!m.read_at && (
+                        <button
+                          type="button"
+                          className="act-btn"
+                          title="Mark read"
+                          aria-label="Mark read"
+                          onClick={() => markRead(m.id)}
+                        >
+                          <CheckIcon className="icon" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
@@ -515,8 +621,10 @@ export default function MyDeskPage() {
           key={openActivity.id}
           activity={openActivity}
           canEdit
+          highlightEventId={openEventId}
           onClose={() => {
             setOpenActivity(null);
+            setOpenEventId(null);
             load();
           }}
           onSaved={() => load()}

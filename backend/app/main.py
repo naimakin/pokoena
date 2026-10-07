@@ -8,7 +8,6 @@ from app.api.routes import (
     activities,
     activity_codes,
     auth,
-    change_requests,
     dashboard,
     dcma,
     evm,
@@ -101,7 +100,6 @@ app.include_router(export.router)
 app.include_router(wbs.router)
 app.include_router(activity_codes.router)
 app.include_router(metadata.router)
-app.include_router(change_requests.router)
 app.include_router(dashboard.router)
 app.include_router(project_status.router)
 app.include_router(recovery_plans.router)

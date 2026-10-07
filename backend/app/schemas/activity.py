@@ -154,6 +154,8 @@ class ActivityHistoryItemOut(BaseModel):
 
     kind: str
     created_at: datetime
+    # The stored activity_events row, for comments — a mention links to it.
+    event_id: uuid.UUID | None = None
     actor_name: str | None = None
     field: str | None = None
     old_value: str | None = None
@@ -186,3 +188,11 @@ class ScheduleImportOut(BaseModel):
     roundtrip_from_export_id: uuid.UUID | None = None
     is_current: bool = False
     has_source_file: bool = False
+
+
+class MentionableUserOut(BaseModel):
+    """Someone who can be @-tagged on an activity — name and role, no email."""
+
+    id: uuid.UUID
+    full_name: str
+    label: str

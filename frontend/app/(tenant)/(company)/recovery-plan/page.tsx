@@ -7,7 +7,8 @@ import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { RecoveryPlan, SlipReport, SlipRow, User } from "@/lib/types";
 import { ActionItems } from "@/components/ActionItems";
-import { AlertTriangleIcon, DownloadIcon } from "@/components/icons";
+import { AlertTriangleIcon, CheckIcon, DownloadIcon } from "@/components/icons";
+import { can } from "@/lib/permissions";
 import { NoProjectIllo } from "@/components/illustrations";
 
 type Grouping = "contractor" | "wbs" | "flat";
@@ -24,7 +25,7 @@ const PLAN_LABEL: Record<string, string> = {
   none: "No plan",
   draft: "Draft",
   submitted: "Submitted",
-  accepted: "Accepted",
+  accepted: "Acknowledged",
   needs_revision: "Needs revision",
 };
 
@@ -47,7 +48,6 @@ export default function RecoveryPlanPage() {
   const [minSlip, setMinSlip] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [plans, setPlans] = useState<Record<string, RecoveryPlan>>({});
-  const [reviewNote, setReviewNote] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
@@ -80,7 +80,9 @@ export default function RecoveryPlanPage() {
     load();
   }, [load]);
 
-  const isAdmin = me?.role === "company_admin";
+  // Acknowledging a plan: anyone who manages progress, but not on a plan they
+  // wrote themselves (backend: recovery_plans.review_plan).
+  const canAcknowledge = can(me, "edit_progress");
 
   async function loadPlan(id: string) {
     if (!project) return;
@@ -187,6 +189,8 @@ export default function RecoveryPlanPage() {
                   )}) and ${report.to_import?.revision_label ?? "—"} (${fmt(
                     report.to_import?.data_date ?? report.to_import?.imported_at,
                   )})`}
+              . A plan is needed for a slip of 5 days or more, or any slip on the critical path; once it&rsquo;s
+              submitted, someone else on the team acknowledges it.
             </div>
           </div>
           <button className="btn btn-secondary no-print" onClick={() => window.print()}>
@@ -214,7 +218,7 @@ export default function RecoveryPlanPage() {
               <b className="num" style={{ fontSize: "1rem" }}>
                 {summary.plans_submitted} of {summary.plans_required} plans submitted
               </b>
-              <span className="chip chip-good">{summary.plans_accepted} accepted</span>
+              <span className="chip chip-good">{summary.plans_accepted} acknowledged</span>
               {summary.critical_slipped_count > 0 && (
                 <span className="chip chip-crit">
                   <AlertTriangleIcon className="icon" style={{ width: 12, height: 12 }} />
@@ -365,27 +369,16 @@ export default function RecoveryPlanPage() {
                                               Submit plan
                                             </button>
                                           )}
-                                          {isAdmin && plan.status === "submitted" && (
-                                            <>
-                                              <input
-                                                placeholder="Review note"
-                                                value={reviewNote[plan.id] ?? ""}
-                                                onChange={(e) => setReviewNote((p) => ({ ...p, [plan.id]: e.target.value }))}
-                                                style={{ width: 200 }}
-                                              />
-                                              <button
-                                                className="btn btn-secondary btn-sm"
-                                                onClick={() => planAction(plan.id, "/review", { decision: "needs_revision", note: reviewNote[plan.id] })}
-                                              >
-                                                Return for revision
-                                              </button>
-                                              <button
-                                                className="btn btn-primary btn-sm"
-                                                onClick={() => planAction(plan.id, "/review", { decision: "accept", note: reviewNote[plan.id] })}
-                                              >
-                                                Accept plan
-                                              </button>
-                                            </>
+                                          {canAcknowledge && plan.status === "submitted" && plan.created_by_user_id !== me?.id && (
+                                            <button
+                                              className="btn btn-primary btn-sm"
+                                              onClick={() => planAction(plan.id, "/review", { decision: "accept" })}
+                                            >
+                                              <CheckIcon className="icon" /> Acknowledge
+                                            </button>
+                                          )}
+                                          {plan.status === "submitted" && plan.created_by_user_id === me?.id && (
+                                            <span className="cell-sub">Waiting for someone on the team to acknowledge it</span>
                                           )}
                                         </div>
                                       </>

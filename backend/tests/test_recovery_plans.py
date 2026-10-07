@@ -142,3 +142,43 @@ def test_cross_tenant_plan_not_found(client, db_session):
     assert client.get(
         f"/projects/{other_project.id}/recovery-plan/plans/{plan_id}"
     ).status_code in (403, 404)
+
+
+def test_delivery_team_acknowledges_but_not_their_own_plan(client, db_session):
+    """Acknowledging a plan is no longer company-admin only: anyone who manages
+    progress may — except on a plan they wrote."""
+    from app.models.project_membership import ProjectMembership
+    from app.models.user_tenant_role import ProjectRole
+
+    tenant, project, scope, admin, sub = _setup(db_session)
+    for email in ("rp-pm@example.com", "rp-pm2@example.com"):
+        user = create_user(db_session, email, "secret123")
+        add_membership(db_session, user, tenant, TenantRole.company_employee, project_roles=[ProjectRole.delivery_team])
+        db_session.add(ProjectMembership(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=user.id))
+    viewer = create_user(db_session, "rp-viewer@example.com", "secret123")
+    add_membership(db_session, viewer, tenant, TenantRole.company_employee, project_roles=[ProjectRole.viewer])
+    db_session.add(ProjectMembership(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, user_id=viewer.id))
+    db_session.commit()
+    base = f"/projects/{project.id}/recovery-plan/plans"
+
+    _login(client, "rp-pm@example.com")
+    plan_id = client.post(base, json={"activity_external_id": "SELF"}).json()["id"]
+    client.post(f"{base}/{plan_id}/items", json={"action": "Second crew", "owner_name": "Site"})
+    assert client.post(f"{base}/{plan_id}/submit").status_code == 200
+    assert client.post(f"{base}/{plan_id}/review", json={"decision": "accept"}).status_code == 403  # own plan
+
+    _login(client, "rp-viewer@example.com")
+    assert client.post(f"{base}/{plan_id}/review", json={"decision": "accept"}).status_code == 403
+
+    _login(client, "rp-pm2@example.com")
+    ack = client.post(f"{base}/{plan_id}/review", json={"decision": "accept"})
+    assert ack.status_code == 200 and ack.json()["status"] == "accepted"
+
+
+def test_plan_needed_only_for_real_slips():
+    from app.services.mitigation import _plan_required
+
+    assert _plan_required({"slip_days": 5, "is_critical": False, "is_longest_path": False})
+    assert _plan_required({"slip_days": 1, "is_critical": True, "is_longest_path": False})
+    assert not _plan_required({"slip_days": 4, "is_critical": False, "is_longest_path": True})
+    assert not _plan_required({"slip_days": 0, "is_critical": True, "is_longest_path": True})

@@ -41,7 +41,7 @@ def test_role_capability_matrix():
     assert ROLE_CAPABILITIES[ProjectRole.dashboard_viewer] == {C.view_overview, C.view_reports}
     assert ROLE_CAPABILITIES[ProjectRole.user_management] == {C.manage_users}
     for role_caps in ROLE_CAPABILITIES.values():
-        assert not role_caps & {C.manage_projects, C.review_approvals}
+        assert C.manage_projects not in role_caps
 
 
 def test_capabilities_by_tenant_role_and_union():

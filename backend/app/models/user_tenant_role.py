@@ -69,7 +69,6 @@ class Capability(str, enum.Enum):
     manage_users = "manage_users"
     # Company admin only — no role grants these.
     manage_projects = "manage_projects"
-    review_approvals = "review_approvals"
 
 
 C = Capability

@@ -1,7 +1,6 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.change_request import ChangeRequest
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.project_scope import ProjectScope
 from app.models.recovery_plan import RecoveryPlan, RecoveryPlanStatus
@@ -150,7 +149,7 @@ def test_inbox_rolls_up_what_waits_on_each_role(client, db_session):
         ProjectScope(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, name="Steel",
                      discipline="Structure", subcontractor_org_id=org.id)
     )
-    period = create_update_period(db_session, tenant, project, number=3)
+    create_update_period(db_session, tenant, project, number=3)
     for code, status, author in (
         ("A1", RecoveryPlanStatus.submitted, emp),
         ("A2", RecoveryPlanStatus.submitted, emp),
@@ -160,10 +159,6 @@ def test_inbox_rolls_up_what_waits_on_each_role(client, db_session):
             RecoveryPlan(id=uuid.uuid4(), tenant_id=tenant.id, project_id=project.id, activity_external_id=code,
                          status=status, created_by_user_id=author.id)
         )
-    db_session.add(
-        ChangeRequest(id=uuid.uuid4(), tenant_id=tenant.id, update_period_id=period.id, requested_by_user_id=emp.id,
-                      field_changed="lag", before_value="0", after_value="5", justification="Cure time")
-    )
     db_session.commit()
 
     _login(client, "desk-admin@example.com")
@@ -171,7 +166,7 @@ def test_inbox_rolls_up_what_waits_on_each_role(client, db_session):
     by_kind = {i["kind"]: i for i in inbox}
     assert by_kind["recovery_review"]["count"] == 2
     assert by_kind["recovery_review"]["detail"] == "A1, A2"
-    assert by_kind["flag_review"]["count"] == 1
+    assert "flag_review" not in by_kind  # Flag Reviews were removed
     assert by_kind["update_period"]["title"] == "UPD-3 is open"
     assert by_kind["update_period"]["detail"] == "1 of 1 subcontractors haven't submitted"
     assert "recovery_revision" not in by_kind  # not the author

@@ -102,6 +102,12 @@ DESIGN.md                 ← full design system spec
   on `Activity.project_scope_id` after every rule change and every import (oldest scope wins an overlap).
   A subcontractor may hold only `activity_status_updater` (update progress) or nothing (view only) —
   enforced in `services/team_roles.py` for both invites and `PATCH /team/{id}`.
+- @mentions: activity comments carry `@[Full Name](user:<uuid>)` tokens (frontend
+  `components/MentionTextarea.tsx` / `MentionText.tsx`, `lib/mentions.ts`). The backend
+  (`services/mentions.py`) keeps only people who can see the activity and stores a `mentions` row per
+  person; My Desk lists them (`/my-desk/mentions`) and the sidebar badges My Desk with the unread count.
+  No email yet. Flag Reviews (subcontractor change requests) were removed in 2026-10; the
+  `change_requests` table is kept but has no routes or UI.
 - All date/schedule formatting should eventually match P6 convention (`DD-MMM-YYYY`) once real
   schedule data lands — not yet enforced since no page renders real activity dates today.
 

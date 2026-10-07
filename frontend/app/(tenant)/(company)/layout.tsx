@@ -109,7 +109,6 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/progress", label: "Activity Ledger", icon: ClockIcon, visible: need("view_delivery") },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: need("view_delivery") },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_delivery") },
-      { href: "/review-queue", label: "Flag Reviews", icon: CompareIcon, visible: need("review_approvals") },
     ],
   },
   {
@@ -289,6 +288,16 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
       .catch(() => router.push("/login"));
   }, [router]);
 
+  // Unread @mentions for the My Desk badge — refreshed on every page change.
+  const [unreadMentions, setUnreadMentions] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get<{ unread: number }>("/my-desk/mentions/count")
+      .then((r) => setUnreadMentions(r.unread))
+      .catch(() => setUnreadMentions(0));
+  }, [user, pathname]);
+
   const allowed = user === null || canOpen(user, pathname);
   const home = homeFor(user);
   // Landing on the default page without access to it (e.g. a Users-only
@@ -338,7 +347,11 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
     href: section.href,
     items: section.children
       .filter((child) => child.visible(user))
-      .map((child) => ({ href: child.href, label: child.label })),
+      .map((child) => ({
+        href: child.href,
+        label: child.label,
+        badge: child.href === "/execution/my-desk" ? unreadMentions : undefined,
+      })),
     marker: BASELINE_GATED_SECTIONS.has(section.key) ? <GatedTabLock /> : null,
   }));
 

@@ -10,7 +10,6 @@ from app.deps import (
     get_current_tenant_user,
     get_tenant_scoped_or_404,
     require_project_permission,
-    require_role,
     require_scope_access,
 )
 from app.models.activity import Activity
@@ -414,18 +413,31 @@ def _review(plan: RecoveryPlan, decision: str, note: str | None, reviewer_id: uu
         plan.revision_no += 1
 
 
+def _wrote(plan: RecoveryPlan, ctx: AuthContext) -> bool:
+    """Company admins may acknowledge anything; everyone else not their own plan."""
+    if ctx.role == TenantRole.company_admin:
+        return False
+    return ctx.user.id in (plan.created_by_user_id, plan.submitted_by_user_id)
+
+
 @router.post("/plans/{plan_id}/review", response_model=RecoveryPlanOut)
 def review_plan(
     project_id: uuid.UUID,
     plan_id: uuid.UUID,
     payload: PlanReviewIn,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> RecoveryPlanOut:
+    """Acknowledge a submitted plan ("accept"; "needs_revision" still sends it
+    back). Anyone who manages progress on the project may — not just a company
+    admin — but never on a plan they wrote themselves."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.edit_progress)
     plan = _load_plan(db, project_id, plan_id, ctx)
     if plan.status != RecoveryPlanStatus.submitted:
         raise HTTPException(status_code=409, detail="Only a submitted plan can be reviewed")
+    if _wrote(plan, ctx):
+        raise HTTPException(status_code=403, detail="Someone else has to acknowledge your own plan")
     _review(plan, payload.decision, payload.note, ctx.user.id)
     db.commit()
     db.refresh(plan)
@@ -438,9 +450,10 @@ def bulk_review(
     project_id: uuid.UUID,
     payload: BulkReviewIn,
     db: Session = Depends(get_db),
-    ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
+    ctx: AuthContext = Depends(get_current_tenant_user),
 ) -> list[RecoveryPlanOut]:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.edit_progress)
     plans = (
         db.query(RecoveryPlan)
         .filter(
@@ -451,6 +464,7 @@ def bulk_review(
         )
         .all()
     )
+    plans = [p for p in plans if not _wrote(p, ctx)]
     for plan in plans:
         _review(plan, payload.decision, payload.note, ctx.user.id)
     db.commit()

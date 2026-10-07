@@ -46,10 +46,10 @@ class DashboardSummary(BaseModel):
     deadline_at: datetime | None
     orgs_total: int
     orgs_submitted: int
-    flagged_pending: int
-    # Change requests still awaiting a decision across every period, not just
-    # the latest one.
-    open_change_requests: int = 0
+    # Recovery plans for slipped activities (services/mitigation.py): how many
+    # the latest update calls for, and how many of those are acknowledged.
+    recovery_required: int = 0
+    recovery_acknowledged: int = 0
     current_update: CurrentUpdateOut | None = None
     scope_status: list[ScopeSubmissionStatus]
 

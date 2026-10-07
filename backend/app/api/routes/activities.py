@@ -32,11 +32,13 @@ from app.schemas.activity import (
     ActivityCommentIn,
     ActivityHistoryItemOut,
     ActivityOut,
+    MentionableUserOut,
     ActivityRelationshipOut,
     ActivityUpdate,
 )
 from app.services.activity_progress import apply_progress_entry, clear_float_if_finished
 from app.services.criticality import annotate_criticality
+from app.services.mentions import mentionable_users, record_mentions
 from app.services.schedule_current import get_current_import
 
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -334,6 +336,20 @@ def list_activities(
     return activities
 
 
+@router.get("/{activity_id}", response_model=ActivityOut)
+def get_activity(
+    activity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> Activity:
+    """One activity — what a link to it (a My Desk mention) opens."""
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
+    require_scope_access(activity.project_scope_id, ctx)
+    annotate_criticality(db, ctx.tenant_id, activity.project_id, [activity])
+    return activity
+
+
 @router.get("/{activity_id}/relationships", response_model=list[ActivityRelationshipOut])
 def list_activity_relationships(
     activity_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
@@ -519,14 +535,39 @@ def add_activity_comment(
         body=payload.body.strip(),
     )
     db.add(event)
+    db.flush()
+    # @[Name](user:id) tokens notify those people (their My Desk) — only the
+    # ones who may see this activity; the rest stay plain text.
+    record_mentions(db, ctx, activity, event)
     db.commit()
     db.refresh(event)
     return ActivityHistoryItemOut(
         kind="comment",
         created_at=event.created_at,
+        event_id=event.id,
         actor_name=ctx.user.full_name,
         body=event.body,
     )
+
+
+@router.get("/{activity_id}/mentionable-users", response_model=list[MentionableUserOut])
+def list_mentionable_users(
+    activity_id: uuid.UUID,
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> list[MentionableUserOut]:
+    """Who can be @-tagged on this activity: the people who can see it. Names
+    and roles only — no emails (services/mentions.py)."""
+    activity = get_tenant_scoped_or_404(db, Activity, activity_id, ctx)
+    require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
+    require_scope_access(activity.project_scope_id, ctx)
+    needle = (q or "").strip().lower()
+    people = [
+        m for m in mentionable_users(db, ctx, activity)
+        if m.user_id != ctx.user.id and (not needle or needle in m.full_name.lower())
+    ]
+    return [MentionableUserOut(id=m.user_id, full_name=m.full_name, label=m.label) for m in people[:20]]
 
 
 @router.get("/{activity_id}/history", response_model=list[ActivityHistoryItemOut])
@@ -566,6 +607,7 @@ def activity_history(
         items.append(
             ActivityHistoryItemOut(
                 kind=event.kind,
+                event_id=event.id,
                 created_at=event.created_at,
                 actor_name=actors.get(event.actor_user_id) if event.actor_user_id else None,
                 field=event.field,

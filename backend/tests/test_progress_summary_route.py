@@ -69,4 +69,4 @@ def test_dashboard_summary_falls_back_to_the_current_update(client, db_session):
     assert update is not None
     assert update["activities_total"] > 0
     assert update["filename"] == "synthetic_project.xer"
-    assert body["open_change_requests"] == 0
+    assert body["recovery_required"] == 0
