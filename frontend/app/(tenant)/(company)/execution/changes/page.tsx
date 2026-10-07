@@ -11,7 +11,7 @@ import { ArrowRightIcon, CheckIcon, ChevronDownIcon, DownloadIcon } from "@/comp
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
 import { NoProjectIllo } from "@/components/illustrations";
 
-type SectionKey = "added" | "removed" | "renamed" | "modified" | "logic";
+type SectionKey = "added" | "removed" | "modified" | "logic";
 
 // Start and finish dates move on almost every update, which buries the changes
 // this page is actually read for — logic, durations, scope. They stay one click
@@ -244,10 +244,6 @@ export default function ScheduleChangesPage() {
     () => (report?.activities.removed ?? []).filter((a) => (!criticalOnly || a.was_critical) && matches(q, a.external_id, a.name)),
     [report, criticalOnly, q],
   );
-  const renamed = useMemo(
-    () => (report?.activities.renamed ?? []).filter((a) => matches(q, a.old_external_id, a.new_external_id, a.name)),
-    [report, q],
-  );
   const modifiedRows = useMemo(
     () =>
       (report?.activities.modified ?? [])
@@ -322,7 +318,6 @@ export default function ScheduleChangesPage() {
   const STATS: { key: SectionKey; label: string; total: number; shown: number; tone: string }[] = [
     { key: "added", label: "Added", total: s.activities_added, shown: added.length, tone: "good" },
     { key: "removed", label: "Removed", total: s.activities_removed, shown: removed.length, tone: "crit" },
-    { key: "renamed", label: "ID changed", total: s.activities_renamed, shown: renamed.length, tone: "neutral" },
     { key: "modified", label: "Modified", total: s.activities_modified, shown: modifiedRows.length, tone: "warn" },
     { key: "logic", label: "Logic changes", total: logicTotal, shown: logicRows.length, tone: "info" },
   ];
@@ -608,42 +603,6 @@ export default function ScheduleChangesPage() {
               </Section>
             )}
 
-            {s.activities_renamed > 0 && (
-              <Section
-                id="chg-renamed"
-                title="Activity ID changed"
-                count={renamed.length}
-                sub="Same P6 task, new Activity ID — matched on the task's internal id"
-                collapsed={collapsed.has("renamed")}
-                onToggle={() => toggleSection("renamed")}
-              >
-                {renamed.length === 0 ? (
-                  <p className="empty-state">No renamed activity matches the search.</p>
-                ) : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Activity ID</th>
-                          <th>Name</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {renamed.map((a) => (
-                          <tr key={a.new_external_id}>
-                            <td className="mono">
-                              {a.old_external_id} → {a.new_external_id}
-                            </td>
-                            <td>{a.name}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Section>
-            )}
-
             {s.activities_modified > 0 && (
               <Section
                 id="chg-modified"
@@ -769,7 +728,7 @@ export default function ScheduleChangesPage() {
               </Section>
             )}
 
-            {s.activities_added + s.activities_removed + s.activities_renamed + s.activities_modified + report.relationships.summary.total === 0 && (
+            {s.activities_added + s.activities_removed + s.activities_modified + report.relationships.summary.total === 0 && (
               <div className="card">
                 <p className="empty-state">
                   No changes between {report.from_import?.revision_label} and {report.to_import?.revision_label}.

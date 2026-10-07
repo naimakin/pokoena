@@ -1262,7 +1262,7 @@ tr.resolved{opacity:.45}
 
 /* Summary tiles: one per section; clicking jumps to (and opens) it. The tone
    lives in a 3px top rule so the numbers stay ink-coloured and readable. */
-.chg-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.75rem}
+.chg-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem}
 .chg-stat{
   display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;min-width:0;text-align:left;
   padding:.75rem .9rem .8rem;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--border-strong);
@@ -1342,7 +1342,7 @@ tr.resolved{opacity:.45}
 .chg-more a{color:var(--accent-strong);font-weight:500}
 
 @media (max-width:1100px){
-  .chg-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .chg-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:640px){
   .chg-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1352,7 +1352,7 @@ tr.resolved{opacity:.45}
   .chg-detail{padding-left:0}
 }
 @media print{
-  .chg-stats{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .chg-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
   .chg-stat{box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
