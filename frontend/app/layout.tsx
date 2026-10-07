@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { IBM_Plex_Mono, Roboto } from "next/font/google";
+import { Roboto } from "next/font/google";
 import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
-// Type v3 (DESIGN.md): Roboto across display and interface, plus a neutral
-// mono for data cells. Roboto replaced Figtree when the owner moved POKO to an
+// Type v3 (DESIGN.md): Roboto across display, interface and data (tabular
+// figures — the owner dropped the monospace data face as too machine-like).
+// Roboto replaced Figtree when the owner moved POKO to an
 // AppDynamics-inspired "indigo chrome" direction — a neutral, engineered
 // grotesque that sits quietly under a coloured header instead of competing
 // with it. Roboto on Google Fonts is static here, so the weights are listed:
@@ -15,11 +16,6 @@ const roboto = Roboto({
   subsets: ["latin"],
   weight: ["300", "400", "500", "700"],
   variable: "--font-roboto",
-});
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-plex-mono",
 });
 
 // Favicon: the POKO mark (components/brand.tsx) pixel-fitted to a 16-grid, inlined
@@ -50,7 +46,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: the company shell's inline script may set
   // data-sidebar on <html> before hydration (the remembered collapsed rail).
   return (
-    <html lang="en" className={`${roboto.variable} ${plexMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={roboto.variable} suppressHydrationWarning>
       <body>
         <ToastProvider>{children}</ToastProvider>
       </body>

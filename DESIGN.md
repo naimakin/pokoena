@@ -1,7 +1,7 @@
 ---
 version: "3.0"
 name: Poko
-description: "A cool-gray project management workspace under an AppDynamics-inspired 'indigo chrome': a deep indigo/violet gradient header (#1e1650 → #3b2a8c) carrying white text and icons, a white left sidebar, a cool light-gray canvas (#f0f2f7), white cards, near-black cool ink (#1c1e2b), and #5b45d6 (indigo/violet) as the single chromatic accent. The owner chose this direction in 2026-10 to differentiate POKO from Foresight's warm-paper look; the discipline underneath is unchanged from v2 — a small, purposeful hue set, hierarchy through tone, weight and size before hue, and an accent that is earned (interactive state, selection, focus, CTAs, plus two sanctioned non-interactive marks: the WBS hierarchy rail and the data-date line). The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, calm. Navigation lives in a left sidebar — an accordion of sections (Dashboard, Projects, Programme, Delivery, Risk, Reports, Administration) that collapses to a 56px icon rail with flyouts, and becomes an off-canvas drawer under 900px. Type v3 runs Roboto across display and interface — weight 500 (Medium) for titles and labels, 400 for body, 700 only for emphasis inside dense data — with IBM Plex Mono (tabular-nums) for data cells. Uppercase is not a label device anywhere in the product: sentence case at weight 500 carries hierarchy. Tables and nav rows carry a 3px accent left-border marker on selection. Critical path rows wash with #c9261f at 12% behind a solid red left rail. Status hues are retuned toward AppDynamics' crisp red / golden amber / green, each at least 4.5:1 as text on its own soft tint. Elevation is a four-step soft, low-spread, faintly-cool shadow scale (xs resting / sm raised / md overlay / lg modal). Border radius squares up to a 3/4/6/8/10 + pill scale."
+description: "A cool-gray project management workspace under an AppDynamics-inspired 'indigo chrome': a deep indigo/violet gradient header (#1e1650 → #3b2a8c) carrying white text and icons, a white left sidebar, a cool light-gray canvas (#f0f2f7), white cards, near-black cool ink (#1c1e2b), and #5b45d6 (indigo/violet) as the single chromatic accent. The owner chose this direction in 2026-10 to differentiate POKO from Foresight's warm-paper look; the discipline underneath is unchanged from v2 — a small, purposeful hue set, hierarchy through tone, weight and size before hue, and an accent that is earned (interactive state, selection, focus, CTAs, plus two sanctioned non-interactive marks: the WBS hierarchy rail and the data-date line). The system reads as a precision scheduling tool for construction and infrastructure professionals: structured, data-dense, calm. Navigation lives in a left sidebar — an accordion of sections (Dashboard, Projects, Programme, Delivery, Risk, Reports, Administration) that collapses to a 56px icon rail with flyouts, and becomes an off-canvas drawer under 900px. Type v3 runs Roboto across display and interface — weight 500 (Medium) for titles and labels, 400 for body, 700 only for emphasis inside dense data — with Roboto tabular figures for data cells too (no monospace face since 2026-10). Uppercase is not a label device anywhere in the product: sentence case at weight 500 carries hierarchy. Tables and nav rows carry a 3px accent left-border marker on selection. Critical path rows wash with #c9261f at 12% behind a solid red left rail. Status hues are retuned toward AppDynamics' crisp red / golden amber / green, each at least 4.5:1 as text on its own soft tint. Elevation is a four-step soft, low-spread, faintly-cool shadow scale (xs resting / sm raised / md overlay / lg modal). Border radius squares up to a 3/4/6/8/10 + pill scale."
 
 colors:
   # CSS var name in globals.css is given in parentheses. Light value first;
@@ -94,7 +94,7 @@ colors:
 
 typography:
   # Type v3: Roboto (static 300/400/500/700 via next/font) across display and
-  # interface; IBM Plex Mono for data cells. Weight separates the roles —
+  # interface and data (tabular figures; no monospace face). Weight separates the roles —
   # 500 for display/titles/labels, 400 for body, 700 only for emphasis in
   # dense data. Roboto has no 600: anything specified 600 renders as Bold, so
   # the codebase uses 500 for labels. No uppercase label device anywhere.
@@ -144,13 +144,13 @@ typography:
     lineHeight: 1.4
     letterSpacing: 0
   mono:
-    fontFamily: IBM Plex Mono, Consolas, monospace
+    fontFamily: Roboto (tabular-nums)
     fontSize: 12px
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: 0
   mono-sm:
-    fontFamily: IBM Plex Mono, Consolas, monospace
+    fontFamily: Roboto (tabular-nums)
     fontSize: 11px
     fontWeight: 400
     letterSpacing: 0
@@ -214,7 +214,7 @@ patterns:
   sidebar: "white --sidebar-bg, 240px. Sections are accordion rows (icon, label, chevron; 40px tall, weight 500); several may be open; the one holding the current page opens itself and its row turns ink with an accent icon (.is-current). Children are indented 32px rows, weight 400; the active page gets accent-soft fill + accent-strong text + a 3px accent ::before bar. Dashboard (no children) is a plain row with the same active treatment."
   sidebar-rail: "collapsed state (desktop only), 56px, remembered per viewer in localStorage (key poko:sidebar; set on <html data-sidebar> by an inline script before first paint). Icons only, native title tooltip, aria-label kept. The section holding the current page gets the accent-soft fill + bar. A section icon opens a flyout to the right (surface card, shadow-md, title + child links) — closes on outside click, Escape (focus returns to the icon), Tab, or route change; arrow keys move between links."
   sidebar-drawer: "below 900px: fixed under the header, min(300px, 86vw) wide, slides in over the page with an --overlay backdrop; always the expanded form; closes on navigation, backdrop click and Escape; visibility:hidden while closed keeps it out of the tab order."
-  activity-table: "virtualized rows, 32px height, surface-2 header, row hover → surface-2, selected row → inset 3px accent left-border + accent-soft tint (tr.selected / .row-selected), critical rows → inset 3px red left-border + crit-row-bg wash (tr.critical), IBM Plex Mono tabular-nums for date/float/duration cells"
+  activity-table: "virtualized rows, 32px height, surface-2 header, row hover → surface-2, selected row → inset 3px accent left-border + accent-soft tint (tr.selected / .row-selected), critical rows → inset 3px red left-border + crit-row-bg wash (tr.critical), Roboto tabular-nums for date/float/duration cells"
   card: "white surface, 1px --border hairline, --radius-lg, --shadow-xs. Header row: title (Roboto 500, 15px) with an optional muted count beside it (.card-count, weight 400), an optional one-line description below, and on the right either a chip or a chevron link (.card-link — accent text + ChevronRightIcon) where the card leads somewhere."
   kpi-card: "white card, Roboto 500 stat values with tabular-nums; optional accent top-edge marker via .card.accent-top (inset 0 2px 0 accent) on a headline metric"
   charts: "thin solid gridlines (--chart-grid), axes/ticks in --chart-axis, series from --series-* (planned steel blue, actual green, forecast = actual dashed, cost graphite), data-date line in --chart-datadate (the accent). Don't pick status hues for a series directly."
@@ -325,8 +325,9 @@ golden amber / indigo — four distinct hues — and `mono-amber` to three indig
 ## Type System v3 — Roboto
 
 v3 replaces Figtree with **Roboto** for display *and* interface (loaded through `next/font/google`
-as `--font-roboto`, wired into `--font-display` / `--font-ui`), and keeps **IBM Plex Mono** for data
-cells (`.num` / `.mono`).
+as `--font-roboto`, wired into `--font-display` / `--font-ui`). Since 2026-10 data cells (`.num` /
+`.mono`, `--font-mono`) use Roboto too, with tabular figures: the owner found monospace numerals read
+as machine output. The token keeps its name; columns of numbers still align.
 
 - **Why Roboto.** It is a neutral, engineered grotesque that sits quietly under a coloured header
   instead of competing with it — the AppDynamics register — and it holds up at the 11–12px sizes the
@@ -406,7 +407,7 @@ Unlike the original reference implementation (a Vite/Tailwind desktop app), this
 Tailwind config — every token above is implemented as a CSS custom property in
 `frontend/app/globals.css` (`:root` for light, `@media (prefers-color-scheme:dark)` for the dark
 variant) and consumed by every component through those variables (`var(--accent)`,
-`var(--font-display)`, etc.). Roboto and IBM Plex Mono are loaded via `next/font/google` in
+`var(--font-display)`, etc.). Roboto is loaded via `next/font/google` in
 `frontend/app/layout.tsx` (the favicon and browser `theme-color` there repeat a few token hexes and
 must be kept in sync by hand). The company shell is `frontend/app/(tenant)/(company)/layout.tsx`
 (header, sidebar state, drawer) plus `frontend/components/SideNav.tsx` (accordion, rail, flyout);
@@ -418,7 +419,7 @@ company sidebar.
   `tr.critical` → inset 3px red left-border + crit-row-bg wash (the signature selection pattern)
 - Active nav item: accent-soft fill + accent-strong text + a 3px accent `::before` bar
   (`.sidenav-row.is-active`, `.sidenav-child.is-active`; in the rail, the current section's icon)
-- All numeric/date cells: `.num` or `.mono` (IBM Plex Mono, `font-variant-numeric: tabular-nums`)
+- All numeric/date cells: `.num` or `.mono` (Roboto, `font-variant-numeric: tabular-nums`)
 - Section headers / display type: Roboto, `var(--display-weight)` (500), `var(--display-tracking)` (-0.01em)
 - Labels: sentence case, weight 500, `--text-muted` or `--text-secondary` — never uppercase
 - Card header: `.card-title` (+ optional `.card-count`), `.card-title-sub`, and on the right a chip

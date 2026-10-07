@@ -11,7 +11,7 @@ a{color:inherit}
    a cool light-gray canvas, white cards, and ONE chromatic accent — indigo/
    violet — spent only on interactive state, selection, focus, CTAs and the
    two sanctioned non-interactive marks (the WBS rail, the data-date line).
-   Type v3 is Roboto for display and interface with IBM Plex Mono for data —
+   Type v3 is Roboto everywhere — display, interface and data (tabular figures) —
    see the --font-* block below and DESIGN.md "Type System v3".
 
    Why the change: the owner chose an AppDynamics-inspired direction so POKO
@@ -175,13 +175,16 @@ a{color:inherit}
 
   --focus:#5b45d6;
 
-  /* Type v3 — Roboto across display and interface (weight, not a second
-     face, separates the roles), IBM Plex Mono for data. Roboto ships 300/
+  /* Type v3 — Roboto across display, interface and data (weight, not a
+     second face, separates the roles). Data no longer uses a monospace face:
+     the owner found mono numerals read as machine output, so --font-mono is
+     Roboto with tabular figures (columns of numbers still line up). The
+     token keeps its name so every data cell follows it. Roboto ships 300/
      400/500/700 here (layout.tsx): 500 (Medium) is the label and title
      weight, 700 is reserved for emphasis inside dense data (chips, badges). */
   --font-display:var(--font-roboto),Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
   --font-ui:var(--font-roboto),Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
-  --font-mono:var(--font-plex-mono),"IBM Plex Mono","Cascadia Mono","Segoe UI Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --font-mono:var(--font-roboto),Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
   --display-weight:500;
   --display-tracking:-.01em;
 }
@@ -278,6 +281,7 @@ body{
      the working area stays quiet (v2's two faint corner washes are gone). */
   background:var(--bg);
   font-family:var(--font-ui);
+  font-variant-numeric:tabular-nums;
   font-size:14px;
   line-height:1.5;
   -webkit-font-smoothing:antialiased;

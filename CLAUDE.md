@@ -26,8 +26,9 @@ properties in `frontend/app/globals.css` (this project has no Tailwind).
    `frontend/app/globals.css` (`--accent`, `--good`/`--warn`/`--crit`/`--info`, etc.) and
    documented in `DESIGN.md`.
 2. **Typography:** Roboto for both display/headers (`var(--font-display)`, weight
-   `var(--display-weight)`) and body (`var(--font-ui)`); IBM Plex Mono (`var(--font-mono)`, also
-   just `.mono`/`.num` classes) for data cells. Never use `text-transform: uppercase` as a label
+   `var(--display-weight)`) and body (`var(--font-ui)`); data cells use `var(--font-mono)` /
+   `.mono` / `.num`, which is Roboto with tabular figures — no monospace face (the owner dropped
+   IBM Plex Mono in 2026-10 as too machine-like; don't reintroduce one). Never use `text-transform: uppercase` as a label
    device — sentence case carries hierarchy instead (see DESIGN.md "Type System v3"; Roboto
    replaced Figtree in 2026-10 at the owner's request, AppDynamics-inspired).
 3. **Accent discipline:** `var(--accent)` (indigo, since the 2026-10 "indigo chrome" palette —

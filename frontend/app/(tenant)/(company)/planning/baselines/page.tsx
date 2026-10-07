@@ -103,6 +103,11 @@ function SectionHead({
   );
 }
 
+// Hours read as a quantity, not a raw float: 153,128 rather than 153128.0.
+function fmtHours(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: n >= 100 ? 0 : 1 });
+}
+
 export default function BaselinesPage() {
   const { showToast } = useToast();
   const { project, refreshBaseline } = useProjectContext();
@@ -317,7 +322,7 @@ export default function BaselinesPage() {
                     <div className="kpi-row" style={{ marginBottom: replaceMode ? "1rem" : 0 }}>
                       {[
                         { label: "Version", value: active.version_label, num: false },
-                        { label: "BAC (hrs)", value: active.total_budget_manhours.toFixed(1), num: true },
+                        { label: "BAC (hrs)", value: fmtHours(active.total_budget_manhours), num: true },
                         { label: "Target start", value: fmtDate(active.target_start_date), num: true },
                         { label: "Target finish", value: fmtDate(active.target_end_date), num: true },
                         { label: "Activities", value: String(active.activity_count), num: true },
@@ -415,7 +420,7 @@ export default function BaselinesPage() {
                               Budgeted labor
                             </div>
                             <div className="num" style={{ fontSize: "1rem", fontWeight: 700, marginTop: ".3rem" }}>
-                              {resources.total_budgeted_labor_hours.toFixed(1)} h
+                              {fmtHours(resources.total_budgeted_labor_hours)} h
                             </div>
                           </div>
                           <div className="card" style={{ padding: ".9rem 1rem" }}>
@@ -448,7 +453,7 @@ export default function BaselinesPage() {
                                   </td>
                                   <td>{RSRC_TYPE_LABEL[r.rsrc_type] ?? r.rsrc_type}</td>
                                   <td>{r.unit_id ?? "—"}</td>
-                                  <td className="num">{r.budgeted_qty.toFixed(1)}</td>
+                                  <td className="num">{fmtHours(r.budgeted_qty)}</td>
                                   <td className="num">{r.budgeted_cost.toLocaleString()}</td>
                                   <td className="num">{r.assignment_count}</td>
                                 </tr>
@@ -655,7 +660,7 @@ export default function BaselinesPage() {
                                 {b.status}
                               </span>
                             </td>
-                            <td className="num">{b.total_budget_manhours.toFixed(1)}</td>
+                            <td className="num">{fmtHours(b.total_budget_manhours)}</td>
                             <td className="num">{fmtDate(b.target_start_date)}</td>
                             <td className="num">{fmtDate(b.target_end_date)}</td>
                             <td className="num">{b.activity_count}</td>
