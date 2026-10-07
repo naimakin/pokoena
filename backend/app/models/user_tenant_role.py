@@ -54,11 +54,13 @@ EDIT_CAPABLE_PROJECT_ROLES = {
 }
 
 # Roles that may manage team members (in addition to company_admin, which
-# always can regardless of project_role).
-USER_MANAGEMENT_CAPABLE_PROJECT_ROLES = {
-    ProjectRole.project_administrator,
-    ProjectRole.user_management,
-}
+# always can regardless of project_role). Only User Management: Project
+# Administrator is about the programme, not about who's on the team.
+USER_MANAGEMENT_CAPABLE_PROJECT_ROLES = {ProjectRole.user_management}
+
+# Roles only a company admin may hand out (services/team_roles.py) — a User
+# Management employee could otherwise mint peers with the same reach.
+ADMIN_GRANTED_PROJECT_ROLES = {ProjectRole.project_administrator, ProjectRole.user_management}
 
 # The only project role a subcontractor may hold: update progress on the
 # activities of their own scopes. Without it they're view only. What they see

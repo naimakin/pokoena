@@ -36,9 +36,33 @@ def open_update_period(
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_role(TenantRole.company_admin)),
 ) -> UpdatePeriod:
+    """Opens the window in which subcontractors update progress on their
+    scopes. One open period per project at a time."""
     get_tenant_scoped_or_404(db, Project, payload.project_id, ctx)
+    periods = (
+        db.query(UpdatePeriod)
+        .filter(UpdatePeriod.tenant_id == ctx.tenant_id, UpdatePeriod.project_id == payload.project_id)
+        .all()
+    )
+    if any(p.status == UpdatePeriodStatus.open for p in periods):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This project already has an open update period — close it first"
+        )
+    now = datetime.now(timezone.utc)
+    opens_at = payload.opens_at or now
+    deadline_at = payload.deadline_at if payload.deadline_at.tzinfo else payload.deadline_at.replace(tzinfo=timezone.utc)
+    if deadline_at <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The deadline must be in the future")
+    number = payload.period_number or max((p.period_number for p in periods), default=0) + 1
     period = UpdatePeriod(
-        id=uuid.uuid4(), tenant_id=ctx.tenant_id, status=UpdatePeriodStatus.open, **payload.model_dump()
+        id=uuid.uuid4(),
+        tenant_id=ctx.tenant_id,
+        project_id=payload.project_id,
+        period_number=number,
+        label=(payload.label or "").strip() or f"Update {number}",
+        opens_at=opens_at,
+        deadline_at=deadline_at,
+        status=UpdatePeriodStatus.open,
     )
     db.add(period)
     db.commit()

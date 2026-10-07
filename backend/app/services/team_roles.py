@@ -5,8 +5,8 @@ from fastapi import HTTPException, status
 
 from app.deps import AuthContext
 from app.models.user_tenant_role import (
+    ADMIN_GRANTED_PROJECT_ROLES,
     SUBCONTRACTOR_PROJECT_ROLES,
-    USER_MANAGEMENT_CAPABLE_PROJECT_ROLES,
     ProjectRole,
     TenantRole,
 )
@@ -33,7 +33,7 @@ def check_project_roles(role: TenantRole, project_roles: list[ProjectRole], acto
     if role == TenantRole.company_employee:
         if not roles:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one project_role is required")
-        if actor.role != TenantRole.company_admin and set(roles) & USER_MANAGEMENT_CAPABLE_PROJECT_ROLES:
+        if actor.role != TenantRole.company_admin and set(roles) & ADMIN_GRANTED_PROJECT_ROLES:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only a company admin can grant Project Administrator or User Management",

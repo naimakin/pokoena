@@ -25,6 +25,18 @@ import {
 const EMPLOYEE_ROLE_OPTIONS = Object.entries(PROJECT_ROLE_LABELS) as [ProjectRole, string][];
 const SUB_UPDATER: ProjectRole = "activity_status_updater";
 
+// What each role actually unlocks (backend: EDIT_CAPABLE_PROJECT_ROLES and
+// USER_MANAGEMENT_CAPABLE_PROJECT_ROLES in models/user_tenant_role.py).
+const ROLE_HELP: Record<ProjectRole, string> = {
+  project_administrator: "Edit the programme, activities and progress on their projects.",
+  all_access: "Edit everything on their projects except threshold settings.",
+  execution: "Update activities and progress on their projects.",
+  user_management: "Open Users: invite people and change their access.",
+  activity_status_updater: "Update activity status and % complete only.",
+};
+// Only a company admin may hand these out (services/team_roles.py).
+const ADMIN_GRANTED: ProjectRole[] = ["project_administrator", "user_management"];
+
 const selectStyle = {
   background: "var(--surface)",
   border: "1px solid var(--border-strong)",
@@ -552,22 +564,30 @@ export default function UserManagementPage() {
 
                 {!accessLocked && !isSub && (
                   <>
-                    <div className="field">
-                      <label>Role(s)</label>
-                      <div className="pick-wrap">
-                        {EMPLOYEE_ROLE_OPTIONS.map(([value, label]) => (
-                          <button
-                            type="button"
-                            key={value}
-                            className={`pick-chip${projectRoles.includes(value) ? " selected" : ""}`}
-                            aria-pressed={projectRoles.includes(value)}
-                            onClick={() => setProjectRoles((prev) => toggle(prev, value))}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <fieldset className="field role-options">
+                      <legend>Roles</legend>
+                      {EMPLOYEE_ROLE_OPTIONS.map(([value, label]) => {
+                        const locked = ADMIN_GRANTED.includes(value) && me?.role !== "company_admin";
+                        const on = projectRoles.includes(value);
+                        return (
+                          <label key={value} className={`role-option${on ? " is-on" : ""}${locked ? " is-locked" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              disabled={locked}
+                              onChange={() => setProjectRoles((prev) => toggle(prev, value))}
+                            />
+                            <span>
+                              <span className="role-option-name">{label}</span>
+                              <span className="role-option-help">
+                                {locked ? "Only a company admin can grant this." : ROLE_HELP[value]}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                      <span className="cell-sub">Without an editing role they can view their projects only.</span>
+                    </fieldset>
                     <div className="field">
                       <label>Projects</label>
                       <div className="pick-wrap">
@@ -590,20 +610,29 @@ export default function UserManagementPage() {
 
                 {!accessLocked && isSub && (
                   <>
-                    <div className="field">
-                      <label>Permission</label>
-                      <div className="segmented" style={{ width: "fit-content" }}>
-                        <button type="button" className={canUpdate ? "active" : ""} onClick={() => setCanUpdate(true)}>
-                          Update progress
-                        </button>
-                        <button type="button" className={!canUpdate ? "active" : ""} onClick={() => setCanUpdate(false)}>
-                          View only
-                        </button>
-                      </div>
+                    <fieldset className="field role-options">
+                      <legend>Permission</legend>
+                      {[
+                        { on: true, name: "Update progress", help: "Enter status, dates and % on their scope while an update period is open." },
+                        { on: false, name: "View only", help: "See their scope and its logic; no edits." },
+                      ].map((opt) => (
+                        <label key={opt.name} className={`role-option${canUpdate === opt.on ? " is-on" : ""}`}>
+                          <input
+                            type="radio"
+                            name="sub-permission"
+                            checked={canUpdate === opt.on}
+                            onChange={() => setCanUpdate(opt.on)}
+                          />
+                          <span>
+                            <span className="role-option-name">{opt.name}</span>
+                            <span className="role-option-help">{opt.help}</span>
+                          </span>
+                        </label>
+                      ))}
                       <span className="cell-sub">
                         Subcontractors only ever see their own scopes; company roles don&rsquo;t apply to them.
                       </span>
-                    </div>
+                    </fieldset>
                     <div className="field">
                       <label htmlFor="add-org">Subcontractor organization</label>
                       <select id="add-org" value={orgId} onChange={(e) => setOrgId(e.target.value)} style={selectStyle}>

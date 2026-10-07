@@ -56,10 +56,10 @@ interface NavSection {
 
 const always: Visible = () => true;
 
+// Mirrors deps.require_user_management: only the User Management role (or a
+// company admin) opens the team — Project Administrator is about the programme.
 const canManageTeam: Visible = (user) =>
-  user?.role === "company_admin" ||
-  Boolean(user?.project_roles?.includes("user_management")) ||
-  Boolean(user?.project_roles?.includes("project_administrator"));
+  user?.role === "company_admin" || Boolean(user?.project_roles?.includes("user_management"));
 
 const isCompanyAdmin: Visible = (user) => user?.role === "company_admin";
 
@@ -150,16 +150,16 @@ const TOP_SECTIONS: NavSection[] = [
 // Account and administration pages open from the user menu in the header's
 // top-right corner (components/UserMenu.tsx), not the sidebar.
 const ADMIN_LINKS: NavChild[] = [
-  { href: "/projects", label: "Projects", icon: FolderIcon, visible: canManageTeam },
+  { href: "/projects", label: "Projects", icon: FolderIcon, visible: isCompanyAdmin },
   { href: "/user-management", label: "Users", icon: UsersIcon, visible: canManageTeam },
-  { href: "/administration/scopes", label: "Subcontractor scopes", icon: LayersIcon, visible: isCompanyAdmin },
+  { href: "/administration/scopes", label: "Subcontractors", icon: LayersIcon, visible: isCompanyAdmin },
 ];
 
 // Browser-tab labels for pages that aren't in the sidebar.
 const ACCOUNT_PAGE_LABELS: Record<string, string> = {
   "/projects": "Projects",
   "/user-management": "Users",
-  "/administration/scopes": "Subcontractor scopes",
+  "/administration/scopes": "Subcontractors",
   "/administration/profile": "My Profile",
 };
 
@@ -376,7 +376,7 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
 
           <div className="header-right">
             <GlobalSearch pages={searchPages} />
-            <ProjectSwitcher manageHref={canManageTeam(user) ? "/projects" : undefined} />
+            <ProjectSwitcher manageHref={isCompanyAdmin(user) ? "/projects" : undefined} />
             <UserMenu
               user={user}
               roleLabel={user ? (ROLE_LABEL[user.role] ?? user.role) : ""}

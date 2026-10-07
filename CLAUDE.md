@@ -52,7 +52,7 @@ frontend/app/
   platform-admin/       ← POKO-staff-only console (tenant onboarding, platform admins)
   globals.css           ← full design-token implementation
 lib/                     ← api.ts (fetch wrapper + silent session refresh), types.ts, auth.ts (server-only)
-components/               ← shared (Toast, icons.tsx, ActivityCard, FlagReviewModal)
+components/               ← shared (Toast, icons.tsx, FlagReviewModal)
 backend/app/
   models/, schemas/, api/routes/, services/, deps.py (auth/RLS plumbing)
   alembic/versions/      ← migrations, sequential (0001, 0002, ...)

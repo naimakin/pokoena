@@ -439,3 +439,41 @@ def test_migration_maps_subcontractor_roles_to_update_or_view_only():
     assert module.subcontractor_roles(["project_administrator"]) == ["activity_status_updater"]
     assert module.subcontractor_roles(["user_management"]) == []
     assert module.subcontractor_roles([]) == []
+
+
+def test_project_administrator_alone_does_not_open_the_team(client, db_session):
+    tenant, _project, _acts = _programme(db_session)
+    _member(db_session, tenant, "pa@example.com", TenantRole.company_employee, [ProjectRole.project_administrator])
+    _login(client, "pa@example.com")
+
+    assert client.get("/team").status_code == 403
+
+
+# --- update periods -------------------------------------------------------------
+
+
+def test_admin_opens_one_update_period_at_a_time(client, db_session):
+    tenant, project, _acts = _programme(db_session)
+    _login(client, _admin(db_session, tenant))
+    deadline = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+
+    first = client.post("/update-periods", json={"project_id": str(project.id), "deadline_at": deadline})
+    again = client.post("/update-periods", json={"project_id": str(project.id), "deadline_at": deadline})
+
+    assert first.status_code == 201, first.text
+    assert first.json()["period_number"] == 1 and first.json()["label"] == "Update 1"
+    assert again.status_code == 409
+
+    client.post(f"/update-periods/{first.json()['id']}/close")
+    second = client.post(
+        "/update-periods", json={"project_id": str(project.id), "deadline_at": deadline, "label": "October update"}
+    )
+    assert second.json()["period_number"] == 2 and second.json()["label"] == "October update"
+
+
+def test_update_period_deadline_must_be_ahead(client, db_session):
+    tenant, project, _acts = _programme(db_session)
+    _login(client, _admin(db_session, tenant))
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
+    assert client.post("/update-periods", json={"project_id": str(project.id), "deadline_at": past}).status_code == 400

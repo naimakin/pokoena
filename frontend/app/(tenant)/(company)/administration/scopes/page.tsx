@@ -5,13 +5,23 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import { ChevronDownIcon, ChevronRightIcon, LayersIcon, PencilIcon, TrashIcon } from "@/components/icons";
+import {
+  BellIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  LayersIcon,
+  PencilIcon,
+  TrashIcon,
+} from "@/components/icons";
+import { fmtP6Date } from "@/components/reporting/format";
 import type {
   ActivityCodes,
   ProjectScope,
   ScopePreview,
   ScopeRulePayload,
   SubcontractorOrg,
+  UpdatePeriod,
   WbsNode,
 } from "@/lib/types";
 
@@ -49,17 +59,20 @@ export default function ScopesPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [periods, setPeriods] = useState<UpdatePeriod[]>([]);
 
   async function load(projectId: string) {
     setLoading(true);
     setError(null);
     try {
-      const [scopeList, wbsList, codeData, orgList] = await Promise.all([
+      const [scopeList, wbsList, codeData, orgList, periodList] = await Promise.all([
         api.get<ProjectScope[]>(`/projects/${projectId}/scopes`),
         api.get<WbsNode[]>(`/projects/${projectId}/wbs-nodes`),
         api.get<ActivityCodes>(`/projects/${projectId}/activity-codes`),
         api.get<SubcontractorOrg[]>("/subcontractor-organizations"),
+        api.get<UpdatePeriod[]>(`/update-periods?project_id=${projectId}`),
       ]);
+      setPeriods(periodList);
       setScopes(scopeList);
       setWbs(wbsList);
       setCodes(codeData);
@@ -132,16 +145,25 @@ export default function ScopesPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Subcontractor scopes</div>
+            <div className="page-title">Subcontractors</div>
             <div className="page-desc">
-              A scope is the part of the programme a subcontractor sees and updates. Pick it by WBS (each with
+              A scope is the part of the programme a subcontractor sees and updates, picked by WBS (each with
               everything under it) and/or activity codes — it follows the programme through every upload. Assign
-              scopes to people on <Link href="/user-management">Users</Link>.
+              scopes to people on <Link href="/user-management">Users</Link>; open an update period when you want
+              their progress.
             </div>
           </div>
         </div>
 
         {!project && <p className="empty-state">Select a project to manage its scopes.</p>}
+
+        {project && (
+          <UpdatePeriodCard
+            projectId={project.id}
+            periods={periods}
+            onChange={() => load(project.id)}
+          />
+        )}
 
         {project && (
           <div className="card">
@@ -271,6 +293,148 @@ export default function ScopesPage() {
         />
       )}
     </>
+  );
+}
+
+function inDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The window in which subcontractors may enter progress. Without an open
+ *  period their scope page is view only. One open period per project. */
+function UpdatePeriodCard({
+  projectId,
+  periods,
+  onChange,
+}: {
+  projectId: string;
+  periods: UpdatePeriod[];
+  onChange: () => void;
+}) {
+  const { showToast } = useToast();
+  const open = periods.find((p) => p.status === "open") ?? null;
+  const last = periods.find((p) => p.status === "closed") ?? null;
+  const nextNumber = Math.max(0, ...periods.map((p) => p.period_number)) + 1;
+  const [label, setLabel] = useState("");
+  const [deadline, setDeadline] = useState(inDays(7));
+  const [busy, setBusy] = useState(false);
+
+  async function openPeriod(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      // End of the chosen day, local time.
+      const deadlineAt = new Date(`${deadline}T23:59:00`).toISOString();
+      await api.post<UpdatePeriod>("/update-periods", {
+        project_id: projectId,
+        deadline_at: deadlineAt,
+        label: label.trim() || undefined,
+      });
+      showToast("Update period opened — subcontractors can enter progress now");
+      setLabel("");
+      onChange();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to open the update period.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function closePeriod() {
+    if (!open || !window.confirm(`Close ${open.label}? Subcontractors won't be able to enter progress until you open the next one.`)) return;
+    setBusy(true);
+    try {
+      await api.post(`/update-periods/${open.id}/close`);
+      showToast(`${open.label} closed`);
+      onChange();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to close the period.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remind() {
+    if (!open) return;
+    try {
+      const result = await api.post<{ reminded: number }>(`/update-periods/${open.id}/remind`);
+      showToast(`Reminder sent to ${result.reminded} subcontractor(s) who haven't submitted`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to send reminders.", "error");
+    }
+  }
+
+  const daysLeft = open ? Math.ceil((new Date(open.deadline_at).getTime() - Date.now()) / 86_400_000) : 0;
+
+  return (
+    <div className="card period-card">
+      <div className={`period-state${open ? " is-open" : ""}`}>
+        <ClockIcon className="icon" />
+        <div className="period-text">
+          {open ? (
+            <>
+              <div className="period-title">
+                {open.label} is open
+                <span className={`chip ${daysLeft <= 2 ? "chip-warn" : "chip-good"}`}>
+                  {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : "Past deadline"}
+                </span>
+              </div>
+              <div className="cell-sub">
+                Subcontractors can enter progress until {fmtP6Date(open.deadline_at)}. Opened {fmtP6Date(open.opens_at)}.
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="period-title">No update period is open</div>
+              <div className="cell-sub">
+                Subcontractors can see their scopes but not enter progress.
+                {last ? ` Last: ${last.label}, closed ${fmtP6Date(last.closed_at)}.` : ""}
+              </div>
+            </>
+          )}
+        </div>
+        {open && (
+          <div className="period-actions">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={remind} disabled={busy}>
+              <BellIcon className="icon" /> Remind
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={closePeriod} disabled={busy}>
+              Close period
+            </button>
+          </div>
+        )}
+      </div>
+      {!open && (
+        <form className="period-form" onSubmit={openPeriod}>
+          <div className="field">
+            <label htmlFor="period-label">Name</label>
+            <input
+              type="text"
+              id="period-label"
+              value={label}
+              placeholder={`Update ${nextNumber}`}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="period-deadline">Deadline</label>
+            <input
+              type="date"
+              id="period-deadline"
+              required
+              min={inDays(0)}
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !deadline}>
+            Open update period
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 

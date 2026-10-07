@@ -144,9 +144,8 @@ def require_role(*roles: TenantRole):
 
 def require_user_management(ctx: AuthContext = Depends(get_current_tenant_user)) -> AuthContext:
     """Company Admins always manage their tenant's team. A company_employee or
-    subcontractor can too, but only if they hold at least one of the User
-    Management / Project Administrator project_roles — everyone else (e.g.
-    holding only Execution/Activity Status Updater) is 403'd. Subcontractors
+    employee can too, but only with the User Management project role —
+    everyone else (Project Administrator, Execution, ...) is 403'd. Subcontractors
     never manage the team, whatever roles an older row may still carry."""
     if ctx.role == TenantRole.company_admin:
         return ctx
