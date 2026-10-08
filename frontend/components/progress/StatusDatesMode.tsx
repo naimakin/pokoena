@@ -6,9 +6,9 @@ import { FlagIcon } from "@/components/icons";
 import { floatClass } from "@/components/reporting/format";
 import { criticalityChip } from "@/lib/criticality";
 import { toDays } from "@/lib/duration";
-import { displayFinish, displayStart } from "@/lib/schedule-dates";
+import { displayFinish, displayStart, finishIsActual, startIsActual } from "@/lib/schedule-dates";
 import type { Activity, WbsNode } from "@/lib/types";
-import { fmtUnitsPercent } from "@/lib/wbs-tree";
+import { bandFinishIsActual, bandStartIsActual, fmtUnitsPercent } from "@/lib/wbs-tree";
 import { WbsGrid } from "./WbsGrid";
 
 // Status & dates are edited in the Activity modal, not in the grid. The grid's
@@ -96,8 +96,14 @@ export function StatusDatesMode({
           labelSpan: 3,
           render: (row) => (
             <>
-              <td className="mono">{fmtDate(row.spanStart)}</td>
-              <td className="mono">{fmtDate(row.spanFinish)}</td>
+              <td className="mono">
+                {fmtDate(row.spanStart)}
+                {bandStartIsActual(row, dataDate) && " A"}
+              </td>
+              <td className="mono">
+                {fmtDate(row.spanFinish)}
+                {bandFinishIsActual(row, dataDate) && " A"}
+              </td>
               <td />
               <td className="mono" title="Units % complete: Σ actual / Σ budgeted labor hours of the activities shown">
                 {fmtUnitsPercent(row)}
@@ -111,8 +117,8 @@ export function StatusDatesMode({
             <th>Activity</th>
             <th style={{ width: 140 }}>Activity ID</th>
             <th>Status</th>
-            <th style={{ width: 110 }}>Start</th>
-            <th style={{ width: 110 }}>Finish</th>
+            <th style={{ width: 120 }} title="A = actual date">Start</th>
+            <th style={{ width: 120 }} title="A = actual date">Finish</th>
             <th style={{ width: 90 }}>Total Float</th>
             <th style={{ width: 70 }}>%</th>
             <th style={{ width: 90 }} title="Criticality Score (0-100): total float, duration, free float and site risk">
@@ -130,12 +136,14 @@ export function StatusDatesMode({
               </td>
               <td className="mono">
                 {fmtDate(displayStart(a))}
+                {startIsActual(a, dataDate) && " A"}
                 {a.status !== "not_started" && afterDataDate(a.actual_start) && (
                   <div className="pg-warn">after data date</div>
                 )}
               </td>
               <td className="mono">
                 {fmtDate(displayFinish(a))}
+                {finishIsActual(a, dataDate) && " A"}
                 {a.status === "complete" && afterDataDate(a.actual_finish) && (
                   <div className="pg-warn">after data date</div>
                 )}

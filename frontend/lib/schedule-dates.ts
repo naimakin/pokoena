@@ -41,3 +41,17 @@ export function displayFinish(a: Dated): string | null {
   if (a.status === "complete") return a.actual_finish ?? null;
   return earlyFinish(a);
 }
+
+// P6's " A" suffix: the date shown is an actual, before the data date
+// (last_recalc_date). Completed work marks both dates, in-progress work only
+// its start.
+const beforeDataDate = (d: string | null, dataDate: string | null) =>
+  Boolean(d && dataDate && d.slice(0, 10) < dataDate.slice(0, 10));
+
+export function startIsActual(a: Dated, dataDate: string | null): boolean {
+  return (a.status === "complete" || a.status === "in_progress") && beforeDataDate(displayStart(a), dataDate);
+}
+
+export function finishIsActual(a: Dated, dataDate: string | null): boolean {
+  return a.status === "complete" && beforeDataDate(displayFinish(a), dataDate);
+}

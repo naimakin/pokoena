@@ -2,7 +2,7 @@
 // nodes in preorder with `depth`, `path_ids` and a dotted `outline_code`, so the
 // frontend only needs to interleave activities, apply collapse, and roll up.
 
-import { displayFinish, displayStart } from "@/lib/schedule-dates";
+import { displayFinish, displayStart, finishIsActual, startIsActual } from "@/lib/schedule-dates";
 import type { Activity, WbsNode } from "@/lib/types";
 
 export const UNGROUPED_KEY = "__ungrouped__";
@@ -30,6 +30,11 @@ export interface BandRow {
   // draw a summary bar on the band row; other consumers ignore them.
   spanStart: string | null;
   spanFinish: string | null;
+  // The activities those two dates come from, and whether every activity in
+  // the subtree is completed — for the band's " A" marker.
+  spanStartBy: Activity | null;
+  spanFinishBy: Activity | null;
+  allComplete: boolean;
 }
 
 export interface ActivityRow {
@@ -69,6 +74,8 @@ function rollup(activities: Activity[]) {
   let laborActual = 0;
   let spanStart: string | null = null;
   let spanFinish: string | null = null;
+  let spanStartBy: Activity | null = null;
+  let spanFinishBy: Activity | null = null;
   for (const a of activities) {
     if (a.status === "in_progress") inProgress += 1;
     else if (a.status === "complete") completed += 1;
@@ -79,8 +86,14 @@ function rollup(activities: Activity[]) {
     // milestone's one date bounds the span on both sides.
     const s = displayStart(a) ?? displayFinish(a);
     const f = displayFinish(a) ?? displayStart(a);
-    if (s && (spanStart === null || s < spanStart)) spanStart = s;
-    if (f && (spanFinish === null || f > spanFinish)) spanFinish = f;
+    if (s && (spanStart === null || s < spanStart)) {
+      spanStart = s;
+      spanStartBy = a;
+    }
+    if (f && (spanFinish === null || f > spanFinish)) {
+      spanFinish = f;
+      spanFinishBy = a;
+    }
   }
   return {
     total: activities.length,
@@ -90,7 +103,24 @@ function rollup(activities: Activity[]) {
     unitsPercent: laborBudget > 0 ? (laborActual / laborBudget) * 100 : null,
     spanStart,
     spanFinish,
+    spanStartBy,
+    spanFinishBy,
+    allComplete: completed === activities.length,
   };
+}
+
+// A milestone's one date bounds the span on both sides, so the source date may
+// be the activity's other column — check whichever it shows.
+export function bandStartIsActual(row: BandRow, dataDate: string | null): boolean {
+  const a = row.spanStartBy;
+  if (!a) return false;
+  return displayStart(a) ? startIsActual(a, dataDate) : finishIsActual(a, dataDate);
+}
+
+export function bandFinishIsActual(row: BandRow, dataDate: string | null): boolean {
+  const a = row.spanFinishBy;
+  if (!a || !row.allComplete) return false;
+  return displayFinish(a) ? finishIsActual(a, dataDate) : startIsActual(a, dataDate);
 }
 
 /**
