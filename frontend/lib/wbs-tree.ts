@@ -22,6 +22,9 @@ export interface BandRow {
   inProgress: number;
   completed: number;
   avgPercent: number;
+  // P6's Units % Complete: Σ labor actual / Σ labor budget hours over the same
+  // filtered subtree; null when nothing in it carries labor.
+  unitsPercent: number | null;
   // Earliest start / latest finish across that same subtree (ISO day strings,
   // so plain string compare is a date compare). Used by Planning > Schedule to
   // draw a summary bar on the band row; other consumers ignore them.
@@ -37,6 +40,11 @@ export interface ActivityRow {
 }
 
 export type GridRow = BandRow | ActivityRow;
+
+/** A band's units %, two decimals as P6 shows it on a WBS row. */
+export function fmtUnitsPercent(row: BandRow): string {
+  return row.unitsPercent === null ? "—" : `${row.unitsPercent.toFixed(2)}%`;
+}
 
 /** Group a (already filtered) activity list by the WBS node it hangs off. */
 export function groupByLeaf(activities: Activity[], knownWbsIds: Set<string>): Map<string, Activity[]> {
@@ -57,12 +65,16 @@ function rollup(activities: Activity[]) {
   let inProgress = 0;
   let completed = 0;
   let pctSum = 0;
+  let laborBudget = 0;
+  let laborActual = 0;
   let spanStart: string | null = null;
   let spanFinish: string | null = null;
   for (const a of activities) {
     if (a.status === "in_progress") inProgress += 1;
     else if (a.status === "complete") completed += 1;
     pctSum += a.percent_complete ?? 0;
+    laborBudget += a.labor_budget_hours ?? 0;
+    laborActual += a.labor_actual_hours ?? 0;
     // The same Start/Finish the activity rows show (lib/schedule-dates.ts); a
     // milestone's one date bounds the span on both sides.
     const s = displayStart(a) ?? displayFinish(a);
@@ -75,6 +87,7 @@ function rollup(activities: Activity[]) {
     inProgress,
     completed,
     avgPercent: activities.length ? Math.round(pctSum / activities.length) : 0,
+    unitsPercent: laborBudget > 0 ? (laborActual / laborBudget) * 100 : null,
     spanStart,
     spanFinish,
   };

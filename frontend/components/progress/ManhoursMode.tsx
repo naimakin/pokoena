@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import type { Activity, WbsNode } from "@/lib/types";
+import { fmtUnitsPercent } from "@/lib/wbs-tree";
 import { WbsGrid } from "./WbsGrid";
 
 type Draft = { burnedHours: string; physicalPct: string };
@@ -103,9 +104,22 @@ export function ManhoursMode({
         collapsed={collapsed}
         onToggle={onToggle}
         colCount={3}
+        idColumn
+        bandCells={{
+          labelSpan: 2,
+          render: (row) => (
+            <>
+              <td className="num" title="Units % complete: Σ actual / Σ budgeted labor hours of the activities shown">
+                {fmtUnitsPercent(row)}
+              </td>
+              <td colSpan={2} />
+            </>
+          ),
+        }}
         header={
           <>
             <th>Activity</th>
+            <th style={{ width: 140 }}>Activity ID</th>
             <th style={{ width: 90 }}>%</th>
             <th style={{ width: 160 }}>Burned Hours</th>
             <th style={{ width: 160 }}>New %</th>

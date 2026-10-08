@@ -32,10 +32,15 @@ What Poko shows as % (`Activity.percent_complete`) — `display_percent`:
 
 from __future__ import annotations
 
+import uuid
 from typing import Iterable, Optional
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.engine.durations import activity_hours_per_day
 from app.models.activity import Activity, ActivityStatus
+from app.models.resource import LABOR, Resource
 from app.models.resource_assignment import ResourceAssignment
 
 
@@ -71,6 +76,47 @@ def labor_units(labor: Iterable[ResourceAssignment]) -> tuple[float, float]:
         budget += assignment.target_qty or 0.0
         actual += assignment.act_reg_qty or 0.0
     return budget, actual
+
+
+def annotate_labor_units(
+    db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, activities: list[Activity]
+) -> None:
+    """Attach each activity's RT_Labor (budget, actual) hours as transient
+    `labor_budget_hours` / `labor_actual_hours` — the grids roll them up into a
+    units % over whatever set is filtered (sum actual / sum budget, as P6's
+    Units % Complete column does on a WBS band)."""
+    if not activities:
+        return
+    rows = (
+        db.query(
+            ResourceAssignment.activity_id,
+            func.coalesce(func.sum(ResourceAssignment.target_qty), 0.0),
+            func.coalesce(func.sum(ResourceAssignment.act_reg_qty), 0.0),
+        )
+        .join(Resource, Resource.id == ResourceAssignment.resource_id)
+        .filter(
+            ResourceAssignment.tenant_id == tenant_id,
+            ResourceAssignment.project_id == project_id,
+            Resource.rsrc_type == LABOR,
+        )
+        .group_by(ResourceAssignment.activity_id)
+        .all()
+    )
+    units = {activity_id: (float(budget), float(actual)) for activity_id, budget, actual in rows}
+    for activity in activities:
+        activity.labor_budget_hours, activity.labor_actual_hours = units.get(activity.id, (0.0, 0.0))
+
+
+def snapshot_labor_units(assignments_snapshot: list[dict]) -> dict[str, tuple[float, float]]:
+    """(budget, actual) RT_Labor hours per external_id from an import's frozen
+    assignments_snapshot — the same numbers annotate_labor_units gives live rows."""
+    units: dict[str, tuple[float, float]] = {}
+    for row in assignments_snapshot:
+        if row.get("rsrc_type") != LABOR:
+            continue
+        budget, actual = units.get(row["external_id"], (0.0, 0.0))
+        units[row["external_id"]] = (budget + (row.get("budget") or 0.0), actual + (row.get("actual") or 0.0))
+    return units
 
 
 def progress_fraction(activity: Activity) -> float:

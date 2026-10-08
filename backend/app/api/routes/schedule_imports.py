@@ -31,6 +31,7 @@ from app.models.user_tenant_role import VIEW_ANY, Capability
 from app.parser.xer_parser import XerParseError
 from app.schemas.activity import ActivityOut, ScheduleImportOut, ScheduleImportUpdate
 from app.schemas.wbs import WbsNodeOut
+from app.services.activity_progress import snapshot_labor_units
 from app.services.schedule_current import get_current_import, to_naive
 from app.services.wbs_tree import WbsNodeLite, build_wbs_tree
 from app.services.xer_import import DataDateRegressionError, import_xer
@@ -147,10 +148,13 @@ def get_import_activities(
             )
         )
 
+    labor = snapshot_labor_units(row.assignments_snapshot or [])
+
     out = []
     for a in row.activities_snapshot:
         hours = a.get("remaining_duration_hours")
         hpd = valid_hours_per_day(a.get("hours_per_day") or live_hpd.get(a["external_id"]))
+        labor_budget, labor_actual = labor.get(a["external_id"], (0.0, 0.0))
         out.append(
             ActivityOut(
                 id=uuid.uuid5(import_id, a["external_id"]),
@@ -179,6 +183,8 @@ def get_import_activities(
                 is_longest_path=bool(a.get("is_longest_path")),
                 constraint_type=a.get("constraint_type"),
                 constraint_date=a.get("constraint_date"),
+                labor_budget_hours=labor_budget,
+                labor_actual_hours=labor_actual,
             )
         )
     return out

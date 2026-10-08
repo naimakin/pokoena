@@ -73,6 +73,11 @@ class ActivityOut(BaseModel):
     criticality_score: int | None = None
     criticality_breakdown: dict[str, int] | None = None
 
+    # RT_Labor budget / actual hours (services/activity_progress.py::
+    # annotate_labor_units) — the inputs to a WBS band's units %.
+    labor_budget_hours: float = 0.0
+    labor_actual_hours: float = 0.0
+
 
 class ActivityUpdate(BaseModel):
     """What the Activity modal may write: the progress fields a subcontractor

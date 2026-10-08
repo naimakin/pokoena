@@ -36,7 +36,7 @@ from app.schemas.activity import (
     ActivityRelationshipOut,
     ActivityUpdate,
 )
-from app.services.activity_progress import apply_progress_entry, clear_float_if_finished
+from app.services.activity_progress import annotate_labor_units, apply_progress_entry, clear_float_if_finished
 from app.services.criticality import annotate_criticality
 from app.services.mentions import mentionable_users, record_mentions
 from app.services.schedule_current import get_current_import
@@ -333,6 +333,7 @@ def list_activities(
         )
     activities = query.order_by(Activity.external_id).all()
     annotate_criticality(db, ctx.tenant_id, project_id, activities)
+    annotate_labor_units(db, ctx.tenant_id, project_id, activities)
     return activities
 
 
@@ -347,6 +348,7 @@ def get_activity(
     require_project_permission(db, activity.project_id, ctx, *VIEW_ANY, allow_subcontractor=True)
     require_scope_access(activity.project_scope_id, ctx)
     annotate_criticality(db, ctx.tenant_id, activity.project_id, [activity])
+    annotate_labor_units(db, ctx.tenant_id, activity.project_id, [activity])
     return activity
 
 
@@ -480,6 +482,7 @@ def batch_update_activities(
     for activity in saved:
         db.refresh(activity)
     annotate_criticality(db, ctx.tenant_id, project_id, saved)
+    annotate_labor_units(db, ctx.tenant_id, project_id, saved)
     return ActivityBatchResultOut(saved=saved, failed=failed)
 
 
@@ -508,6 +511,7 @@ def update_activity(
     db.commit()
     db.refresh(activity)
     annotate_criticality(db, ctx.tenant_id, activity.project_id, [activity])
+    annotate_labor_units(db, ctx.tenant_id, activity.project_id, [activity])
     return activity
 
 

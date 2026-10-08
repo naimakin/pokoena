@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Activity, WbsNode } from "@/lib/types";
-import { buildGridRows, groupByLeaf } from "@/lib/wbs-tree";
+import { buildGridRows, groupByLeaf, type BandRow } from "@/lib/wbs-tree";
 import { ChevronDownIcon, ChevronUpIcon } from "@/components/icons";
 
 const INDENT_STEP = 16;
@@ -23,14 +23,16 @@ export function WbsGrid({
   onActivityClick,
   sortWithinBand,
   rowClassName,
+  idColumn = false,
+  bandCells,
   emptyLabel = "No activities match the current filter.",
 }: {
   nodes: WbsNode[];
   activities: Activity[]; // already filtered
   collapsed: Set<string>;
   onToggle: (wbsId: string) => void;
-  colCount: number; // number of <td> after the identity cell in an activity row
-  header: ReactNode; // <th> cells (identity col + the rest)
+  colCount: number; // number of <td> after the identity cell(s) in an activity row
+  header: ReactNode; // <th> cells (identity col(s) + the rest)
   renderActivityCells: (activity: Activity) => ReactNode;
   // Set by callers that open the Activity modal on row click (Progress). Left
   // unset the row stays inert, for grids that are purely a readout.
@@ -42,8 +44,14 @@ export function WbsGrid({
   // Extra class on an activity row (e.g. Schedule Simulation marks the ones
   // changed in the scenario).
   rowClassName?: (activity: Activity) => string | undefined;
+  // Activity ID in its own column right of the name, instead of under it.
+  idColumn?: boolean;
+  // Band rows as real cells: the label spans `labelSpan` columns, then
+  // `render` supplies the rest (e.g. a rolled-up % under the % column).
+  bandCells?: { labelSpan: number; render: (row: BandRow) => ReactNode };
   emptyLabel?: string;
 }) {
+  const totalCols = colCount + 1 + (idColumn ? 1 : 0);
   const knownWbsIds = new Set(nodes.map((n) => n.wbs_id));
   const byLeaf = groupByLeaf(activities, knownWbsIds);
   if (sortWithinBand) {
@@ -60,7 +68,7 @@ export function WbsGrid({
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={colCount + 1} className="empty-state">
+              <td colSpan={totalCols} className="empty-state">
                 {emptyLabel}
               </td>
             </tr>
@@ -70,7 +78,7 @@ export function WbsGrid({
               const d = `d${Math.min(row.depth, 4)}`;
               return (
                 <tr key={row.key} className={`wbs-band ${d}`}>
-                  <td colSpan={colCount + 1}>
+                  <td colSpan={bandCells ? bandCells.labelSpan : totalCols}>
                     <div className="wbs-band-label" style={{ paddingLeft: indent(row.depth) }}>
                       {row.hasChildren ? (
                         <button
@@ -90,13 +98,11 @@ export function WbsGrid({
                       <span className="wbs-band-code">{row.outlineCode}</span>
                       <span>{row.label}</span>
                       <span className="wbs-band-roll" style={{ marginLeft: "auto" }}>
-                        Σ {row.total}
-                        {row.inProgress > 0 ? ` · ${row.inProgress} IP` : ""}
-                        {row.completed > 0 ? ` · ${row.completed} done` : ""}
-                        {` · ${row.avgPercent}%`}
+                        {row.total} {row.total === 1 ? "activity" : "activities"} · {row.completed} completed
                       </span>
                     </div>
                   </td>
+                  {bandCells?.render(row)}
                 </tr>
               );
             }
@@ -132,9 +138,10 @@ export function WbsGrid({
                 <td>
                   <div className="pg-id" style={{ paddingLeft: indent(row.depth) }}>
                     <div className="pg-name">{a.name}</div>
-                    {a.external_id}
+                    {!idColumn && a.external_id}
                   </div>
                 </td>
+                {idColumn && <td className="pg-ext-id">{a.external_id}</td>}
                 {renderActivityCells(a)}
               </tr>
             );

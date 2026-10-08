@@ -1213,6 +1213,7 @@ tr.resolved{opacity:.45}
 
 .pg-id{font-family:var(--font-mono);font-size:.75rem}
 .pg-id .pg-name{font-family:var(--font-ui);font-size:.8125rem;color:var(--text-primary);font-weight:500}
+.pg-ext-id{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary);white-space:nowrap}
 .pg-warn{font-size:.6875rem;color:var(--warn)}
 .pg-flags{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
 /* Rows that open the Activity modal — the whole row is the hit target, so it

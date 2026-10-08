@@ -242,6 +242,11 @@ export interface Activity {
   // Criticality Score (lib/criticality.ts) — null for completed work.
   criticality_score?: number | null;
   criticality_breakdown?: Record<string, number> | null;
+
+  // RT_Labor budget / actual hours — a WBS band's units % is
+  // Σ actual / Σ budget over its filtered activities (lib/wbs-tree.ts).
+  labor_budget_hours?: number;
+  labor_actual_hours?: number;
 }
 
 export type SiteRisk = "high" | "standard" | "low";

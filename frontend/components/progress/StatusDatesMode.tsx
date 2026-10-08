@@ -8,6 +8,7 @@ import { criticalityChip } from "@/lib/criticality";
 import { toDays } from "@/lib/duration";
 import { displayFinish, displayStart } from "@/lib/schedule-dates";
 import type { Activity, WbsNode } from "@/lib/types";
+import { fmtUnitsPercent } from "@/lib/wbs-tree";
 import { WbsGrid } from "./WbsGrid";
 
 // Status & dates are edited in the Activity modal, not in the grid. The grid's
@@ -90,9 +91,22 @@ export function StatusDatesMode({
             : undefined
         }
         colCount={7}
+        idColumn
+        bandCells={{
+          labelSpan: 6,
+          render: (row) => (
+            <>
+              <td className="mono" title="Units % complete: Σ actual / Σ budgeted labor hours of the activities shown">
+                {fmtUnitsPercent(row)}
+              </td>
+              <td colSpan={2} />
+            </>
+          ),
+        }}
         header={
           <>
             <th>Activity</th>
+            <th style={{ width: 140 }}>Activity ID</th>
             <th>Status</th>
             <th style={{ width: 110 }}>Start</th>
             <th style={{ width: 110 }}>Finish</th>
