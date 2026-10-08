@@ -18,7 +18,8 @@ import {
   XIcon,
 } from "@/components/icons";
 import { api, ApiError } from "@/lib/api";
-import { PokoChecks } from "@/components/dcma/PokoChecks";
+import { findingsLabel, PokoFindings } from "@/components/dcma/PokoChecks";
+import { FoldAllControls } from "@/components/reporting/collapse";
 import {
   categoryLabel,
   checksCsv,
@@ -79,6 +80,13 @@ function impactLabel(impact: number): string {
 // (at most five, the largest category) and lets each row's sections share it.
 const CARD_MIN = 300;
 const GAP_PX = 16;
+const FOLD_KEY = "poko.dcma.folded";
+
+function tally(checks: DcmaCheckResult[]) {
+  const c = { pass: 0, warn: 0, fail: 0, not_tracked: 0 };
+  for (const check of checks) c[check.status] += 1;
+  return c;
+}
 
 function ringLabel(check: DcmaCheckResult, t: Thresholds): string {
   const m = metaFor(check, t);
@@ -144,25 +152,28 @@ export default function DcmaPage() {
     [report],
   );
 
-  // The summary, filters and score are DCMA's 14; POKO's own (unscored) checks
-  // get their own section below.
-  const dcmaChecks = useMemo(() => (report?.checks ?? []).filter((c) => c.scored !== false), [report]);
-  const pokoChecks = useMemo(() => (report?.checks ?? []).filter((c) => c.scored === false), [report]);
+  // The score, the summary tallies and "Passing by category" are DCMA's 14;
+  // POKO's own (unscored) checks are a section of their own, listed first.
+  const allChecks = useMemo(() => report?.checks ?? [], [report]);
+  const dcmaChecks = useMemo(() => allChecks.filter((c) => c.scored !== false), [allChecks]);
+  const pokoChecks = useMemo(() => allChecks.filter((c) => c.scored === false), [allChecks]);
 
-  const counts = useMemo(() => {
-    const c = { pass: 0, warn: 0, fail: 0, not_tracked: 0 };
-    for (const check of dcmaChecks) c[check.status] += 1;
-    return c;
-  }, [dcmaChecks]);
+  const counts = useMemo(() => tally(dcmaChecks), [dcmaChecks]);
+  // What each status filter would show, POKO checks included.
+  const filterCounts = useMemo(() => tally(allChecks), [allChecks]);
+
+  useEffect(() => {
+    if (category === "poko" && pokoChecks.length === 0) setCategory("all");
+  }, [category, pokoChecks.length]);
 
   const visible = useMemo(
     () =>
-      dcmaChecks.filter(
+      allChecks.filter(
         (c) =>
           (statusFilter === "all" || c.status === statusFilter) &&
           (category === "all" || metaFor(c, t).category === category),
       ),
-    [dcmaChecks, statusFilter, category, t],
+    [allChecks, statusFilter, category, t],
   );
 
   const byCategory = useMemo(
@@ -179,6 +190,57 @@ export default function DcmaPage() {
       }),
     [dcmaChecks, visible, t],
   );
+
+  const pokoAttention = pokoChecks.filter((c) => c.status !== "pass").length;
+  const sections = useMemo(() => {
+    const dcma = byCategory.map((cat) => ({
+      key: cat.key as DcmaCategory,
+      label: cat.label,
+      sub: `${cat.passed} of ${cat.total} passing`,
+      shown: cat.shown,
+    }));
+    if (pokoChecks.length === 0) return dcma;
+    const poko = {
+      key: "poko" as DcmaCategory,
+      label: categoryLabel("poko"),
+      sub: `${pokoAttention > 0 ? `${pokoAttention} of ${pokoChecks.length} need attention` : "All clean"} · not scored`,
+      shown: visible.filter((c) => c.scored === false),
+    };
+    return [poko, ...dcma];
+  }, [byCategory, pokoChecks.length, pokoAttention, visible]);
+
+  // Folded sections, remembered per browser; shared by Charts and Table.
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FOLD_KEY);
+      if (raw) setClosed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const saveClosed = useCallback((next: Set<string>) => {
+    setClosed(next);
+    try {
+      localStorage.setItem(FOLD_KEY, JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const setSectionOpen = useCallback(
+    (key: string, open: boolean) => {
+      const next = new Set(closed);
+      if (open) next.delete(key);
+      else next.add(key);
+      saveClosed(next);
+    },
+    [closed, saveClosed],
+  );
+  function pickCategory(key: DcmaCategory | "all") {
+    setCategory(key);
+    if (key !== "all" && closed.has(key)) setSectionOpen(key, true);
+  }
+  const shownSections = sections.filter((s) => s.shown.length > 0);
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -298,7 +360,7 @@ export default function DcmaPage() {
                     key={cat.key}
                     type="button"
                     className={`dcma-cat-row${category === cat.key ? " is-on" : ""}`}
-                    onClick={() => setCategory(category === cat.key ? "all" : cat.key)}
+                    onClick={() => pickCategory(category === cat.key ? "all" : cat.key)}
                   >
                     <span>{cat.label}</span>
                     <span className="mono">
@@ -317,6 +379,21 @@ export default function DcmaPage() {
                     </span>
                   </button>
                 ))}
+                {pokoChecks.length > 0 && (
+                  <button
+                    type="button"
+                    className={`dcma-cat-row dcma-cats-poko${category === "poko" ? " is-on" : ""}`}
+                    onClick={() => pickCategory(category === "poko" ? "all" : "poko")}
+                  >
+                    <span>
+                      POKO checks
+                      <span className="dcma-cats-poko-sub">Not in the score</span>
+                    </span>
+                    <span className={`mono${pokoAttention > 0 ? " dcma-cats-poko-warn" : ""}`}>
+                      {pokoAttention > 0 ? `${pokoAttention} to review` : "Clean"}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -331,26 +408,37 @@ export default function DcmaPage() {
                   >
                     {f.label}{" "}
                     <span className="dcma-count">
-                      {f.key === "all" ? dcmaChecks.length : counts[f.key]}
+                      {f.key === "all" ? allChecks.length : filterCounts[f.key]}
                     </span>
                   </button>
                 ))}
               </div>
               <div className="segmented" role="group" aria-label="Category">
-                <button className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>
+                <button className={category === "all" ? "active" : ""} onClick={() => pickCategory("all")}>
                   All categories
                 </button>
                 {DCMA_CATEGORIES.map((cat) => (
                   <button
                     key={cat.key}
                     className={category === cat.key ? "active" : ""}
-                    onClick={() => setCategory(cat.key)}
+                    onClick={() => pickCategory(cat.key)}
                   >
                     {cat.label}
                   </button>
                 ))}
+                {pokoChecks.length > 0 && (
+                  <button className={category === "poko" ? "active" : ""} onClick={() => pickCategory("poko")}>
+                    POKO checks
+                  </button>
+                )}
               </div>
               <span className="dcma-spacer" />
+              <FoldAllControls
+                onExpand={() => saveClosed(new Set())}
+                onCollapse={() => saveClosed(new Set(shownSections.map((s) => s.key)))}
+                canExpand={shownSections.some((s) => closed.has(s.key))}
+                canCollapse={shownSections.some((s) => !closed.has(s.key))}
+              />
               <div className="segmented" role="group" aria-label="View">
                 <button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")}>
                   Charts
@@ -384,9 +472,7 @@ export default function DcmaPage() {
               // Performance share a row), and a row with room to spare widens
               // its cards rather than leaving a hole.
               <div className="dcma-flow" ref={measure}>
-                {byCategory
-                  .filter((cat) => cat.shown.length > 0)
-                  .map((cat) => {
+                {shownSections.map((cat) => {
                     const n = cat.shown.length;
                     const span = Math.min(n, cols);
                     const perRow = Math.ceil(n / Math.ceil(n / cols));
@@ -395,15 +481,22 @@ export default function DcmaPage() {
                       flexBasis: `calc((100% - ${(cols - 1) * GAP_PX}px) * ${span / cols} + ${(span - 1) * GAP_PX}px - 1px)`,
                       "--dcma-per": perRow,
                     } as CSSProperties;
+                    const open = !closed.has(cat.key);
                     return (
-                      <section key={cat.key} className="dcma-section" style={style}>
-                        <div className="dcma-section-head">
-                          <span className="dcma-section-title">{cat.label}</span>
-                          <span className="dcma-section-sub">
-                            {cat.passed} of {cat.total} passing
-                          </span>
-                        </div>
-                        <div className="dcma-grid">
+                      <section
+                        key={cat.key}
+                        className={`dcma-section${cat.key === "poko" ? " is-poko" : ""}`}
+                        style={style}
+                      >
+                        <SectionHead
+                          id={`dcma-sec-${cat.key}`}
+                          open={open}
+                          onToggle={() => setSectionOpen(cat.key, !open)}
+                          title={cat.label}
+                          sub={cat.sub}
+                          hint={`${n} check${n === 1 ? "" : "s"}`}
+                        />
+                        <div id={`dcma-sec-${cat.key}`} className={`dcma-grid fold-body${open ? "" : " is-folded"}`}>
                           {cat.shown.map((check) => (
                             <CheckCard
                               key={check.id}
@@ -431,7 +524,6 @@ export default function DcmaPage() {
                       <tr>
                         <th style={{ width: "2.5rem" }}>#</th>
                         <th>Check</th>
-                        <th>Category</th>
                         <th>Compliance</th>
                         <th style={{ textAlign: "right" }}>Result</th>
                         <th>Target</th>
@@ -440,68 +532,87 @@ export default function DcmaPage() {
                         <th style={{ width: "2rem" }} />
                       </tr>
                     </thead>
-                    <tbody>
-                      {visible.map((check) => {
-                        const m = metaFor(check, t);
-                        const isOpen = expanded.has(check.id);
-                        const hasDetails = check.details.length > 0;
-                        return (
-                          <Fragment key={check.id}>
-                            <tr
-                              onClick={() => hasDetails && toggle(check.id)}
-                              style={{ cursor: hasDetails ? "pointer" : "default" }}
-                            >
-                              <td className="mono" style={{ color: "var(--text-muted)" }}>
-                                {check.id}
-                              </td>
-                              <td>
-                                <div style={{ fontWeight: 500 }}>{m.title}</div>
-                                <div className="dcma-table-sub">{m.measures}</div>
-                              </td>
-                              <td style={{ color: "var(--text-secondary)" }}>{categoryLabel(m.category)}</td>
-                              <td>
-                                <StatusChip status={check.status} />
-                              </td>
-                              <td className="num" style={{ textAlign: "right" }}>
-                                {resultLabel(check)}
-                              </td>
-                              <td className="mono">
-                                {m.target}
-                                {isCustom(check.id, report) && <span className="dcma-custom-dot" title="Project target" />}
-                              </td>
-                              <td className="mono" style={{ color: "var(--text-secondary)" }}>
-                                {countLabel(check)}
-                              </td>
-                              <td className="num" style={{ textAlign: "right" }}>
-                                {impactLabel(scoreImpact(check, report))}
-                              </td>
-                              <td>
-                                {hasDetails &&
-                                  (isOpen ? (
-                                    <ChevronUpIcon className="icon" style={{ width: 14, height: 14 }} />
-                                  ) : (
-                                    <ChevronDownIcon className="icon" style={{ width: 14, height: 14 }} />
-                                  ))}
-                              </td>
-                            </tr>
-                            {isOpen && hasDetails && (
-                              <tr>
-                                <td />
-                                <td colSpan={8} style={{ paddingTop: 0 }}>
-                                  <AffectedIds check={check} />
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
+                    {shownSections.map((cat) => {
+                      const open = !closed.has(cat.key);
+                      const folded = open ? undefined : "dcma-row-folded";
+                      const n = cat.shown.length;
+                      return (
+                        <tbody key={cat.key} id={`dcma-tsec-${cat.key}`}>
+                          <tr className="dcma-group-row">
+                            <td colSpan={8}>
+                              <SectionHead
+                                id={`dcma-tsec-${cat.key}`}
+                                open={open}
+                                onToggle={() => setSectionOpen(cat.key, !open)}
+                                title={cat.label}
+                                sub={cat.sub}
+                                hint={`${n} check${n === 1 ? "" : "s"}`}
+                              />
+                            </td>
+                          </tr>
+                          {cat.shown.map((check) => {
+                            const m = metaFor(check, t);
+                            const isOpen = expanded.has(check.id);
+                            const hasDetails = check.details.length > 0;
+                            const unscored = check.scored === false;
+                            return (
+                              <Fragment key={check.id}>
+                                <tr
+                                  className={folded}
+                                  onClick={() => hasDetails && toggle(check.id)}
+                                  style={{ cursor: hasDetails ? "pointer" : "default" }}
+                                >
+                                  <td className="mono" style={{ color: "var(--text-muted)" }}>
+                                    {check.id}
+                                  </td>
+                                  <td>
+                                    <div style={{ fontWeight: 500 }}>{m.title}</div>
+                                    <div className="dcma-table-sub">{m.measures}</div>
+                                  </td>
+                                  <td>
+                                    <StatusChip status={check.status} />
+                                  </td>
+                                  <td className="num" style={{ textAlign: "right" }}>
+                                    {resultLabel(check)}
+                                  </td>
+                                  <td className="mono">
+                                    {m.target}
+                                    {isCustom(check.id, report) && <span className="dcma-custom-dot" title="Project target" />}
+                                  </td>
+                                  <td className="mono" style={{ color: "var(--text-secondary)" }}>
+                                    {countLabel(check)}
+                                  </td>
+                                  <td className="num" style={{ textAlign: "right" }}>
+                                    {unscored ? "Not scored" : impactLabel(scoreImpact(check, report))}
+                                  </td>
+                                  <td>
+                                    {hasDetails &&
+                                      (isOpen ? (
+                                        <ChevronUpIcon className="icon" style={{ width: 14, height: 14 }} />
+                                      ) : (
+                                        <ChevronDownIcon className="icon" style={{ width: 14, height: 14 }} />
+                                      ))}
+                                  </td>
+                                </tr>
+                                {isOpen && hasDetails && (
+                                  <tr className={folded}>
+                                    <td />
+                                    <td colSpan={7} style={{ paddingTop: 0 }}>
+                                      {unscored ? <PokoFindings check={check} /> : <AffectedIds check={check} />}
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                        </tbody>
+                      );
+                    })}
                   </table>
                 </div>
               </div>
             )}
 
-            {pokoChecks.length > 0 && <PokoChecks checks={pokoChecks} />}
           </>
         )}
       </div>
@@ -604,12 +715,51 @@ function CheckCard({
               <ChevronDownIcon className="icon" style={{ width: 13, height: 13 }} />
             )}
             {open ? "Hide" : "Show"}{" "}
-            {isIndex(check) ? "activities behind plan" : "affected activities"}
+            {check.scored === false
+              ? findingsLabel(check)
+              : isIndex(check)
+                ? "activities behind plan"
+                : "affected activities"}
           </button>
-          {open && <AffectedIds check={check} />}
+          {open && (check.scored === false ? <PokoFindings check={check} /> : <AffectedIds check={check} />)}
         </>
       )}
     </div>
+  );
+}
+
+/** A section's header that folds it: the whole row is the button. `hint`
+ *  only shows while folded, to say what is hidden. */
+function SectionHead({
+  id,
+  open,
+  onToggle,
+  title,
+  sub,
+  hint,
+}: {
+  id: string;
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  sub: string;
+  hint: string;
+}) {
+  return (
+    <h2 className="fold-heading">
+      <button
+        type="button"
+        className="section-head dcma-section-head"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+      >
+        <ChevronDownIcon className="icon icon-sm section-caret" aria-hidden="true" />
+        <span className="dcma-section-title">{title}</span>
+        <span className="dcma-section-sub">{sub}</span>
+        {!open && <span className="fold-hint dcma-section-hint">{hint}</span>}
+      </button>
+    </h2>
   );
 }
 

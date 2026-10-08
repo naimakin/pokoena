@@ -327,7 +327,7 @@ export function checksCsv(report: DcmaReport): string {
         isIndex(c) ? String(Math.round(c.value * c.denominator)) : String(c.value),
         String(c.denominator),
         c.basis,
-        scoreImpact(c, report).toFixed(1),
+        c.scored === false ? "Not scored" : scoreImpact(c, report).toFixed(1),
       ];
     }),
   ];

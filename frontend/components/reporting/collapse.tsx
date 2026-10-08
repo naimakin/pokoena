@@ -43,7 +43,7 @@ export function FoldKey({ id, children }: { id: string; children: ReactNode }) {
 
 /** Open state for one section — shared when a provider and key are present,
  *  local otherwise. */
-function useFold(defaultOpen: boolean) {
+export function useFold(defaultOpen: boolean) {
   const registry = useContext(FoldContext);
   const key = useContext(FoldKeyContext);
   const [localOpen, setLocalOpen] = useState(defaultOpen);
