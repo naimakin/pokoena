@@ -264,8 +264,8 @@ export default function DcmaPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <PageState kind="loading" section="Reports" title="DCMA 14-Point" />;
-  if (error) return <PageState kind="error" section="Reports" title="DCMA 14-Point" message={error} />;
+  if (loading) return <PageState kind="loading" section="Reports" title="Schedule Quality" />;
+  if (error) return <PageState kind="error" section="Reports" title="Schedule Quality" message={error} />;
 
   return (
     <>
@@ -275,9 +275,9 @@ export default function DcmaPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">DCMA 14-Point</div>
+            <div className="page-title">Schedule Quality</div>
             <div className="page-desc">
-              Schedule quality assessment per DCMA EA PAM 200.1, plus POKO&apos;s own data and sequence checks
+              DCMA 14-Point assessment per DCMA EA PAM 200.1, plus POKO&apos;s own data and sequence checks
             </div>
           </div>
         </div>
@@ -287,10 +287,10 @@ export default function DcmaPage() {
             <EmptyState
               art={<UploadScheduleIllo />}
               title="No schedule imported yet"
-              body="Upload a Primavera P6 .xer from Programs to run the DCMA check."
+              body="Upload a Primavera P6 .xer from Programme Files to run the DCMA check."
               action={
                 <Link className="btn btn-primary btn-sm" href="/project-files">
-                  Go to Programs
+                  Go to Programme Files
                 </Link>
               }
             />

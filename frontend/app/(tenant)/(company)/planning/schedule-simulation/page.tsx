@@ -341,7 +341,7 @@ export default function ScheduleSimulationPage() {
         art={<UploadScheduleIllo />}
         action={
           <Link className="btn btn-primary btn-sm" href="/project-files">
-            Go to Programs
+            Go to Programme Files
           </Link>
         }
       />

@@ -79,6 +79,8 @@ const TOP_SECTIONS: NavSection[] = [
     href: "/dashboard",
     visible: always,
     children: [
+      // The personal, cross-project inbox — the first stop of the day.
+      { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: need("view_delivery") },
       { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: need("view_overview") },
       { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: BuildingIcon, visible: need("view_overview") },
     ],
@@ -87,18 +89,16 @@ const TOP_SECTIONS: NavSection[] = [
     key: "planning",
     label: "Programme",
     icon: CalendarIcon,
-    href: "/project-files",
+    href: "/activity-workspace",
     visible: always,
     // Programme and Delivery were one job in two menus; merged, in the order
     // the work runs. Routes are unchanged.
     children: [
-      { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: need("view_delivery") },
-      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
+      { href: "/project-files", label: "Programme Files", icon: DatabaseIcon, visible: need("view_programme") },
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
       // Activity Ledger + Chart, merged: anyone who could open either page.
       { href: "/activity-workspace", label: "Activity Workspace", icon: GanttIcon, visible: need("view_programme", "view_delivery") },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: need("view_delivery") },
-      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_delivery") },
       { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
     ],
@@ -117,29 +117,30 @@ const TOP_SECTIONS: NavSection[] = [
       { href: "/risk/register", label: "Risk Register", icon: LayersIcon, visible: need("view_risk") },
       { href: "/risk/early-warnings", label: "Early Warnings", icon: AlertTriangleIcon, visible: need("view_risk") },
       { href: "/risk/resources", label: "Resources Analysis", icon: UsersIcon, visible: need("view_risk") },
-      { href: "/risk/recommendations", label: "Recommendations", icon: FlagIcon, visible: need("view_risk") },
-      { href: "/risk/matrix", label: "Risk Matrix", icon: GridIcon, visible: need("view_risk") },
-      { href: "/risk/mitigation-plans", label: "Mitigation Plans", icon: ShieldCheckIcon, visible: need("view_risk") },
+      // Register holds the matrix as a tab; Mitigation holds the recommendations.
+      { href: "/risk/mitigation-plans", label: "Mitigation", icon: ShieldCheckIcon, visible: need("view_risk") },
     ],
   },
   {
     key: "reporting",
     label: "Reports",
     icon: BarChartIcon,
-    href: "/reporting/reports",
+    href: "/execution/project-status",
     visible: always,
     // Progress Reports / Schedule Reports / Custom Reports / Project Dashboard
     // were four empty slots for the same thing: a report you assemble and hand
     // to someone. They are one page now, and the old routes redirect to it.
     children: [
-      { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: need("view_reports") },
-      // A status rollup is something you report, not something you act on —
-      // it moved here from Delivery (route unchanged).
+      // Summary first, then the analyses, then building a report to hand on.
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: need("view_reports") },
-      { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: need("view_reports") },
       { href: "/evm", label: "S-Curve & EVM", icon: TrendingUpIcon, visible: need("view_reports") },
-      { href: "/dcma", label: "DCMA 14-Point", icon: ShieldCheckIcon, visible: need("view_reports") },
+      // DCMA's 14 checks plus POKO's own — more than DCMA, hence the name.
+      { href: "/dcma", label: "Schedule Quality", icon: ShieldCheckIcon, visible: need("view_reports") },
+      { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: need("view_reports") },
+      // What moved between two updates: read, not acted on (route unchanged).
+      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_reports", "view_delivery") },
       { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: need("view_reports") },
+      { href: "/reporting/reports", label: "Report Builder", icon: BarChartIcon, visible: need("view_reports") },
     ],
   },
 ];

@@ -235,7 +235,7 @@ export default function FloatPathPage() {
         {candidates.length === 0 ? (
           <div className="card">
             <p className="empty-state">
-              Import a schedule from Programs first — float paths are read off the current
+              Import a schedule from Programme Files first — float paths are read off the current
               programme&rsquo;s logic and dates.
             </p>
           </div>

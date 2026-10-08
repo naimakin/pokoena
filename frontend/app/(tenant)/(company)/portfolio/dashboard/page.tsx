@@ -213,10 +213,10 @@ export default function PortfolioDashboardPage() {
             <EmptyState
               art={<UploadScheduleIllo />}
               title="No programmes in the portfolio yet"
-              body="Import a Primavera P6 .xer into a project from Programs and it appears here."
+              body="Import a Primavera P6 .xer into a project from Programme Files and it appears here."
               action={
                 <Link className="btn btn-primary btn-sm" href="/project-files">
-                  Go to Programs
+                  Go to Programme Files
                 </Link>
               }
             />

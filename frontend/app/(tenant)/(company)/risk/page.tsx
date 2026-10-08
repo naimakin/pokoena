@@ -481,7 +481,7 @@ export default function QsraPage() {
                 <div>
                   <div className="card-title">Recommendations from this run</div>
                   <div className="card-title-sub">
-                    Early warnings and resource checks are added on the <Link href="/risk/recommendations">Recommendations</Link> page.
+                    Early warnings and resource checks are added on the <Link href="/risk/mitigation-plans?tab=recommendations">Recommendations</Link> tab of Mitigation.
                   </div>
                 </div>
               </div>

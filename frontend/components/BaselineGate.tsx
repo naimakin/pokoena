@@ -18,7 +18,7 @@ export const BASELINE_GATED_SECTIONS = new Set(["overview", "risk", "reporting"]
 // that measures against the baseline.
 // Activity Workspace stays open: planners need it before a baseline exists, and
 // its Burned MH Loading mode shows its own "needs a baseline" banner.
-export const BASELINE_GATED_PATHS = new Set(["/recovery-plan", "/execution/changes"]);
+export const BASELINE_GATED_PATHS = new Set(["/recovery-plan"]);
 
 // Pages inside a gated section that measure the programme against itself rather
 // than against a baseline, so the gate would only be in the way. Float Path
@@ -28,7 +28,14 @@ export const BASELINE_GATED_PATHS = new Set(["/recovery-plan", "/execution/chang
 // baseline yet mustn't lock anyone out of their own notes.
 // Portfolio Dashboard spans every project, so one project lacking a baseline
 // mustn't hide it.
-export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path", "/execution/my-desk", "/portfolio/dashboard"]);
+// Changes compares two schedule updates with each other; the baseline is only
+// its fallback when a single update exists.
+export const BASELINE_UNGATED_PATHS = new Set([
+  "/reporting/float-path",
+  "/execution/my-desk",
+  "/portfolio/dashboard",
+  "/execution/changes",
+]);
 
 export function isBaselineGated(sectionKey: string | undefined, pathname: string | null): boolean {
   if (pathname && BASELINE_UNGATED_PATHS.has(pathname)) return false;
@@ -69,7 +76,7 @@ export function BaselineGate({ gated, children }: { gated: boolean; children: Re
               <span className="setup-num">2</span>
               Upload the schedule (.xer)
               <Link className="btn btn-secondary btn-sm" href="/project-files">
-                Programs
+                Programme Files
               </Link>
             </li>
             <li>

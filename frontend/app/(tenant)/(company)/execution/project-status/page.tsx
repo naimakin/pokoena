@@ -202,7 +202,7 @@ export default function ProjectStatusPage() {
             <div className="page-title">Project Status</div>
             <div className="page-desc">
               {noSchedule
-                ? "No schedule imported yet — upload a .xer from Programs."
+                ? "No schedule imported yet — upload a .xer from Programme Files."
                 : `${status.latest_filename} · data date ${fmtDate(status.data_date)}`}
             </div>
           </div>

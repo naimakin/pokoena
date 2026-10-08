@@ -254,7 +254,7 @@ export default function ExportSyncP6Page() {
                     </li>
                     <li>Open it in Primavera P6 and run F9 (schedule recalculation).</li>
                     <li>
-                      Re-upload the F9 result via Programs. Link it back to this export there so the sync
+                      Re-upload the F9 result via Programme Files. Link it back to this export there so the sync
                       log shows the round-trip.
                     </li>
                   </ol>
@@ -308,7 +308,7 @@ export default function ExportSyncP6Page() {
                 )}
                 {exportCount === 0 && (
                   <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
-                    Import a schedule from Programs before exporting.
+                    Import a schedule from Programme Files before exporting.
                   </p>
                 )}
                 {exportError && <p className="login-error">{exportError}</p>}

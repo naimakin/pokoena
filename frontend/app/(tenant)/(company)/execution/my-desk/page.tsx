@@ -277,13 +277,13 @@ export default function MyDeskPage() {
   // ---------------------------------------------------------------- render
 
   if (projectsLoading || (!loaded && !error && (project || scope === "all"))) {
-    return <PageState kind="loading" section="Programme" title="My Desk" />;
+    return <PageState kind="loading" section="Overview" title="My Desk" />;
   }
   if (projects.length === 0) {
     return (
       <PageState
         kind="empty"
-        section="Programme"
+        section="Overview"
         title="My Desk"
         emptyTitle="No project yet"
         message="Once you're on a project, what waits on you, what you pin and your private notes collect here."
@@ -292,7 +292,7 @@ export default function MyDeskPage() {
     );
   }
   if (error) {
-    return <PageState kind="error" section="Programme" title="My Desk" message={error} />;
+    return <PageState kind="error" section="Overview" title="My Desk" message={error} />;
   }
 
   const allMode = scope === "all";
@@ -300,7 +300,7 @@ export default function MyDeskPage() {
   return (
     <>
       <div className="a-topbar">
-        <span className="crumb">Programme</span>
+        <span className="crumb">Overview</span>
         <div className="spacer" />
         <div className="segmented" role="tablist" aria-label="Scope">
           <button role="tab" aria-selected={!allMode} className={!allMode ? "active" : undefined} onClick={() => changeScope("project")}>

@@ -472,7 +472,7 @@ export default function WbsPage() {
               {isViewingCurrent ? (
                 <>
                   No WBS imported yet. Upload a P6 <span className="mono">.xer</span> schedule from Programme &rsaquo;
-                  Programs — its PROJWBS structure loads here automatically, or add nodes manually above.
+                  Programme Files — its PROJWBS structure loads here automatically, or add nodes manually above.
                 </>
               ) : (
                 "This program was imported before WBS history was tracked, so its structure wasn't saved."

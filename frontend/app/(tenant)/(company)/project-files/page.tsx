@@ -256,10 +256,10 @@ export default function ProgramLibraryPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Programme" title="Programs" />;
+    return <PageState kind="loading" section="Programme" title="Programme Files" />;
   }
   if (error) {
-    return <PageState kind="error" section="Programme" title="Programs" message={error} />;
+    return <PageState kind="error" section="Programme" title="Programme Files" message={error} />;
   }
 
   return (
@@ -272,7 +272,7 @@ export default function ProgramLibraryPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Programs</div>
+            <div className="page-title">Programme Files</div>
             <div className="page-desc">
               Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
               float, and critical path. Set the baseline by editing an import below and ticking <b>Baseline</b> (or on{" "}

@@ -474,7 +474,7 @@ function ActivityWorkspace() {
               {dataLoading
                 ? "Loading…"
                 : isViewingCurrent
-                  ? "No activities yet — import a schedule from Programs."
+                  ? "No activities yet — import a schedule from Programme Files."
                   : "No activities recorded for this program."}
             </p>
           </div>

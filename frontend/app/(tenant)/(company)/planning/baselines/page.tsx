@@ -231,7 +231,7 @@ export default function BaselinesPage() {
             <div className="page-title">Baselines</div>
             <div className="page-desc">
               The baseline programme is the project&apos;s frozen plan. Every update programme uploaded to
-              Programs is measured back against it — see Reports › Project Status for date variance and the
+              Programme Files is measured back against it — see Reports › Project Status for date variance and the
               S-curve.
             </div>
           </div>

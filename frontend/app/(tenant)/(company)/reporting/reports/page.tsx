@@ -144,17 +144,17 @@ export default function ReportsPage() {
   }
 
   if (loading) {
-    return <PageState kind="loading" section="Reports" title="Reports" />;
+    return <PageState kind="loading" section="Reports" title="Report Builder" />;
   }
   if (error) {
-    return <PageState kind="error" section="Reports" title="Reports" message={error} />;
+    return <PageState kind="error" section="Reports" title="Report Builder" message={error} />;
   }
   if (!project) {
     return (
       <PageState
         kind="empty"
         section="Reports"
-        title="Reports"
+        title="Report Builder"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
         art={<NoProjectIllo />}
@@ -176,7 +176,7 @@ export default function ReportsPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Reports</div>
+            <div className="page-title">Report Builder</div>
             <div className="page-desc">
               Pick the blocks a report contains, save it as a named format, then open it to read or
               print. Everything is generated from the current programme, so a report and the .xer it
@@ -206,7 +206,7 @@ export default function ReportsPage() {
           <div className="banner warn">
             <span className="banner-text">
               No schedule imported yet. Reports will render, but most blocks will have nothing to show
-              until a .xer is uploaded from Programs.
+              until a .xer is uploaded from Programme Files.
             </span>
           </div>
         )}

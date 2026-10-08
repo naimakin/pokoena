@@ -379,7 +379,7 @@ export default function RecoveryPlanPage() {
             <p className="empty-state">
               {noSnapshot
                 ? "One of these programs has no activity snapshot, so slippage can't be measured. Pick another pair."
-                : "Upload at least two schedule updates (UPD-1, UPD-2…) from Programs. The recovery plan compares the two most recent."}
+                : "Upload at least two schedule updates (UPD-1, UPD-2…) from Programme Files. The recovery plan compares the two most recent."}
             </p>
           </div>
         ) : report.slipped.length === 0 ? (

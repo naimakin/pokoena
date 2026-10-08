@@ -953,7 +953,7 @@ function ScheduleChangesBlock({ project }: BlockContext) {
           : undefined
       }
       state={state}
-      unavailable="Needs two schedule updates to compare — upload the next .xer from Programs."
+      unavailable="Needs two schedule updates to compare — upload the next .xer from Programme Files."
     >
       {data && (
         <div className="report-section">
