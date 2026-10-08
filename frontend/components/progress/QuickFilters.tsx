@@ -236,8 +236,7 @@ export function QuickFilters({
   lead,
   tail,
 }: {
-  // Rendered after Status (search, WBS) and after the last list filter
-  // (Advanced, Clear) — the date windows always close the row on the right.
+  // Rendered after Status (search, WBS) and at the end of the row (Advanced, Clear).
   lead?: ReactNode;
   tail?: ReactNode;
   criteria: FilterCriteria;
@@ -379,22 +378,20 @@ export function QuickFilters({
         <PopFoot onClear={() => set({ importance: [], tags: [] })} disabled={flagCount === 0} />
       </Popover>
 
-      {tail}
+      <DateRangeFilter
+        label="Start"
+        value={criteria.startRange}
+        onChange={(startRange) => set({ startRange })}
+        dataDate={dataDate}
+      />
+      <DateRangeFilter
+        label="Finish"
+        value={criteria.finishRange}
+        onChange={(finishRange) => set({ finishRange })}
+        dataDate={dataDate}
+      />
 
-      <div className="qf-time">
-        <DateRangeFilter
-          label="Start"
-          value={criteria.startRange}
-          onChange={(startRange) => set({ startRange })}
-          dataDate={dataDate}
-        />
-        <DateRangeFilter
-          label="Finish"
-          value={criteria.finishRange}
-          onChange={(finishRange) => set({ finishRange })}
-          dataDate={dataDate}
-        />
-      </div>
+      {tail}
     </div>
   );
 }

@@ -1477,8 +1477,7 @@ tr.resolved{opacity:.45}
   background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);
   box-shadow:var(--shadow-md);padding:.5rem;
 }
-/* Activity Ledger filters: one row — list filters on the left, the start /
-   finish windows on the right. Every control is 32px and squared like the
+/* Activity Ledger filters: one row of list and date filters. Every control is 32px and squared like the
    WBS picker; a trigger reads "Label  value", the value turning accent once
    the filter is set. Panels reuse .gantt-pop (Planning > Chart). */
 .qf-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;padding:.8rem 1rem}
@@ -1495,8 +1494,6 @@ tr.resolved{opacity:.45}
 .qf-search{height:32px;width:200px;padding:0 .6rem;font-size:.8125rem;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text-primary)}
 .qf-search:hover{border-color:var(--text-muted)}
 .qf-bar .wbs-select-trigger{min-width:180px;max-width:280px}
-.qf-time{display:flex;align-items:center;gap:.45rem;margin-left:auto;padding-left:.75rem;border-left:1px solid var(--border)}
-@media (max-width:900px){.qf-time{margin-left:0;padding-left:0;border-left:0}}
 .qf-pop{display:flex;flex-direction:column;gap:.5rem;padding:.6rem}
 .qf-pop.is-right{left:auto;right:0}
 .qf-tabs{display:flex;width:100%}
