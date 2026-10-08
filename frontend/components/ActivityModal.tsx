@@ -6,7 +6,16 @@ import { hoursPerDay } from "@/lib/duration";
 import { FINISH_MILESTONE, isMilestone, START_MILESTONE } from "@/lib/schedule-dates";
 import { BREAKDOWN_LABELS, criticalityChip, criticalityLabel, SITE_RISK_OPTIONS } from "@/lib/criticality";
 import { useToast } from "@/components/Toast";
-import { AlertTriangleIcon, CheckIcon, ClockIcon, FlagIcon, LockIcon, PinIcon, XIcon } from "@/components/icons";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  FlagIcon,
+  LockIcon,
+  PinIcon,
+  XIcon,
+} from "@/components/icons";
 import { NoteComposer, NoteList, type NoteDraft, type NotePatch } from "@/components/PersonalNotes";
 import { MentionTextarea } from "@/components/MentionTextarea";
 import { MentionText } from "@/components/MentionText";
@@ -959,10 +968,19 @@ function RelationshipTable({
   rows: ActivityRelationship[];
   otherIdOf: (r: ActivityRelationship) => string | null | undefined;
 }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="act-rel-block">
-      <div className="act-section-label">{title}</div>
-      {rows.length === 0 ? (
+      <button
+        type="button"
+        className="section-head act-rel-head"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <ChevronDownIcon className="icon icon-sm section-caret" aria-hidden="true" />
+        <span className="act-section-label">{title}</span>
+      </button>
+      {!open ? null : rows.length === 0 ? (
         <p className="act-modal-note">None.</p>
       ) : (
         <div className="table-wrap">

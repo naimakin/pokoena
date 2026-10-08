@@ -5,8 +5,9 @@ import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { RecoveryPlan, SlipReport, SlipRow, User } from "@/lib/types";
+import type { RecoveryPlan, SlipReport, SlipRow, User, WbsNode } from "@/lib/types";
 import { ActionItems } from "@/components/ActionItems";
+import { FoldAllControls, FoldCard, FoldKey, FoldProvider } from "@/components/reporting/collapse";
 import { AlertTriangleIcon, CheckIcon, DownloadIcon } from "@/components/icons";
 import { can } from "@/lib/permissions";
 import { NoProjectIllo } from "@/components/illustrations";
@@ -48,6 +49,9 @@ export default function RecoveryPlanPage() {
   const [minSlip, setMinSlip] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [plans, setPlans] = useState<Record<string, RecoveryPlan>>({});
+  const [wbsNames, setWbsNames] = useState<Map<string, string>>(new Map());
+  // Groups folded shut; every group starts open.
+  const [closed, setClosed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -79,6 +83,15 @@ export default function RecoveryPlanPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // A row's wbs_path is the P6 wbs_id; the name comes from the WBS tree.
+  useEffect(() => {
+    if (!project) return;
+    api
+      .get<WbsNode[]>(`/projects/${project.id}/wbs-nodes`)
+      .then((nodes) => setWbsNames(new Map(nodes.map((n) => [n.wbs_id, n.wbs_name]))))
+      .catch(() => setWbsNames(new Map()));
+  }, [project]);
 
   // Acknowledging a plan: anyone who manages progress, but not on a plan they
   // wrote themselves (backend: recovery_plans.review_plan).
@@ -146,8 +159,20 @@ export default function RecoveryPlanPage() {
           : row.wbs_path ?? "No WBS";
       map.set(key, [...(map.get(key) ?? []), row]);
     }
-    return [...map.entries()].map(([label, rs]) => ({ key: label, label, rows: rs }));
-  }, [grouping, rows]);
+    return [...map.entries()].map(([key, rs]) => {
+      const name = grouping === "wbs" ? wbsNames.get(key) : undefined;
+      return { key, label: name ? `${key} · ${name}` : key, rows: rs };
+    });
+  }, [grouping, rows, wbsNames]);
+
+  const setGroupOpen = useCallback((key: string, open: boolean) => {
+    setClosed((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   if (loading) {
     return <PageState kind="loading" section="Delivery" title="Recovery Plan" />;
@@ -259,14 +284,18 @@ export default function RecoveryPlanPage() {
                 />
                 d
               </label>
+              <FoldAllControls
+                onExpand={() => setClosed(new Set())}
+                onCollapse={() => setClosed(new Set(groups.map((g) => g.key)))}
+                canExpand={closed.size > 0}
+                canCollapse={groups.some((g) => !closed.has(g.key))}
+              />
             </div>
 
+            <FoldProvider closed={closed} onChange={setGroupOpen}>
             {groups.map((group) => (
-              <div key={group.key} className="card">
-                <div className="card-head">
-                  <div className="card-title">{group.label}</div>
-                  <div className="card-title-sub">{group.rows.length} slipped</div>
-                </div>
+              <FoldKey key={group.key} id={group.key}>
+              <FoldCard title={group.label} meta={`${group.rows.length} slipped`}>
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -393,8 +422,10 @@ export default function RecoveryPlanPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </FoldCard>
+              </FoldKey>
             ))}
+            </FoldProvider>
           </>
         )}
       </div>

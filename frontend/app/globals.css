@@ -1436,6 +1436,9 @@ tr.resolved{opacity:.45}
 .act-comment-list{display:flex;flex-direction:column;gap:.7rem;font-size:.8125rem}
 .act-comment-meta{font-size:.6875rem;color:var(--text-muted);margin-bottom:.15rem}
 .act-rel-block + .act-rel-block{margin-top:1rem}
+/* Predecessors / Successors fold shut: a bare header row, not a card header. */
+.act-rel-head{padding:.35rem .25rem;border-bottom:0;border-radius:var(--radius-sm);margin-bottom:.2rem}
+.act-rel-head .act-section-label{margin-bottom:0}
 
 .act-timeline{display:flex;flex-direction:column;gap:.85rem;font-size:.8125rem}
 .act-timeline-item{display:flex;gap:.6rem;align-items:flex-start}
