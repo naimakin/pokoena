@@ -95,6 +95,8 @@ function ActivityWorkspace() {
   const [mode, setMode] = useState<Mode>("status");
   const [criteria, setCriteriaState] = useState<FilterCriteria>(EMPTY_CRITERIA);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // WBS depth shown, from the Max level slider; null = all levels open.
+  const [maxLevel, setMaxLevel] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("start");
   const [toggles, setToggles] = useState<GanttViewToggles>(NO_TOGGLES);
   const [ganttPref, setGanttPref] = useState(true);
@@ -237,6 +239,7 @@ function ActivityWorkspace() {
   useEffect(() => {
     loadData();
     setCollapsed(new Set());
+    setMaxLevel(null);
   }, [loadData]);
 
   // --- unsaved guard ---------------------------------------------------------
@@ -364,14 +367,16 @@ function ActivityWorkspace() {
     });
   }, []);
 
-  function applyExpand(value: string) {
-    if (value === "expand") setCollapsed(new Set());
-    else if (value === "collapse")
-      setCollapsed(new Set([...wbsNodes.map((n) => n.wbs_id), ...(hasUngrouped ? [UNGROUPED_KEY] : [])]));
-    else if (value) {
-      const level = Number(value);
-      setCollapsed(new Set(wbsNodes.filter((n) => n.depth + 1 >= level).map((n) => n.wbs_id)));
+  // Level L shows WBS levels 1..L with the bands at level L folded; past the
+  // deepest level everything is open ("All").
+  function applyMaxLevel(level: number) {
+    if (level > deepestLevel) {
+      setMaxLevel(null);
+      setCollapsed(new Set());
+      return;
     }
+    setMaxLevel(level);
+    setCollapsed(new Set(wbsNodes.filter((n) => n.depth + 1 >= level).map((n) => n.wbs_id)));
   }
 
   const onActivitiesUpdated = useCallback((updated: Activity) => {
@@ -527,24 +532,18 @@ function ActivityWorkspace() {
                 </div>
 
                 <div className="ws-head-group">
-                  <select
-                    style={selectStyle}
-                    value=""
-                    aria-label="Expand or collapse WBS"
-                    onChange={(e) => {
-                      applyExpand(e.target.value);
-                      e.target.value = "";
-                    }}
-                  >
-                    <option value="">Expand / collapse…</option>
-                    <option value="expand">Expand all</option>
-                    <option value="collapse">Collapse all</option>
-                    {Array.from({ length: deepestLevel }, (_, i) => i + 1).map((level) => (
-                      <option key={level} value={level}>
-                        Collapse to level {level}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="gantt-maxlevel" title="How many WBS levels to show">
+                    Max level
+                    <input
+                      type="range"
+                      min={1}
+                      max={deepestLevel + 1}
+                      value={maxLevel ?? deepestLevel + 1}
+                      onChange={(e) => applyMaxLevel(Number(e.target.value))}
+                      aria-valuetext={maxLevel === null ? "All levels" : `Level ${maxLevel}`}
+                    />
+                    <span className="mono">{maxLevel === null ? "All" : maxLevel}</span>
+                  </label>
                   {mode === "status" && (
                     <>
                       <label className="ws-field" title="Order of activities within each WBS band">
