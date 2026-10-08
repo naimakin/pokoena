@@ -93,9 +93,12 @@ export function StatusDatesMode({
         colCount={7}
         idColumn
         bandCells={{
-          labelSpan: 6,
+          labelSpan: 3,
           render: (row) => (
             <>
+              <td className="mono">{fmtDate(row.spanStart)}</td>
+              <td className="mono">{fmtDate(row.spanFinish)}</td>
+              <td />
               <td className="mono" title="Units % complete: Σ actual / Σ budgeted labor hours of the activities shown">
                 {fmtUnitsPercent(row)}
               </td>
