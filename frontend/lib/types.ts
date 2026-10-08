@@ -280,6 +280,8 @@ export interface DcmaCheckResult {
   // data date (#14, BEI).
   denominator: number;
   basis: "activities" | "relationships" | "planned";
+  // False for POKO's own checks (#15 out of sequence): shown, not scored.
+  scored?: boolean;
 }
 
 export interface DcmaReport {

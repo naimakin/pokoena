@@ -359,7 +359,8 @@ def rollup_from_inputs(inputs: dict) -> StatusRollup:
         dcma_score = report.overall_score
         dcma_status = report.overall_status
         for check in report.checks:
-            if check.status in ("fail", "warn"):
+            # Unscored checks list links ("A / FS / B"), not activity ids.
+            if check.scored and check.status in ("fail", "warn"):
                 flagged.update(check.details)
     except Exception:  # pragma: no cover - defensive; never fail the caller
         pass

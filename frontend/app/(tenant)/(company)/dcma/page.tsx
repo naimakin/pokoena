@@ -353,13 +353,13 @@ export default function DcmaPage() {
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setTargetsAt("all")}
-                  title="Set this project's own targets for the 14 checks"
+                  title="Set this project's own targets for the checks"
                 >
                   <SettingsIcon className="icon" /> Targets
                 </button>
               )}
               {can(user, "export") && (
-                <button className="btn btn-secondary btn-sm" onClick={downloadCsv} title="Download the 14 checks as CSV">
+                <button className="btn btn-secondary btn-sm" onClick={downloadCsv} title="Download the checks as CSV">
                   <DownloadIcon className="icon" /> CSV
                 </button>
               )}
@@ -576,7 +576,7 @@ function CheckCard({
           </div>
           <div>
             <dt>Score impact</dt>
-            <dd className="mono">{impactLabel(impact)}</dd>
+            <dd className="mono">{check.scored === false ? "Not scored" : impactLabel(impact)}</dd>
           </div>
         </dl>
       </div>
@@ -591,7 +591,8 @@ function CheckCard({
             ) : (
               <ChevronDownIcon className="icon" style={{ width: 13, height: 13 }} />
             )}
-            {open ? "Hide" : "Show"} {isIndex(check) ? "activities behind plan" : "affected activities"}
+            {open ? "Hide" : "Show"}{" "}
+            {isIndex(check) ? "activities behind plan" : check.id === 15 ? "out-of-sequence links" : "affected activities"}
           </button>
           {open && <AffectedIds check={check} />}
         </>

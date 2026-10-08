@@ -14,6 +14,7 @@ class DcmaCheckResultOut(BaseModel):
     details: list[str]
     denominator: int = 0
     basis: str = "activities"
+    scored: bool = True
 
 
 class DcmaReportOut(BaseModel):

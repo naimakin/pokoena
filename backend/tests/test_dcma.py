@@ -196,3 +196,98 @@ def test_resources_check_is_real_when_assignment_ids_provided():
     assert resources.status == "warn"  # 1 of 2 unassigned = 50% > 20% threshold
     assert resources.details == ["A2"]
     assert resources.pct == 50.0
+
+
+# --- #15 Out of sequence (POKO's own check, unscored) ---------------------
+
+_P6 = {"done": "TK_Complete", "ip": "TK_Active", "ns": "TK_NotStart"}
+
+
+def _oos(pairs: list[tuple[str, str, LinkType]], states: dict[str, str], **kwargs):
+    acts = {code: _act(external_id=code, status_code=_P6[s]) for code, s in states.items()}
+    rels = [_rel(acts[p], acts[s], lt) for p, s, lt in pairs]
+    report = run_dcma(list(acts.values()), rels, hours_per_day=8, data_date=None, **kwargs)
+    return report, next(c for c in report.checks if c.id == 15)
+
+
+def test_oos_completed_with_unfinished_fs_predecessor():
+    _, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "done"})
+    assert c.details == ["P / FS / A"]
+    assert c.status == "warn"
+
+
+def test_oos_completed_with_unfinished_ff_predecessor():
+    _, c = _oos([("P", "A", LinkType.FF)], {"P": "ns", "A": "done"})
+    assert c.details == ["P / FF / A"]
+
+
+def test_oos_in_progress_with_unfinished_fs_predecessor():
+    _, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "ip"})
+    assert c.details == ["P / FS / A"]
+
+
+def test_oos_in_progress_with_not_started_ss_predecessor():
+    _, c = _oos([("P", "A", LinkType.SS)], {"P": "ns", "A": "ip"})
+    assert c.details == ["P / SS / A"]
+
+
+def test_oos_in_progress_ss_predecessor_already_started_is_fine():
+    _, c = _oos([("P", "A", LinkType.SS)], {"P": "ip", "A": "ip"})
+    assert c.details == []
+    assert c.status == "pass"
+
+
+def test_oos_negatives():
+    _, c = _oos(
+        [
+            ("P1", "A1", LinkType.FS),  # completed predecessor
+            ("P2", "A2", LinkType.SS),  # SS on a completed activity
+            ("P3", "A3", LinkType.SF),  # SF never counts
+            ("P4", "A4", LinkType.FF),  # FF on an in-progress activity
+            ("P5", "A5", LinkType.FS),  # not-started activity
+        ],
+        {
+            "P1": "done", "A1": "done",
+            "P2": "ns", "A2": "done",
+            "P3": "ns", "A3": "done",
+            "P4": "ns", "A4": "ip",
+            "P5": "ns", "A5": "ns",
+        },
+    )
+    assert c.details == []
+
+
+def test_oos_lists_every_offending_link_of_an_activity():
+    _, c = _oos(
+        [("P2", "A", LinkType.FS), ("P1", "A", LinkType.FF)],
+        {"P1": "ns", "P2": "ip", "A": "done"},
+    )
+    assert c.details == ["P1 / FF / A", "P2 / FS / A"]
+    assert c.value == 2
+
+
+def test_oos_completed_finish_milestone_counts():
+    p = _act(external_id="P", status_code="TK_Active")
+    m = _act(external_id="M", status_code="TK_Complete", task_type="TT_FinMile")
+    report = run_dcma([p, m], [_rel(p, m)], hours_per_day=8, data_date=None)
+    assert next(c for c in report.checks if c.id == 15).details == ["P / FS / M"]
+
+
+def test_oos_is_not_scored():
+    report, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "done"})
+    assert c.scored is False and c.status == "warn"
+    scored = [x for x in report.checks if x.id != 15 and x.status != "not_tracked"]
+    points = sum(1.0 if x.status == "pass" else 0.5 if x.status == "warn" else 0.0 for x in scored)
+    assert report.overall_score == round(points / len(scored) * 100, 1)
+
+
+def test_oos_threshold_override_passes():
+    from app.engine.quality.dcma import DcmaThresholds
+
+    _, c = _oos(
+        [("P", "A", LinkType.FS)],
+        {"P": "ip", "A": "done"},
+        thresholds=DcmaThresholds(out_of_sequence_max=100.0),
+    )
+    assert c.status == "pass"
+    assert c.details == ["P / FS / A"]

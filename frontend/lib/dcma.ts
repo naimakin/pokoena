@@ -37,6 +37,7 @@ export const DCMA_DEFAULTS: Thresholds = {
   zero_float_max: 10,
   bei_min: 0.95,
   bei_max: 1.05,
+  out_of_sequence_max: 0,
 };
 
 /** One editable number of a check's target. */
@@ -155,6 +156,15 @@ const META: Record<number, CheckMeta> = {
     ],
     rule: "Within 0.10 outside the band warns; further out fails.",
   },
+  15: {
+    title: "Out of sequence",
+    category: "logic",
+    measures: text(
+      "Progressed work ahead of its logic: a completed activity with an unfinished FS or FF predecessor, an in-progress one with an unfinished FS or a not-started SS predecessor",
+    ),
+    ...atMost("out_of_sequence_max"),
+    rule: "Over target warns; it doesn't count toward the score.",
+  },
 };
 
 export const CHECK_IDS = Object.keys(META).map(Number);
@@ -248,7 +258,8 @@ export function factLabel(check: DcmaCheckResult): string {
 /** What the check costs the overall score: the score is the mean of
  *  pass = 1, warn = 0.5, fail = 0 over the applicable checks. */
 export function scoreImpact(check: DcmaCheckResult, report: DcmaReport): number {
-  const applicable = report.checks.filter((c) => c.status !== "not_tracked").length || 1;
+  if (check.scored === false) return 0;
+  const applicable = report.checks.filter((c) => c.scored !== false && c.status !== "not_tracked").length || 1;
   if (check.status === "fail") return -100 / applicable;
   if (check.status === "warn") return -50 / applicable;
   return 0;

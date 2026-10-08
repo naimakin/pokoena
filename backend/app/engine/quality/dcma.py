@@ -29,6 +29,12 @@ DCMA 14 checks (reference: DCMA EA PAM 200.1):
   13. Total float = 0     — TF=0 but not on the longest path (>10% = warn)
   14. BEI                 — Baseline Execution Index (target: 0.95-1.05)
 
+Plus one POKO check, not DCMA's and left out of the overall score (`scored`):
+  15. Out of sequence     — progressed work linked ahead of its predecessors:
+                            completed A with an unfinished FS/FF predecessor,
+                            in-progress A with an unfinished FS or a
+                            not-started SS predecessor (the analyst's rules).
+
 Those targets are DCMA's; a project can set its own (`DcmaThresholds`, stored
 per project as `projects.dcma_thresholds`, edited on the DCMA page). Which
 checks fail and which only warn stays DCMA's: #10 and #13 warn when over
@@ -83,6 +89,7 @@ class DcmaThresholds:
     zero_float_max: float = 10.0
     bei_min: float = 0.95
     bei_max: float = 1.05
+    out_of_sequence_max: float = 0.0
 
     @classmethod
     def from_overrides(cls, overrides: dict | None) -> "DcmaThresholds":
@@ -140,6 +147,9 @@ class DcmaCheckResult:
     # for #14 (BEI). The page draws each check as a part of this whole.
     denominator: int = 0
     basis: str = "activities"  # "activities" | "relationships" | "planned"
+    # False for POKO's own checks: shown with the rest but kept out of the
+    # overall score, so the score stays DCMA's and comparable over time.
+    scored: bool = True
 
 
 @dataclass
@@ -363,6 +373,48 @@ def _check14_bei(acts: list[Activity], data_date: date, t: DcmaThresholds) -> Dc
     )
 
 
+_P6_STATE = {"TK_Complete": "complete", "TK_Active": "in_progress", "TK_NotStart": "not_started"}
+# A level-of-effort spans its logic by design, and a WBS summary carries none.
+_NO_SEQUENCE_TYPES = {"TT_LOE", "TT_WBS"}
+
+
+def _state(a: Activity) -> str | None:
+    if a.status_code in _P6_STATE:
+        return _P6_STATE[a.status_code]
+    return getattr(a.status, "value", a.status)
+
+
+def _check15_out_of_sequence(
+    acts: list[Activity], rels: list[ActivityRelationship], t: DcmaThresholds
+) -> DcmaCheckResult:
+    by_id = {a.id: a for a in acts if a.task_type not in _NO_SEQUENCE_TYPES}
+    findings: list[tuple[str, str, str]] = []
+    for r in rels:
+        pred = by_id.get(r.predecessor_id)
+        succ = by_id.get(r.successor_id)
+        if pred is None or succ is None:
+            continue
+        succ_state, pred_state = _state(succ), _state(pred)
+        link = str(getattr(r.link_type, "value", r.link_type))
+        if succ_state == "complete":
+            hit = link in ("FS", "FF") and pred_state != "complete"
+        elif succ_state == "in_progress":
+            hit = (link == "FS" and pred_state != "complete") or (link == "SS" and pred_state == "not_started")
+        else:
+            hit = False
+        if hit:
+            findings.append((succ.external_id, pred.external_id, link))
+    findings.sort()
+
+    pct = round(len(findings) / len(rels) * 100, 2) if rels else 0.0
+    return DcmaCheckResult(
+        id=15, name="Out of Sequence", status="warn" if pct > t.out_of_sequence_max else "pass",
+        value=float(len(findings)), threshold=t.out_of_sequence_max, pct=pct, unit="%",
+        details=[f"{pred} / {link} / {succ}" for succ, pred, link in findings[:20]],
+        denominator=len(rels), basis="relationships", scored=False,
+    )
+
+
 def run_dcma(
     activities: list[Activity],
     relationships: list[ActivityRelationship],
@@ -371,7 +423,7 @@ def run_dcma(
     assigned_activity_ids: Optional[set[uuid.UUID]] = None,
     thresholds: Optional[DcmaThresholds] = None,
 ) -> DcmaReport:
-    """Run all 14 DCMA checks against a project's current activities/relationships.
+    """Run the 14 DCMA checks (plus POKO's unscored #15) against a project's current activities/relationships.
     `assigned_activity_ids` (activity ids with >=1 resource_assignments row) makes
     check #10 real instead of "not_tracked" — see module docstring. `thresholds`
     defaults to DCMA's own targets."""
@@ -398,9 +450,10 @@ def run_dcma(
         _check12_critical_path_length(in_scope, total, t),
         _check13_total_float_zero(in_scope, total, t),
         _check14_bei(activities, dd, t),
+        _check15_out_of_sequence(activities, relationships, t),
     ]
 
-    applicable = [c for c in checks if c.status != "not_tracked"]
+    applicable = [c for c in checks if c.scored and c.status != "not_tracked"]
     pass_pts = sum(1 for c in applicable if c.status == "pass")
     warn_pts = sum(1 for c in applicable if c.status == "warn")
     score = round((pass_pts * 1.0 + warn_pts * 0.5) / len(applicable) * 100, 1) if applicable else 0.0
