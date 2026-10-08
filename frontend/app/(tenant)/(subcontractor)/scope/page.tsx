@@ -323,8 +323,19 @@ export default function ScopePage() {
                     <li key={m.id} className="mention-item is-unread">
                       <div className="mention-open">
                         <span className="mention-meta">
-                          <b>{m.author_name ?? "Someone"}</b> on <span className="mono">{m.activity_external_id}</span>
+                          <b>{m.author_name ?? "Someone"}</b>{" "}
+                          {m.kind === "recovery_owner"
+                            ? "made you owner of a recovery action on"
+                            : m.kind === "recovery_action" || m.kind === "recovery_root_cause"
+                              ? "mentioned you in the recovery plan for"
+                              : "on"}{" "}
+                          <span className="mono">{m.activity_external_id}</span>
                           {m.activity_name ? ` · ${m.activity_name}` : ""}
+                          {m.href && (
+                            <Link href={m.href} className="rp-mention-link" onClick={() => markMentionRead(m.id)}>
+                              Open plan
+                            </Link>
+                          )}
                         </span>
                         <span className="mention-body">
                           <MentionText body={m.body} />

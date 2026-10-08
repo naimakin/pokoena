@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -14,11 +15,12 @@ from app.deps import (
 )
 from app.models.activity import Activity
 from app.models.activity_event import ActivityEvent
-from app.models.mention import Mention
+from app.models.mention import Mention, MentionKind
 from app.models.my_desk import ActivityPin, PersonalNote
 from app.models.user import User
 from app.models.project import Project
-from app.models.user_tenant_role import Capability
+from app.models.recovery_plan import RecoveryPlan, RecoveryPlanItem
+from app.models.user_tenant_role import Capability, TenantRole
 from app.schemas.my_desk import (
     ActivityDeskOut,
     InboxItemOut,
@@ -94,10 +96,47 @@ def list_mentions(
     if unread:
         query = query.filter(Mention.read_at.is_(None))
     rows = query.order_by(Mention.created_at.desc()).limit(limit).all()
+    event_ids = [m.activity_event_id for m in rows if m.activity_event_id]
     events = {
         e.id: e
-        for e in db.query(ActivityEvent).filter(ActivityEvent.id.in_([m.activity_event_id for m in rows]))
-    } if rows else {}
+        for e in db.query(ActivityEvent).filter(
+            ActivityEvent.tenant_id == ctx.tenant_id, ActivityEvent.id.in_(event_ids)
+        )
+    } if event_ids else {}
+    plan_ids = {m.recovery_plan_id for m in rows if m.recovery_plan_id}
+    plans = {
+        p.id: p
+        for p in db.query(RecoveryPlan).filter(RecoveryPlan.tenant_id == ctx.tenant_id, RecoveryPlan.id.in_(plan_ids))
+    } if plan_ids else {}
+    item_ids = {m.recovery_item_id for m in rows if m.recovery_item_id}
+    actions = dict(
+        db.query(RecoveryPlanItem.id, RecoveryPlanItem.action).filter(
+            RecoveryPlanItem.tenant_id == ctx.tenant_id, RecoveryPlanItem.id.in_(item_ids)
+        )
+    ) if item_ids else {}
+
+    def body(m: Mention) -> str:
+        if m.activity_event_id is not None:
+            event = events.get(m.activity_event_id)
+            return (event.body or "") if event is not None else ""
+        if m.recovery_item_id is not None:
+            return actions.get(m.recovery_item_id, "")
+        plan = plans.get(m.recovery_plan_id)
+        return (plan.summary or "") if plan is not None else ""
+
+    def href(m: Mention) -> str | None:
+        """A recovery-plan mention opens its row on the Recovery Plan page, on
+        the comparison the plan was raised against."""
+        if m.recovery_plan_id is None:
+            return None
+        params = {"activity": m.activity_external_id}
+        plan = plans.get(m.recovery_plan_id)
+        if ctx.role == TenantRole.subcontractor:
+            return f"/scope/recovery-plan?{urlencode(params)}"
+        if plan is not None and plan.from_import_id and plan.to_import_id:
+            params = {"from": str(plan.from_import_id), "to": str(plan.to_import_id), **params}
+        return f"/recovery-plan?{urlencode(params)}"
+
     names = dict(
         db.query(User.id, User.full_name).filter(User.id.in_({m.author_user_id for m in rows if m.author_user_id}))
     ) if rows else {}
@@ -116,8 +155,11 @@ def list_mentions(
             activity_external_id=m.activity_external_id,
             activity_name=activities.get(m.activity_id),
             author_name=names.get(m.author_user_id),
-            body=events[m.activity_event_id].body or "" if m.activity_event_id in events else "",
+            body=body(m),
+            kind=m.kind or MentionKind.comment,
             event_id=m.activity_event_id,
+            recovery_plan_id=m.recovery_plan_id,
+            href=href(m),
             created_at=m.created_at,
             read_at=m.read_at,
         )

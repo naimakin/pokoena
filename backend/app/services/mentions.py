@@ -1,4 +1,4 @@
-"""@mentions in activity comments.
+"""@mentions in activity comments and recovery plans.
 
 A comment body carries a mention as a token `@[Full Name](user:<uuid>)`: the
 name keeps the text readable on its own, the id is what counts. The server is
@@ -13,6 +13,12 @@ Who may be mentioned on an activity = who can see it:
   Viewer isn't pinged about work they can't open;
 - subcontractors assigned to the activity's own scope.
 The list never carries emails: anyone on the project can read it.
+
+Recovery plans (routes/recovery_plans.py) reuse the same tokens in the root
+cause and in each action's text, and the same list for an action's owner.
+There a mention is recorded only for people *newly* tagged by a save
+(`record_recovery_mentions` diffs the old text against the new), so re-saving
+the same text — or editing around a tag — never notifies twice.
 """
 
 import re
@@ -26,6 +32,7 @@ from app.models.activity import Activity
 from app.models.activity_event import ActivityEvent
 from app.models.mention import Mention
 from app.models.project_membership import ProjectMembership
+from app.models.recovery_plan import RecoveryPlan
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.subcontractor_scope_assignment import SubcontractorScopeAssignment
 from app.models.user import User
@@ -129,6 +136,62 @@ def record_mentions(db: Session, ctx: AuthContext, activity: Activity, event: Ac
                 activity_id=activity.id,
                 activity_external_id=activity.external_id,
                 activity_event_id=event.id,
+                mentioned_user_id=uid,
+                author_user_id=ctx.user.id,
+            )
+        )
+    db.flush()
+    return saved
+
+
+def record_recovery_mentions(
+    db: Session,
+    ctx: AuthContext,
+    activity: Activity | None,
+    plan: RecoveryPlan,
+    *,
+    kind: str,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    item_id: uuid.UUID | None = None,
+    user_ids: list[uuid.UUID] | None = None,
+) -> list[uuid.UUID]:
+    """Notify the people a recovery-plan save newly tagged (or, with
+    `user_ids`, the person just made an action's owner). Never the editor
+    themselves, only people who can see the activity, and never twice while an
+    earlier notification for the same spot is still unread. Flushes; the caller
+    commits."""
+    if activity is None:
+        return []
+    if user_ids is None:
+        before = set(mentioned_ids(old_text or ""))
+        user_ids = [uid for uid in mentioned_ids(new_text or "") if uid not in before]
+    wanted = [uid for uid in user_ids if uid != ctx.user.id]
+    if not wanted:
+        return []
+    allowed = {m.user_id for m in mentionable_users(db, ctx, activity)}
+    pending = {
+        uid
+        for (uid,) in db.query(Mention.mentioned_user_id).filter(
+            Mention.tenant_id == ctx.tenant_id,
+            Mention.recovery_plan_id == plan.id,
+            Mention.kind == kind,
+            (Mention.recovery_item_id == item_id) if item_id is not None else Mention.recovery_item_id.is_(None),
+            Mention.read_at.is_(None),
+        )
+    }
+    saved = [uid for uid in wanted if uid in allowed and uid not in pending]
+    for uid in saved:
+        db.add(
+            Mention(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                project_id=plan.project_id,
+                activity_id=activity.id,
+                activity_external_id=plan.activity_external_id,
+                kind=kind,
+                recovery_plan_id=plan.id,
+                recovery_item_id=item_id,
                 mentioned_user_id=uid,
                 author_user_id=ctx.user.id,
             )

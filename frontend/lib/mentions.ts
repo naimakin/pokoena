@@ -25,6 +25,14 @@ export function mentionPlainText(body: string): string {
   return body.replace(MENTION_TOKEN, (_all, name: string) => `@${name}`);
 }
 
+/** A stored body back in editable form: `@Name` text plus the name → id map
+ *  for the people already tagged, so re-saving keeps their tokens. */
+export function mentionEditable(body: string | null | undefined): { text: string; picked: Record<string, string> } {
+  const picked: Record<string, string> = {};
+  for (const m of (body ?? "").matchAll(MENTION_TOKEN)) picked[m[1]] = m[2];
+  return { text: mentionPlainText(body ?? ""), picked };
+}
+
 /** Turn the `@Name` the person typed back into tokens, for the people they
  *  actually picked from the list (longest names first, so "Ana Demir" wins
  *  over "Ana"). Names they typed without picking stay plain text. */

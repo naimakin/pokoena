@@ -1154,11 +1154,18 @@ export interface SlipImportRef {
 
 export interface SlipReport {
   project_id: string;
-  comparison_basis: "previous_upd" | "baseline_programme" | "none";
+  // previous_upd / baseline_programme: the default pair; custom: a chosen
+  // pair; baseline: From = the active baseline; none: nothing to compare.
+  comparison_basis: "previous_upd" | "baseline_programme" | "baseline" | "custom" | "none";
   from_import: SlipImportRef | null;
   to_import: SlipImportRef | null;
   threshold_days: number;
   coverage: { from_snapshot: boolean; to_snapshot: boolean };
+  /** Nothing chosen, or the choice equals the default pair. */
+  is_default: boolean;
+  from_baseline: boolean;
+  /** The project's active baseline (what From = "Baseline" compares against). */
+  baseline: { label: string; import_id: string; data_date: string | null } | null;
   summary: {
     slipped_count: number;
     critical_slipped_count: number;
@@ -1177,7 +1184,9 @@ export interface RecoveryPlanItem {
   recovery_plan_id: string;
   order_index: number;
   action: string;
+  /** Free text, or the picked person's name (owner_user_id). */
   owner_name: string | null;
+  owner_user_id: string | null;
   target_date: string | null;
   status: RecoveryItemStatusValue;
   completed_at: string | null;
@@ -1264,10 +1273,24 @@ export interface RecoveryPlan {
   reviewed_by_user_id: string | null;
   review_note: string | null;
   slip_days_at_creation: number | null;
+  from_import_id: string | null;
+  to_import_id: string | null;
+  submitted_by_user_id: string | null;
+  edited_at: string | null;
+  edited_by_user_id: string | null;
   created_at: string;
   updated_at: string;
   author_name: string | null;
   scope_name: string | null;
+  submitted_by_name: string | null;
+  reviewed_by_name: string | null;
+  edited_by_name: string | null;
+  /** The author changed it after it was submitted / acknowledged (status unchanged). */
+  edited_after: "submission" | "acknowledgement" | null;
+  from_label: string | null;
+  to_label: string | null;
+  /** May the signed-in user change the root cause and action items? */
+  can_edit: boolean;
   items?: RecoveryPlanItem[];
 }
 
@@ -1674,7 +1697,10 @@ export interface MentionableUser {
   label: string;
 }
 
-/** A comment that tagged the signed-in user (GET /my-desk/mentions). */
+export type MentionKindValue = "comment" | "recovery_root_cause" | "recovery_action" | "recovery_owner";
+
+/** A comment or recovery plan that tagged the signed-in user, or an action they
+ *  were made owner of (GET /my-desk/mentions). */
 export interface MyMention {
   id: string;
   project_id: string;
@@ -1684,7 +1710,12 @@ export interface MyMention {
   activity_name: string | null;
   author_name: string | null;
   body: string;
-  event_id: string;
+  kind: MentionKindValue;
+  /** Set for a comment. */
+  event_id: string | null;
+  /** Set for a recovery plan mention, with href to its row on the Recovery Plan page. */
+  recovery_plan_id: string | null;
+  href: string | null;
   created_at: string;
   read_at: string | null;
 }

@@ -23,6 +23,14 @@ import type { Activity, DeskInboxItem, DeskPin, DeskSuggestion, MyMention, Perso
 // the user pinned or wrote, never inferred.
 
 type Scope = "project" | "all";
+
+/** "on A100" for a comment; the recovery plan kinds say what happened. */
+function mentionVerb(m: MyMention): string {
+  if (m.kind === "recovery_owner") return "made you owner of a recovery action on";
+  if (m.kind === "recovery_action") return "mentioned you in a recovery action on";
+  if (m.kind === "recovery_root_cause") return "mentioned you in the recovery plan for";
+  return "on";
+}
 type PinFilter = "all" | "critical" | "slipped" | "noted";
 
 const SCOPE_KEY = "poko:my-desk-scope";
@@ -152,6 +160,16 @@ export default function MyDeskPage() {
   // ---------------------------------------------------------------- actions
 
   async function openMention(m: MyMention) {
+    if (m.href) {
+      // A recovery plan mention opens the plan's row on Programme > Recovery Plan.
+      if (!m.read_at) markRead(m.id);
+      if (m.project_id !== project?.id) {
+        selectProject(m.project_id);
+        showToast(`Switched to ${m.project_code}`);
+      }
+      router.push(m.href);
+      return;
+    }
     if (!m.activity_id) {
       showToast(`${m.activity_external_id} is no longer in the programme.`, "error");
       return;
@@ -354,7 +372,7 @@ export default function MyDeskPage() {
                   <div className="card-title">
                     Mentions{unreadMentions ? <span className="mention-count">{unreadMentions} new</span> : null}
                   </div>
-                  <div className="card-title-sub">Comments where someone tagged you with @</div>
+                  <div className="card-title-sub">Comments and recovery plans where someone tagged you with @</div>
                 </div>
                 <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
                   <div className="segmented" role="group" aria-label="Mentions shown">
@@ -383,7 +401,7 @@ export default function MyDeskPage() {
                     <li key={m.id} className={`mention-item${m.read_at ? "" : " is-unread"}`}>
                       <button type="button" className="mention-open" onClick={() => openMention(m)}>
                         <span className="mention-meta">
-                          <b>{m.author_name ?? "Someone"}</b> on <span className="mono">{m.activity_external_id}</span>
+                          <b>{m.author_name ?? "Someone"}</b> {mentionVerb(m)} <span className="mono">{m.activity_external_id}</span>
                           {m.activity_name ? ` · ${m.activity_name}` : ""}
                           {(allMode || m.project_id !== project?.id) && (
                             <span className="chip chip-neutral mono">{m.project_code}</span>

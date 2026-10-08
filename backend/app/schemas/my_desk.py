@@ -34,7 +34,8 @@ class InboxItemOut(BaseModel):
 
 
 class MentionOut(BaseModel):
-    """Someone tagged the caller in an activity comment."""
+    """Someone tagged the caller in an activity comment or a recovery plan, or
+    made them the owner of a recovery action."""
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -45,7 +46,12 @@ class MentionOut(BaseModel):
     author_name: str | None
     # The comment with @[Name](user:id) tokens kept, for the client to render chips.
     body: str
-    event_id: uuid.UUID
+    # comment | recovery_root_cause | recovery_action | recovery_owner
+    kind: str = "comment"
+    event_id: uuid.UUID | None = None
+    recovery_plan_id: uuid.UUID | None = None
+    # Where the mention opens (recovery plan mentions), e.g. "/recovery-plan?activity=A100".
+    href: str | None = None
     created_at: datetime
     read_at: datetime | None
 

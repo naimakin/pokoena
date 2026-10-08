@@ -61,15 +61,29 @@ class SlipSummaryOut(BaseModel):
     plans_accepted: int
 
 
+class SlipBaselineOut(BaseModel):
+    """The project's active baseline — what From = "Baseline" compares against."""
+
+    label: str
+    import_id: uuid.UUID
+    data_date: datetime | None
+
+
 class SlipReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     project_id: uuid.UUID
-    comparison_basis: Literal["previous_upd", "baseline_programme", "none"]
+    # previous_upd / baseline_programme: the default pair; custom: a chosen
+    # pair; baseline: From = the active baseline; none: nothing to compare.
+    comparison_basis: Literal["previous_upd", "baseline_programme", "baseline", "custom", "none"]
     from_import: SlipImportRefOut | None
     to_import: SlipImportRefOut | None
     threshold_days: int
     coverage: SlipCoverageOut
+    # True when nothing was chosen, or the choice equals the default pair.
+    is_default: bool = True
+    from_baseline: bool = False
+    baseline: SlipBaselineOut | None = None
     summary: SlipSummaryOut
     slipped: list[SlipRowOut]
 
@@ -80,6 +94,11 @@ class SlipReportOut(BaseModel):
 class RecoveryPlanCreate(BaseModel):
     activity_external_id: str = Field(min_length=1, max_length=50)
     summary: str | None = Field(default=None, max_length=4000)
+    # The comparison the plan is raised against (the page's From / To); left
+    # out = the default comparison. Recorded on the plan.
+    from_import_id: uuid.UUID | None = None
+    to_import_id: uuid.UUID | None = None
+    from_baseline: bool = False
 
 
 class RecoveryPlanHeaderUpdate(BaseModel):
@@ -89,12 +108,17 @@ class RecoveryPlanHeaderUpdate(BaseModel):
 class RecoveryItemCreate(BaseModel):
     action: str = Field(min_length=1, max_length=2000)
     owner_name: str | None = Field(default=None, max_length=255)
+    # A person who can see the activity; wins over owner_name.
+    owner_user_id: uuid.UUID | None = None
     target_date: date | None = None
 
 
 class RecoveryItemUpdate(BaseModel):
     action: str | None = Field(default=None, min_length=1, max_length=2000)
+    # Sent alone, owner_name is a free-text owner and clears owner_user_id;
+    # owner_user_id (null clears) picks a person and takes their name.
     owner_name: str | None = Field(default=None, max_length=255)
+    owner_user_id: uuid.UUID | None = None
     target_date: date | None = None
     status: Literal["open", "in_progress", "done", "dropped"] | None = None
     completed_at: date | None = None
@@ -108,6 +132,7 @@ class RecoveryItemOut(BaseModel):
     order_index: int
     action: str
     owner_name: str | None
+    owner_user_id: uuid.UUID | None = None
     target_date: date | None
     status: str
     completed_at: date | None
@@ -132,11 +157,27 @@ class RecoveryPlanOut(BaseModel):
     reviewed_by_user_id: uuid.UUID | None
     review_note: str | None
     slip_days_at_creation: int | None
+    from_import_id: uuid.UUID | None = None
+    to_import_id: uuid.UUID | None = None
+    submitted_by_user_id: uuid.UUID | None = None
+    edited_at: datetime | None = None
+    edited_by_user_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
     # transient, filled by the route
     author_name: str | None = None
     scope_name: str | None = None
+    submitted_by_name: str | None = None
+    reviewed_by_name: str | None = None
+    edited_by_name: str | None = None
+    # "submission" / "acknowledgement" when the author changed the plan after
+    # it was submitted / acknowledged (the status stays as it was).
+    edited_after: Literal["submission", "acknowledgement"] | None = None
+    # The comparison the plan was raised against, for display.
+    from_label: str | None = None
+    to_label: str | None = None
+    # May the caller change the root cause and action items?
+    can_edit: bool = False
 
 
 class RecoveryPlanDetailOut(RecoveryPlanOut):

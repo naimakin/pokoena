@@ -88,6 +88,13 @@ class RecoveryPlan(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Last change to what the author wrote (root cause, action items) — not
+    # status moves or item progress ticks. Editing never changes `status`; the
+    # page flags an edit made after submission / acknowledgement instead.
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -111,7 +118,13 @@ class RecoveryPlanItem(Base):
 
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     action: Mapped[str] = mapped_column(Text, nullable=False)
+    # Free text (legacy, or someone outside POKO) or, when `owner_user_id` is
+    # set, that person's name at assignment time — kept for display.
     owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # A person who can see the activity (services/mentions.mentionable_users).
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[RecoveryItemStatus] = mapped_column(
         SAEnum(RecoveryItemStatus, name="recovery_item_status"),

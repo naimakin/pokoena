@@ -6,7 +6,10 @@ import type { MentionableUser } from "@/lib/types";
 
 interface Props {
   /** Whose people can be tagged: the activity being commented on. */
-  activityId: string;
+  activityId?: string;
+  /** Or any endpoint returning MentionableUser[] (takes ?q=), e.g. a recovery
+   *  plan's people. Wins over activityId. */
+  peopleUrl?: string;
   value: string;
   onChange: (text: string) => void;
   /** Name → user id for everyone picked from the list (lib/mentions.serializeMentions). */
@@ -18,6 +21,9 @@ interface Props {
   /** Ctrl/⌘+Enter. */
   onSubmit?: () => void;
   ariaLabel?: string;
+  autoFocus?: boolean;
+  /** Escape with no list open (e.g. cancel an inline edit). */
+  onCancel?: () => void;
 }
 
 // "@" at the start of the text or after whitespace, then what's typed so far.
@@ -28,6 +34,7 @@ const TRIGGER = /(^|\s)@([^\s@]{0,40})$/;
  *  popover under the field, driven by the keyboard (↑ ↓ Enter/Tab Esc). */
 export function MentionTextarea({
   activityId,
+  peopleUrl,
   value,
   onChange,
   picked,
@@ -37,6 +44,8 @@ export function MentionTextarea({
   disabled,
   onSubmit,
   ariaLabel,
+  autoFocus,
+  onCancel,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const listId = useId();
@@ -44,12 +53,14 @@ export function MentionTextarea({
   const [options, setOptions] = useState<MentionableUser[]>([]);
   const [active, setActive] = useState(0);
 
+  const source = peopleUrl ?? (activityId ? `/activities/${activityId}/mentionable-users` : null);
+
   useEffect(() => {
-    if (query === null) return;
+    if (query === null || !source) return;
     const timer = window.setTimeout(() => {
-      const q = query ? `?q=${encodeURIComponent(query)}` : "";
+      const q = query ? `${source.includes("?") ? "&" : "?"}q=${encodeURIComponent(query)}` : "";
       api
-        .get<MentionableUser[]>(`/activities/${activityId}/mentionable-users${q}`)
+        .get<MentionableUser[]>(`${source}${q}`)
         .then((people) => {
           setOptions(people);
           setActive(0);
@@ -57,7 +68,7 @@ export function MentionTextarea({
         .catch(() => setOptions([]));
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [query, activityId]);
+  }, [query, source]);
 
   function readTrigger(text: string, caret: number) {
     const m = TRIGGER.exec(text.slice(0, caret));
@@ -93,6 +104,9 @@ export function MentionTextarea({
     } else if (query !== null && e.key === "Escape") {
       e.preventDefault();
       setQuery(null);
+    } else if (e.key === "Escape" && onCancel) {
+      e.preventDefault();
+      onCancel();
     } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && onSubmit) {
       e.preventDefault();
       onSubmit();
@@ -110,6 +124,7 @@ export function MentionTextarea({
         placeholder={placeholder}
         disabled={disabled}
         aria-label={ariaLabel}
+        autoFocus={autoFocus}
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
