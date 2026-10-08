@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityStatus, SavedActivityFilter, WbsNode } from "@/lib/types";
+import type { ActivityCodes, ActivityStatus, SavedActivityFilter, WbsNode } from "@/lib/types";
 import { selectStyle } from "@/components/ScurveChart";
 import {
+  EMPTY_CRITERIA,
   FIELD_DEFS,
   FIELD_BY_KEY,
   OP_LABEL,
@@ -12,6 +13,7 @@ import {
   type FilterOp,
   type FilterPredicate,
 } from "./filter";
+import { QuickFilters } from "./QuickFilters";
 import { WbsTreeSelect } from "./WbsTreeSelect";
 
 const STATUS_CHIPS: { value: ActivityStatus; label: string }[] = [
@@ -37,7 +39,15 @@ export function FilterPanel({
   onSaveNew,
   onUpdateActive,
   onDeleteSaved,
+  dataDate,
+  codes,
+  codeMembership,
+  tagOptions,
 }: {
+  dataDate: string | null;
+  codes: ActivityCodes | null;
+  codeMembership: Map<string, Set<string>> | null;
+  tagOptions: string[];
   criteria: FilterCriteria;
   onChange: (next: FilterCriteria) => void;
   nodes: WbsNode[];
@@ -151,21 +161,30 @@ export function FilterPanel({
           className={`btn btn-secondary btn-sm${criteria.predicates.length ? " " : ""}`}
           onClick={() => setBuilderOpen((v) => !v)}
         >
-          Filters{criteria.predicates.length ? ` · ${criteria.predicates.length}` : ""}
+          Advanced{criteria.predicates.length ? ` · ${criteria.predicates.length}` : ""}
         </button>
 
         {!criteriaIsEmpty(criteria) && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
-              onChange({ statuses: [], wbsId: null, search: "", match: "all", predicates: [] });
+              onChange(EMPTY_CRITERIA);
               onClearSaved();
             }}
           >
-            Clear
+            Clear all
           </button>
         )}
       </div>
+
+      <QuickFilters
+        criteria={criteria}
+        set={set}
+        dataDate={dataDate}
+        codes={codes}
+        codeMembership={codeMembership}
+        tagOptions={tagOptions}
+      />
 
       {/* condition builder */}
       {builderOpen && (

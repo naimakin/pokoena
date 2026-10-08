@@ -5,7 +5,7 @@ import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type { Activity, BaselineStatus, SavedActivityFilter, ScheduleImport, WbsNode } from "@/lib/types";
+import type { Activity, ActivityCodes, BaselineStatus, SavedActivityFilter, ScheduleImport, WbsNode } from "@/lib/types";
 import { applyFilter, EMPTY_CRITERIA, normalizeCriteria, type FilterCriteria } from "@/components/progress/filter";
 import { FilterPanel } from "@/components/progress/FilterPanel";
 import { StatusDatesMode } from "@/components/progress/StatusDatesMode";
@@ -75,11 +75,8 @@ export default function ProgressPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Folded in from the old Planning > Activities view — CPM-side quick filters,
-  // scoped to Status & Dates only (Burned MH Loading keeps its own filtered set).
-  const [criticalOnly, setCriticalOnly] = useState(false);
-  const [overdueOnly, setOverdueOnly] = useState(false);
   const [floatAsc, setFloatAsc] = useState(false);
+  const [codes, setCodes] = useState<ActivityCodes | null>(null);
 
   // Only the manhours mode still holds unsaved page-level state: status/date
   // edits moved into the Activity modal, which saves on its own.
@@ -91,19 +88,19 @@ export default function ProgressPage() {
   // as "the activity columns are gone".
 
   // Deep links from the dashboard's Project Health card: /progress?filter=critical|overdue
-  // (used to point at Planning > Activities before that view folded in here).
-  useEffect(() => {
+  // open with that risk indicator set.
+  const deepLinkRisks = useCallback((): string[] => {
     const preset = new URLSearchParams(window.location.search).get("filter");
-    if (preset === "critical") {
+    if (preset === "critical") return ["critical"];
+    if (preset === "overdue") return ["overdue_finish"];
+    return [];
+  }, []);
+  useEffect(() => {
+    if (deepLinkRisks().length > 0) {
       setMode("status");
-      setCriticalOnly(true);
-      setFloatAsc(true);
-    } else if (preset === "overdue") {
-      setMode("status");
-      setOverdueOnly(true);
       setFloatAsc(true);
     }
-  }, []);
+  }, [deepLinkRisks]);
 
   useEffect(() => {
     if (totalDirty === 0) return;
@@ -137,7 +134,11 @@ export default function ProgressPage() {
     setLoading(true);
     setError(null);
     // ?q= (from the header search) prefills the ID/name search.
-    setCriteriaState({ ...EMPTY_CRITERIA, search: new URLSearchParams(window.location.search).get("q") ?? "" });
+    setCriteriaState({
+      ...EMPTY_CRITERIA,
+      search: new URLSearchParams(window.location.search).get("q") ?? "",
+      risks: deepLinkRisks(),
+    });
     setActiveSavedId(null);
     setFilterDirty(false);
     try {
@@ -157,11 +158,24 @@ export default function ProgressPage() {
     } finally {
       setLoading(false);
     }
-  }, [project, loadFilters]);
+  }, [project, loadFilters, deepLinkRisks]);
 
   useEffect(() => {
     loadImports();
   }, [loadImports]);
+
+  // Activity codes are keyed to live activity ids, so they only filter the
+  // current update.
+  useEffect(() => {
+    if (!project) {
+      setCodes(null);
+      return;
+    }
+    api
+      .get<ActivityCodes>(`/projects/${project.id}/activity-codes`)
+      .then(setCodes)
+      .catch(() => setCodes(null));
+  }, [project]);
 
   const currentImportId = useMemo(() => (imports.find((i) => i.is_current) ?? imports[0])?.id ?? null, [imports]);
   const selectedImport = useMemo(() => imports.find((i) => i.id === selectedImportId) ?? null, [imports, selectedImportId]);
@@ -214,23 +228,20 @@ export default function ProgressPage() {
   }
 
   const nodeByWbsId = useMemo(() => new Map(wbsNodes.map((n) => [n.wbs_id, n])), [wbsNodes]);
-  const filtered = useMemo(
-    () => applyFilter(activities, nodeByWbsId, criteria),
-    [activities, nodeByWbsId, criteria],
+  const codeMembership = useMemo(() => {
+    if (!codes || !isViewingCurrent) return null;
+    const m = new Map<string, Set<string>>();
+    for (const [codeValueId, ids] of Object.entries(codes.assignments)) m.set(codeValueId, new Set(ids));
+    return m;
+  }, [codes, isViewingCurrent]);
+  const tagOptions = useMemo(
+    () => [...new Set(activities.flatMap((a) => a.tags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [activities],
   );
-  // Critical/overdue quick filters narrow the Status & Dates grid only —
-  // Burned MH Loading keeps working off `filtered`, unchanged.
-  const statusFiltered = useMemo(() => {
-    if (!criticalOnly && !overdueOnly) return filtered;
-    const today = new Date().toISOString().slice(0, 10);
-    return filtered.filter((a) => {
-      if (criticalOnly && !a.is_critical) return false;
-      if (overdueOnly && (a.status === "complete" || !a.planned_finish || a.planned_finish.slice(0, 10) >= today)) {
-        return false;
-      }
-      return true;
-    });
-  }, [filtered, criticalOnly, overdueOnly]);
+  const filtered = useMemo(
+    () => applyFilter(activities, nodeByWbsId, criteria, { dataDate, codeMembership }),
+    [activities, nodeByWbsId, criteria, dataDate, codeMembership],
+  );
   const completedCount = useMemo(() => activities.filter((a) => a.status === "complete").length, [activities]);
   const hasUngrouped = useMemo(
     () => filtered.some((a) => !a.wbs_path || !nodeByWbsId.has(a.wbs_path)),
@@ -377,7 +388,7 @@ export default function ProgressPage() {
               {dataLoading
                 ? "Loading…"
                 : (() => {
-                    const shown = mode === "status" ? statusFiltered.length : filtered.length;
+                    const shown = filtered.length;
                     return shown !== activities.length
                       ? `${shown} of ${activities.length} activities shown`
                       : `${activities.length} activities`;
@@ -438,20 +449,10 @@ export default function ProgressPage() {
               </>
             )}
             {mode === "status" && (
-              <>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={criticalOnly} onChange={(e) => setCriticalOnly(e.target.checked)} />
-                  Critical path only
-                </label>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
-                  Overdue only
-                </label>
-                <label className="checkbox-row" title="Sort activities within each WBS band by total float, lowest first">
-                  <input type="checkbox" checked={floatAsc} onChange={(e) => setFloatAsc(e.target.checked)} />
-                  Sort by float
-                </label>
-              </>
+              <label className="checkbox-row" title="Sort activities within each WBS band by total float, lowest first">
+                <input type="checkbox" checked={floatAsc} onChange={(e) => setFloatAsc(e.target.checked)} />
+                Sort by float
+              </label>
             )}
           </div>
           <div className="segmented">
@@ -505,13 +506,17 @@ export default function ProgressPage() {
               onSaveNew={saveNewFilter}
               onUpdateActive={updateActiveFilter}
               onDeleteSaved={deleteSaved}
+              dataDate={dataDate}
+              codes={isViewingCurrent ? codes : null}
+              codeMembership={codeMembership}
+              tagOptions={tagOptions}
             />
 
             <div className="card progress-card" style={{ padding: 0 }}>
               <StatusDatesMode
                 hidden={mode !== "status"}
                 nodes={wbsNodes}
-                activities={statusFiltered}
+                activities={filtered}
                 dataDate={dataDate}
                 canEdit={canEdit}
                 snapshotOnly={!isViewingCurrent}
