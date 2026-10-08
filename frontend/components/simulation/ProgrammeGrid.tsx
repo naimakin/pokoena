@@ -78,7 +78,7 @@ export function ProgrammeGrid({
         <div>
           <div className="card-title">Programme</div>
           <div className="card-title-sub">
-            {activities.length.toLocaleString()} activities, as in Activity Ledger. Click one to change it in the scenario.
+            {activities.length.toLocaleString()} activities, as in Activity Workspace. Click one to change it in the scenario.
           </div>
         </div>
       </div>

@@ -11,7 +11,14 @@ import { NoBaselineIllo } from "@/components/illustrations";
 // baseline programme. Planning / Portfolio / Administration are deliberately
 // left open so the planner can import the schedule and lock the baseline in
 // the first place.
-export const BASELINE_GATED_SECTIONS = new Set(["overview", "execution", "risk", "reporting"]);
+export const BASELINE_GATED_SECTIONS = new Set(["overview", "risk", "reporting"]);
+
+// Pages that need a baseline inside an otherwise open section: Programme holds
+// both the setup pages (Programs, Baselines, Activity Workspace…) and the progress tracking
+// that measures against the baseline.
+// Activity Workspace stays open: planners need it before a baseline exists, and
+// its Burned MH Loading mode shows its own "needs a baseline" banner.
+export const BASELINE_GATED_PATHS = new Set(["/recovery-plan", "/execution/changes"]);
 
 // Pages inside a gated section that measure the programme against itself rather
 // than against a baseline, so the gate would only be in the way. Float Path
@@ -25,6 +32,7 @@ export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path", "/execut
 
 export function isBaselineGated(sectionKey: string | undefined, pathname: string | null): boolean {
   if (pathname && BASELINE_UNGATED_PATHS.has(pathname)) return false;
+  if (pathname && BASELINE_GATED_PATHS.has(pathname)) return true;
   return BASELINE_GATED_SECTIONS.has(sectionKey ?? "");
 }
 
@@ -47,7 +55,7 @@ export function BaselineGate({ gated, children }: { gated: boolean; children: Re
           <EmptyState
             art={<NoBaselineIllo />}
             title="This project has no baseline yet"
-            body="Delivery, Reports, EVM and Risk measure the project against a locked baseline programme."
+            body="Progress tracking, Reports, EVM and Risk measure the project against a locked baseline programme."
           />
           <ol className="setup-steps">
             <li className="is-done">

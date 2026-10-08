@@ -406,8 +406,8 @@ export default function ProjectStatusPage() {
                   {focusedQuadrant?.label} · {(focusedQuadrant?.program_count ?? 0) + (focusedQuadrant?.user_count ?? 0)} activities
                 </div>
                 <div className="card-title-sub">
-                  <Link href="/progress" style={{ color: "var(--accent-strong)", fontWeight: 500 }}>
-                    View in Activity Ledger →
+                  <Link href="/activity-workspace" style={{ color: "var(--accent-strong)", fontWeight: 500 }}>
+                    View in Activity Workspace →
                   </Link>
                 </div>
               </div>

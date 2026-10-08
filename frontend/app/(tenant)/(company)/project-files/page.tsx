@@ -228,7 +228,7 @@ export default function ProgramLibraryPage() {
       );
     }
     if (unlocking) {
-      notes.push("Unlock: Delivery, Reports, EVM, Risk and AI stay locked until a baseline is set again. Tick Baseline again to restore it.");
+      notes.push("Unlock: Progress tracking, Reports, EVM, Risk and AI stay locked until a baseline is set again. Tick Baseline again to restore it.");
     }
     if (notes.length > 0 && !window.confirm(`${notes.join("\n\n")}\n\nContinue?`)) return;
 

@@ -175,16 +175,16 @@ export default function RecoveryPlanPage() {
   }, []);
 
   if (loading) {
-    return <PageState kind="loading" section="Delivery" title="Recovery Plan" />;
+    return <PageState kind="loading" section="Programme" title="Recovery Plan" />;
   }
   if (error) {
-    return <PageState kind="error" section="Delivery" title="Recovery Plan" message={error} />;
+    return <PageState kind="error" section="Programme" title="Recovery Plan" message={error} />;
   }
   if (!project || !report) {
     return (
       <PageState
         kind="empty"
-        section="Delivery"
+        section="Programme"
         title="Recovery Plan"
         emptyTitle="No project selected"
         message="Create or pick a project from the project switcher in the top bar."
@@ -199,7 +199,7 @@ export default function RecoveryPlanPage() {
     <>
       <div className="a-topbar">
         <span className="crumb">
-          Delivery
+          Programme
         </span>
       </div>
       <div className="a-content recovery-print">

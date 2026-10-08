@@ -17,7 +17,6 @@ import {
   BarChartIcon,
   BuildingIcon,
   CalendarIcon,
-  ClockIcon,
   CompareIcon,
   DatabaseIcon,
   DiceIcon,
@@ -90,25 +89,18 @@ const TOP_SECTIONS: NavSection[] = [
     icon: CalendarIcon,
     href: "/project-files",
     visible: always,
-    children: [
-      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
-      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
-      { href: "/chart", label: "Chart", icon: GanttIcon, visible: need("view_programme") },
-      { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
-      { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
-    ],
-  },
-  {
-    key: "execution",
-    label: "Delivery",
-    icon: FlagIcon,
-    href: "/execution/my-desk",
-    visible: always,
+    // Programme and Delivery were one job in two menus; merged, in the order
+    // the work runs. Routes are unchanged.
     children: [
       { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: need("view_delivery") },
-      { href: "/progress", label: "Activity Ledger", icon: ClockIcon, visible: need("view_delivery") },
+      { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
+      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
+      // Activity Ledger + Chart, merged: anyone who could open either page.
+      { href: "/activity-workspace", label: "Activity Workspace", icon: GanttIcon, visible: need("view_programme", "view_delivery") },
       { href: "/recovery-plan", label: "Recovery Plan", icon: TrendingUpIcon, visible: need("view_delivery") },
       { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_delivery") },
+      { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
+      { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
     ],
   },
   {

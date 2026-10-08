@@ -25,8 +25,8 @@ interface Result {
 const MAX_ACTIVITIES = 8;
 
 /** Header search (Ctrl/⌘+K): jump to any page by name, or to an activity of
- *  the selected project by ID or name — activities open in Activity Ledger
- *  pre-filtered (/progress?q=…). The activity list is fetched once per
+ *  the selected project by ID or name — activities open in Activity Workspace
+ *  pre-filtered (/activity-workspace?q=…). The activity list is fetched once per
  *  project, the first time the dialog opens. */
 export function GlobalSearch({ pages }: { pages: SearchPage[] }) {
   const router = useRouter();
@@ -88,7 +88,7 @@ export function GlobalSearch({ pages }: { pages: SearchPage[] }) {
       .slice(0, MAX_ACTIVITIES)
       .map((a) => ({
         key: `a:${a.external_id}`,
-        href: `/progress?q=${encodeURIComponent(a.external_id)}`,
+        href: `/activity-workspace?q=${encodeURIComponent(a.external_id)}`,
         title: a.name,
         hint: a.external_id,
         kind: "activity" as const,

@@ -45,15 +45,15 @@ interface WidgetDef {
 
 type Tone = "good" | "warn" | "crit" | "info" | "neutral";
 
-// Where each Project Health factor's detail lives. Activity Ledger takes a
-// preset filter (see progress/page.tsx) so the critical-path / overdue rows
+// Where each Project Health factor's detail lives. Activity Workspace takes a
+// preset filter (see activity-workspace/page.tsx) so the critical-path / overdue rows
 // land on the exact activity list behind the number.
 const HEALTH_FACTOR_HREF: Record<HealthFactorKey, string> = {
   // Reminding non-responders and closing the period both live on Dashboard itself.
   scope_submissions: "/dashboard",
   evm: "/evm",
-  critical_path: "/progress?filter=critical",
-  overdue: "/progress?filter=overdue",
+  critical_path: "/activity-workspace?filter=critical",
+  overdue: "/activity-workspace?filter=overdue",
 };
 
 const HEALTH_STATUS_TEXT: Record<HealthStatus, string> = {

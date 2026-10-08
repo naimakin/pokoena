@@ -23,9 +23,9 @@ export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
 };
 
 export const PROJECT_ROLE_DESCRIPTIONS: Record<ProjectRole, string> = {
-  project_manager: "Everything in Overview, Programme, Delivery, Risk and Reports — imports, baselines, exports and edits.",
+  project_manager: "Everything in Overview, Programme, Risk and Reports — imports, baselines, exports and edits.",
   planner: "Sees everything; imports programmes, manages baselines, edits Programme and Risk, exports.",
-  delivery_team: "Sees everything; updates progress and writes recovery plans in Delivery; can export.",
+  delivery_team: "Sees everything; updates progress and writes recovery plans; can export.",
   viewer: "Sees every menu, read only — no imports, exports or edits.",
   dashboard_viewer: "Overview dashboards and Reports only, read only.",
   user_management: "Opens Users: invite people and change their access. Add it to another role.",

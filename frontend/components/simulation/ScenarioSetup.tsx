@@ -111,7 +111,7 @@ export function ScenarioSetup({
       </div>
       {changes.length === 0 ? (
         <p className="empty-state sim-changes-empty">
-          No changes yet. Click an activity in the programme below and edit it as in Activity Ledger — mark it complete,
+          No changes yet. Click an activity in the programme below and edit it as in Activity Workspace — mark it complete,
           change its %, push its finish out — or just move the data date.
         </p>
       ) : (

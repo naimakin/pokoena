@@ -269,7 +269,7 @@ export default function EvmPage() {
                 {scurve && scurve.series.length > 0 ? (
                   <ScurveChart series={scurve.series} />
                 ) : (
-                  <p className="empty-state">No progress entries yet — submit progress from the Activity Ledger page.</p>
+                  <p className="empty-state">No progress entries yet — submit progress from Activity Workspace (Burned MH Loading).</p>
                 )}
               </ExpandableChartCard>
             </div>

@@ -1667,6 +1667,55 @@ tr.resolved{opacity:.45}
 .gantt-row.is-band.d0 .gantt-bar-summary i{border-top-color:var(--wbs-ink-contrast)}
 .gantt-milestone{position:absolute;top:50%;width:11px;height:11px;transform:translateY(-50%) rotate(45deg);z-index:2}
 
+/* ---------- Programme > Activity Workspace ----------
+   The Activity Ledger's grid and the Gantt in one card (activity-workspace/
+   page.tsx + components/workspace/). It reuses the .gantt-* split pane above;
+   like the Ledger, the page is pinned to the viewport (.fill-viewport) so only
+   the panes scroll and their column headers stay put. Without the Gantt the
+   grid takes the whole card. */
+.ws-card{display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.ws-head{flex-wrap:wrap;gap:.6rem 1rem;padding:.6rem 1.1rem}
+.ws-head-group{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.ws-tally{font-size:.75rem;color:var(--text-muted);white-space:nowrap}
+.ws-tally .mono{color:var(--text-secondary)}
+.ws-field{display:flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--text-muted);white-space:nowrap}
+.ws-sep{width:1px;height:20px;background:var(--border);flex:none}
+.ws-count{font-size:.6875rem;color:var(--text-muted)}
+.ws-toolbar-label{font-size:.75rem;font-weight:500;color:var(--text-muted)}
+.ws-gantt-btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-subtle);color:var(--accent-strong)}
+.ws-body{display:flex;flex-direction:column;min-height:0}
+.ws-body[hidden]{display:none}
+.ws-scroll{overflow:auto;max-height:68vh}
+.ws-scroll .table-wrap{overflow:visible}
+.ws-panes.is-grid-only .gantt-pane{overflow-x:auto}
+@media (min-width:641px){
+  .fill-viewport .ws-card{flex:1;min-height:360px}
+  .fill-viewport .ws-body{flex:1}
+  .fill-viewport .ws-panes{flex:1;height:auto;min-height:0}
+  .fill-viewport .ws-scroll{max-height:none}
+}
+/* Rows open the Activity modal; critical rows keep the Ledger's red wash + rail. */
+.gantt-row.is-open{cursor:pointer}
+.gantt-row.is-open:not(.is-critical):hover{background:var(--accent-subtle)}
+.gantt-row.is-open:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.gantt-row.is-critical{background:var(--crit-row-bg);box-shadow:inset 3px 0 0 var(--crit-row-line)}
+.ws-grid .gantt-row.is-band.d1{box-shadow:inset 3px 0 0 var(--wbs-line-1)}
+.ws-grid .gantt-row.is-band.d2{box-shadow:inset 3px 0 0 var(--wbs-line-2)}
+.ws-grid .gantt-row.is-band.d3{box-shadow:inset 2px 0 0 var(--wbs-line-3)}
+.ws-grid .gantt-row.is-band.d4{box-shadow:inset 2px 0 0 var(--wbs-line-4)}
+.ws-grid .gantt-cell .chip{padding:.12rem .5rem}
+.ws-name{font-weight:500;color:var(--text-primary)}
+.ws-id{font-size:.6875rem;color:var(--text-secondary)}
+.ws-date{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}
+.ws-warn{display:inline-flex;color:var(--warn)}
+.ws-warn .icon{width:12px;height:12px}
+.ws-flags{flex-wrap:nowrap;overflow:hidden}
+.ws-band-label{display:flex;align-items:center;gap:.4rem;min-width:0;width:100%}
+.ws-band-code{font-size:.6875rem;font-weight:400;color:var(--text-muted);flex-shrink:0}
+.ws-band-roll{margin-left:auto;padding-left:.6rem;font-size:.6875rem;font-weight:400;color:var(--text-muted);flex-shrink:0;white-space:nowrap}
+.gantt-row.is-band.d0 .ws-band-code,.gantt-row.is-band.d0 .ws-band-roll{color:var(--wbs-ink-contrast-soft)}
+.gantt-row.is-band.d1 .ws-band-code,.gantt-row.is-band.d1 .ws-band-roll{color:var(--wbs-ink)}
+
 /* ---------- responsive ---------- */
 /* Content grids: on a desktop the sidebar takes 240px off the page, so the
    two-up / four-up grids step down earlier than the viewport breakpoint
