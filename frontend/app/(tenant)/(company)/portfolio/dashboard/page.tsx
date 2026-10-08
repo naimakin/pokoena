@@ -9,6 +9,7 @@ import { UploadScheduleIllo } from "@/components/illustrations";
 import { PortfolioTimeline } from "@/components/portfolio/PortfolioTimeline";
 import { ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, XIcon } from "@/components/icons";
 import { fmtP6Date } from "@/components/reporting/format";
+import { FoldCard } from "@/components/reporting/collapse";
 import { api, ApiError } from "@/lib/api";
 import { criticalityChip } from "@/lib/criticality";
 import {
@@ -478,15 +479,14 @@ export default function PortfolioDashboardPage() {
             </div>
 
             {/* ---- top critical ---- */}
-            <div className="card pf-card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Most critical activities</div>
-                  <div className="card-title-sub">Highest Criticality Scores across the portfolio, unfinished work only</div>
-                </div>
-              </div>
+            <FoldCard
+              className="pf-card"
+              title="Most critical activities"
+              subtitle="Highest Criticality Scores across the portfolio, unfinished work only"
+              hint={`${data.top_activities.length} activities`}
+            >
               <ActivityTable rows={data.top_activities} showProject />
-            </div>
+            </FoldCard>
           </>
         )}
       </div>
