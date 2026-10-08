@@ -93,7 +93,7 @@ const TOP_SECTIONS: NavSection[] = [
     children: [
       { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
       { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
-      { href: "/gantt", label: "Chart", icon: GanttIcon, visible: need("view_programme") },
+      { href: "/chart", label: "Chart", icon: GanttIcon, visible: need("view_programme") },
       { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
     ],

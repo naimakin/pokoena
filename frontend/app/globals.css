@@ -1580,7 +1580,9 @@ tr.resolved{opacity:.45}
   border-radius:0;background:var(--surface);
 }
 .gantt-viz.is-fullscreen .gantt-panes{flex:1;height:auto;min-height:0}
-.gantt-pane{overflow:auto;flex-shrink:0;background:var(--surface)}
+/* Horizontal scrollbar always reserved on BOTH panes, so their visible
+   heights match and the mirrored vertical scroll lines rows up to the end. */
+.gantt-pane{overflow-x:scroll;overflow-y:auto;flex-shrink:0;background:var(--surface)}
 .gantt-pane-chart{flex:1;flex-shrink:1;min-width:0}
 .gantt-head{
   position:sticky;top:0;z-index:5;display:flex;background:var(--surface);
@@ -1626,8 +1628,15 @@ tr.resolved{opacity:.45}
   position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;
   font-size:.625rem;color:var(--text-secondary);border-left:1px solid var(--border);overflow:hidden;
 }
-.gantt-scale-tier.is-lower span{font-size:.5625rem;color:var(--text-muted);border-top:1px solid var(--border)}
-.gantt-scale-tier.is-weeks span{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.gantt-scale-tier.is-upper span{justify-content:flex-start;overflow:hidden;overflow:clip}
+.gantt-scale-label{
+  position:sticky;left:0;padding:0 .4rem;font-style:normal;font-weight:500;white-space:nowrap;
+}
+.gantt-scale-tier.is-lower span{
+  font-size:.5625rem;color:var(--text-muted);border-top:1px solid var(--border);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.gantt-scale-tier.is-lane{border-top:1px solid var(--border)}
 
 .gantt-overlay{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
 .gantt-overlay.is-grid{z-index:1}
