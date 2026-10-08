@@ -20,14 +20,8 @@ export const BASELINE_GATED_SECTIONS = new Set(["overview", "execution", "risk",
 // My Desk is the user's own pins, notes and approval queues — a project with no
 // baseline yet mustn't lock anyone out of their own notes.
 // Portfolio Dashboard spans every project, so one project lacking a baseline
-// mustn't hide it. Baselines itself now lives in the Reports section but must
-// stay open — it's the page that creates the baseline in the first place.
-export const BASELINE_UNGATED_PATHS = new Set([
-  "/reporting/float-path",
-  "/execution/my-desk",
-  "/portfolio/dashboard",
-  "/planning/baselines",
-]);
+// mustn't hide it.
+export const BASELINE_UNGATED_PATHS = new Set(["/reporting/float-path", "/execution/my-desk", "/portfolio/dashboard"]);
 
 export function isBaselineGated(sectionKey: string | undefined, pathname: string | null): boolean {
   if (pathname && BASELINE_UNGATED_PATHS.has(pathname)) return false;

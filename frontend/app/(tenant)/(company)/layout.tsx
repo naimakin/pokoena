@@ -92,6 +92,7 @@ const TOP_SECTIONS: NavSection[] = [
     visible: always,
     children: [
       { href: "/project-files", label: "Programs", icon: DatabaseIcon, visible: need("view_programme") },
+      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
       { href: "/gantt", label: "Chart", icon: GanttIcon, visible: need("view_programme") },
       { href: "/planning/schedule-simulation", label: "Scenario Lab", icon: SimulationIcon, visible: need("view_programme") },
       { href: "/export-sync-p6", label: "Export / Sync to P6", icon: DownloadIcon, visible: need("export") },
@@ -140,7 +141,6 @@ const TOP_SECTIONS: NavSection[] = [
     // to someone. They are one page now, and the old routes redirect to it.
     children: [
       { href: "/reporting/reports", label: "Reports", icon: BarChartIcon, visible: need("view_reports") },
-      { href: "/planning/baselines", label: "Baselines", icon: LockIcon, visible: need("view_programme") },
       // A status rollup is something you report, not something you act on —
       // it moved here from Delivery (route unchanged).
       { href: "/execution/project-status", label: "Project Status", icon: GridIcon, visible: need("view_reports") },

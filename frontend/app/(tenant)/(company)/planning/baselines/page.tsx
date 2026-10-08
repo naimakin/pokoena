@@ -15,16 +15,8 @@ import { api, ApiError } from "@/lib/api";
 import { PageState } from "@/components/PageShell";
 import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
-import type {
-  BaselineProgramResult,
-  BaselineResourceSummary,
-  BaselineStatus,
-  BaselineVariance,
-  EvmScurve,
-  User,
-} from "@/lib/types";
+import type { BaselineProgramResult, BaselineResourceSummary, BaselineStatus, User } from "@/lib/types";
 import { ChevronDownIcon, LockIcon, UploadCloudIcon } from "@/components/icons";
-import { ScurveChart } from "@/components/ScurveChart";
 import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
 import { can } from "@/lib/permissions";
@@ -45,19 +37,6 @@ const RSRC_TYPE_LABEL: Record<string, string> = {
   RT_Mat: "Material",
   RT_Equip: "Nonlabor",
 };
-
-function varianceChip(days: number | null | undefined): string {
-  if (days === null || days === undefined) return "chip-neutral";
-  if (days <= 0) return "chip-good";
-  if (days <= 15) return "chip-warn";
-  return "chip-crit";
-}
-
-function signed(days: number | null | undefined): string {
-  if (days === null || days === undefined) return "—";
-  if (days === 0) return "0 d";
-  return `${days > 0 ? "+" : ""}${days} d`;
-}
 
 // Card header that toggles its section open/closed. `children` sits on the right
 // (chips, filters) and doesn't toggle when interacted with.
@@ -115,17 +94,14 @@ export default function BaselinesPage() {
   const [user, setUser] = useState<User | null>(null);
   const [status, setStatus] = useState<BaselineStatus | null>(null);
   const [resources, setResources] = useState<BaselineResourceSummary | null>(null);
-  const [variance, setVariance] = useState<BaselineVariance | null>(null);
-  const [scurve, setScurve] = useState<EvmScurve | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
-  const [slippingOnly, setSlippingOnly] = useState(false);
   // The long tables start collapsed so the page doesn't run off the bottom.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["resources", "variance"]));
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["resources"]));
   const isOpen = (key: string) => !collapsed.has(key);
   const toggle = (key: string) =>
     setCollapsed((prev) => {
@@ -144,8 +120,6 @@ export default function BaselinesPage() {
     if (!project) {
       setStatus(null);
       setResources(null);
-      setVariance(null);
-      setScurve(null);
       setLoading(false);
       return;
     }
@@ -154,22 +128,11 @@ export default function BaselinesPage() {
     try {
       const baseline = await api.get<BaselineStatus>(`/projects/${project.id}/evm/baseline`);
       setStatus(baseline);
-      if (baseline.has_active) {
-        const [res, varr, sc] = await Promise.all([
-          api.get<BaselineResourceSummary>(`/projects/${project.id}/evm/baseline/resources`),
-          api.get<BaselineVariance>(`/projects/${project.id}/evm/baseline/variance`),
-          api
-            .get<EvmScurve>(`/projects/${project.id}/evm/scurve?granularity=weekly`)
-            .catch(() => null),
-        ]);
-        setResources(res);
-        setVariance(varr);
-        setScurve(sc);
-      } else {
-        setResources(null);
-        setVariance(null);
-        setScurve(null);
-      }
+      setResources(
+        baseline.has_active
+          ? await api.get<BaselineResourceSummary>(`/projects/${project.id}/evm/baseline/resources`)
+          : null,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load baselines.");
     } finally {
@@ -231,14 +194,6 @@ export default function BaselinesPage() {
 
   const isAdmin = can(user, "manage_baselines");
   const active = status?.active_baseline ?? null;
-  const varRows = variance
-    ? slippingOnly
-      ? variance.rows.filter((r) => (r.finish_variance_days ?? 0) > 0)
-      : variance.rows
-    : [];
-  const histMax = variance
-    ? Math.max(...variance.summary.finish_variance_histogram.map((b) => b.count), 1)
-    : 1;
 
   const dropzone = (
     <div
@@ -276,7 +231,8 @@ export default function BaselinesPage() {
             <div className="page-title">Baselines</div>
             <div className="page-desc">
               The baseline programme is the project&apos;s frozen plan. Every update programme uploaded to
-              Programs is measured back against it — for date variance and the S-curve.
+              Programs is measured back against it — see Reports › Project Status for date variance and the
+              S-curve.
             </div>
           </div>
         </div>
@@ -468,157 +424,7 @@ export default function BaselinesPage() {
               </div>
             )}
 
-            {/* 3. Baseline vs current schedule ---------------------------- */}
-            {active && variance && (
-              <div className="card" style={{ marginTop: "1rem" }}>
-                <div className="card-head">
-                  <div>
-                    <div className="card-title">Baseline vs current schedule</div>
-                    <div className="card-title-sub">
-                      Frozen baseline dates against the latest update programme
-                    </div>
-                  </div>
-                </div>
-
-                <div className="kpi-row" style={{ padding: "1rem 1.1rem 0" }}>
-                  {[
-                    { label: "Baseline finish", value: fmtDate(variance.summary.baseline_finish), chip: null as string | null },
-                    { label: "Forecast finish", value: fmtDate(variance.summary.forecast_finish), chip: null as string | null },
-                    {
-                      label: "Project slip",
-                      value: signed(variance.summary.project_finish_variance_days),
-                      chip: varianceChip(variance.summary.project_finish_variance_days) as string | null,
-                    },
-                    { label: "Activities behind", value: String(variance.summary.behind), chip: null as string | null },
-                    { label: "Worst slip", value: signed(variance.summary.worst_slip_days), chip: null as string | null },
-                    { label: "Critical slipping", value: String(variance.summary.critical_slip_count), chip: null as string | null },
-                  ].map((kpi) => (
-                    <div className="card" key={kpi.label} style={{ padding: ".9rem 1rem" }}>
-                      <div style={{ fontSize: ".6875rem", color: "var(--text-muted)" }}>
-                        {kpi.label}
-                      </div>
-                      <div style={{ marginTop: ".35rem" }}>
-                        {kpi.chip ? (
-                          <span className={`chip ${kpi.chip}`}>{kpi.value}</span>
-                        ) : (
-                          <span className="num" style={{ fontSize: "1rem", fontWeight: 700 }}>
-                            {kpi.value}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ padding: "1.25rem 1.1rem" }}>
-                  <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".6rem" }}>
-                    Finish-date variance distribution
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: ".4rem" }}>
-                    {variance.summary.finish_variance_histogram.map((b) => (
-                      <div key={b.label} style={{ display: "flex", alignItems: "center", gap: ".6rem" }}>
-                        <div style={{ width: 120, fontSize: ".6875rem", color: "var(--text-secondary)" }}>
-                          {b.label}
-                        </div>
-                        <div style={{ flex: 1, background: "var(--surface-3)", borderRadius: 4, height: 16 }}>
-                          <div
-                            style={{
-                              width: `${(b.count / histMax) * 100}%`,
-                              height: "100%",
-                              borderRadius: 4,
-                              background: b.label.includes("late") ? "var(--crit)" : "var(--good)",
-                            }}
-                          />
-                        </div>
-                        <div className="num" style={{ width: 28, textAlign: "right", fontSize: ".75rem" }}>
-                          {b.count}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {scurve && scurve.series.length > 0 && (
-                  <div style={{ padding: "0 1.1rem 1.25rem" }}>
-                    <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".6rem" }}>
-                      S-curve — planned vs earned vs actual (cumulative manhours)
-                    </div>
-                    <ScurveChart series={scurve.series} />
-                  </div>
-                )}
-
-                <SectionHead
-                  open={isOpen("variance")}
-                  onToggle={() => toggle("variance")}
-                  title={`Activity date variance (${varRows.length})`}
-                  style={{ borderTop: "1px solid var(--border)" }}
-                >
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: ".35rem", fontSize: ".75rem" }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={slippingOnly}
-                      onChange={(e) => setSlippingOnly(e.target.checked)}
-                    />
-                    Slipping only
-                  </label>
-                </SectionHead>
-                {isOpen("variance") && (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Activity</th>
-                          <th>Baseline finish</th>
-                          <th>Current finish</th>
-                          <th>Finish var</th>
-                          <th>Start var</th>
-                          <th>%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {varRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="empty-state">
-                              {slippingOnly ? "Nothing slipping against the baseline." : "No activities."}
-                            </td>
-                          </tr>
-                        ) : (
-                          varRows.map((r) => (
-                            <tr key={r.activity_id}>
-                              <td>
-                                <div className="subname">{r.name}</div>
-                                <div className="actid">
-                                  {r.external_id}
-                                  {r.is_critical && (
-                                    <span className="chip chip-crit" style={{ marginLeft: ".35rem" }}>
-                                      Critical
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="num">{fmtDate(r.baseline_finish)}</td>
-                              <td className="num">{fmtDate(r.current_finish)}</td>
-                              <td>
-                                <span className={`chip ${varianceChip(r.finish_variance_days)}`}>
-                                  {signed(r.finish_variance_days)}
-                                </span>
-                              </td>
-                              <td className="num">{signed(r.start_variance_days)}</td>
-                              <td className="num">{r.percent_complete}%</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. Baseline history --------------------------------------- */}
+            {/* 3. Baseline history --------------------------------------- */}
             <div className="card" style={{ marginTop: "1rem" }}>
               <SectionHead
                 open={isOpen("history")}

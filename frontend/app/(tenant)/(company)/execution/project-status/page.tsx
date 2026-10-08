@@ -16,6 +16,7 @@ import type {
 import { TrendLine } from "@/components/charts/TrendLine";
 import { selectStyle } from "@/components/ScurveChart";
 import { NoProjectIllo } from "@/components/illustrations";
+import { BaselineVariancePanel } from "@/components/reporting/BaselineVariancePanel";
 
 function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -460,6 +461,8 @@ export default function ProjectStatusPage() {
             </div>
           </div>
         </div>
+
+        <BaselineVariancePanel projectId={project.id} />
       </div>
     </>
   );
