@@ -34,6 +34,8 @@ Plus one POKO check, not DCMA's and left out of the overall score (`scored`):
                             completed A with an unfinished FS/FF predecessor,
                             in-progress A with an unfinished FS or a
                             not-started SS predecessor (the analyst's rules).
+                            No target: every finding is reported in full,
+                            and any finding at all warns.
 
 Those targets are DCMA's; a project can set its own (`DcmaThresholds`, stored
 per project as `projects.dcma_thresholds`, edited on the DCMA page). Which
@@ -89,7 +91,6 @@ class DcmaThresholds:
     zero_float_max: float = 10.0
     bei_min: float = 0.95
     bei_max: float = 1.05
-    out_of_sequence_max: float = 0.0
 
     @classmethod
     def from_overrides(cls, overrides: dict | None) -> "DcmaThresholds":
@@ -384,9 +385,7 @@ def _state(a: Activity) -> str | None:
     return getattr(a.status, "value", a.status)
 
 
-def _check15_out_of_sequence(
-    acts: list[Activity], rels: list[ActivityRelationship], t: DcmaThresholds
-) -> DcmaCheckResult:
+def _check15_out_of_sequence(acts: list[Activity], rels: list[ActivityRelationship]) -> DcmaCheckResult:
     by_id = {a.id: a for a in acts if a.task_type not in _NO_SEQUENCE_TYPES}
     findings: list[tuple[str, str, str]] = []
     for r in rels:
@@ -407,10 +406,11 @@ def _check15_out_of_sequence(
     findings.sort()
 
     pct = round(len(findings) / len(rels) * 100, 2) if rels else 0.0
+    # Uncapped, unlike the other checks: the point is the full list of links.
     return DcmaCheckResult(
-        id=15, name="Out of Sequence", status="warn" if pct > t.out_of_sequence_max else "pass",
-        value=float(len(findings)), threshold=t.out_of_sequence_max, pct=pct, unit="%",
-        details=[f"{pred} / {link} / {succ}" for succ, pred, link in findings[:20]],
+        id=15, name="Out of Sequence", status="warn" if findings else "pass",
+        value=float(len(findings)), threshold=0.0, pct=pct, unit="%",
+        details=[f"{pred} / {link} / {succ}" for succ, pred, link in findings],
         denominator=len(rels), basis="relationships", scored=False,
     )
 
@@ -450,7 +450,7 @@ def run_dcma(
         _check12_critical_path_length(in_scope, total, t),
         _check13_total_float_zero(in_scope, total, t),
         _check14_bei(activities, dd, t),
-        _check15_out_of_sequence(activities, relationships, t),
+        _check15_out_of_sequence(activities, relationships),
     ]
 
     applicable = [c for c in checks if c.scored and c.status != "not_tracked"]

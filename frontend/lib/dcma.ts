@@ -37,7 +37,6 @@ export const DCMA_DEFAULTS: Thresholds = {
   zero_float_max: 10,
   bei_min: 0.95,
   bei_max: 1.05,
-  out_of_sequence_max: 0,
 };
 
 /** One editable number of a check's target. */
@@ -162,8 +161,11 @@ const META: Record<number, CheckMeta> = {
     measures: text(
       "Progressed work ahead of its logic: a completed activity with an unfinished FS or FF predecessor, an in-progress one with an unfinished FS or a not-started SS predecessor",
     ),
-    ...atMost("out_of_sequence_max"),
-    rule: "Over target warns; it doesn't count toward the score.",
+    // POKO's own rule, not DCMA's: no target to tune — every link is listed.
+    target: text("None"),
+    marks: () => [],
+    fields: [],
+    rule: "Any out-of-sequence link warns; it doesn't count toward the score.",
   },
 };
 

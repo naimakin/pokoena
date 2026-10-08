@@ -281,13 +281,19 @@ def test_oos_is_not_scored():
     assert report.overall_score == round(points / len(scored) * 100, 1)
 
 
-def test_oos_threshold_override_passes():
+def test_oos_any_finding_warns_and_lists_every_link():
+    # No target and no 20-row cap: the analyst wants every link reported.
+    states = {"P": "ns", **{f"A{i:02d}": "done" for i in range(30)}}
+    pairs = [("P", f"A{i:02d}", LinkType.FS) for i in range(30)]
+    _, c = _oos(pairs, states)
+    assert c.status == "warn"
+    assert len(c.details) == 30
+    assert c.details[0] == "P / FS / A00"
+
+
+def test_oos_stored_target_from_an_older_version_is_ignored():
     from app.engine.quality.dcma import DcmaThresholds
 
-    _, c = _oos(
-        [("P", "A", LinkType.FS)],
-        {"P": "ip", "A": "done"},
-        thresholds=DcmaThresholds(out_of_sequence_max=100.0),
-    )
-    assert c.status == "pass"
-    assert c.details == ["P / FS / A"]
+    t = DcmaThresholds.from_overrides({"out_of_sequence_max": 6.5})
+    _, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "done"}, thresholds=t)
+    assert c.status == "warn"

@@ -26,6 +26,7 @@ import {
   factLabel,
   isCustom,
   isIndex,
+  metaById,
   metaFor,
   resultLabel,
   scoreImpact,
@@ -400,7 +401,9 @@ export default function DcmaPage() {
                               check={check}
                               t={t}
                               custom={isCustom(check.id, report)}
-                              onEditTarget={canEdit ? () => setTargetsAt(check.id) : undefined}
+                              onEditTarget={
+                                canEdit && metaById(check.id).fields.length > 0 ? () => setTargetsAt(check.id) : undefined
+                              }
                               impact={scoreImpact(check, report)}
                               open={expanded.has(check.id)}
                               onToggle={() => toggle(check.id)}

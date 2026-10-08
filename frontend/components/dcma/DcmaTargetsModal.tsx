@@ -99,7 +99,7 @@ export function DcmaTargetsModal({
 
         <div className="modal-body dcma-targets-body" ref={bodyRef}>
           {DCMA_CATEGORIES.map((cat) => {
-            const ids = CHECK_IDS.filter((id) => metaById(id).category === cat.key);
+            const ids = CHECK_IDS.filter((id) => metaById(id).category === cat.key && metaById(id).fields.length > 0);
             return (
               <div key={cat.key} className="dcma-targets-group">
                 <div className="dcma-targets-cat">{cat.label}</div>
