@@ -1258,7 +1258,7 @@ function DcmaBlock({ project }: BlockContext) {
       title="DCMA 14-point check"
       subtitle={data ? `Score ${fmtNum(data.overall_score, 0)} / 100 over ${data.in_scope} activities` : undefined}
       meta={data ? <span className={`chip ${DCMA_CHIP[data.overall_status]}`}>{DCMA_LABEL[data.overall_status]}</span> : undefined}
-      hint={countLabel(data?.checks.length, "check")}
+      hint={countLabel(data?.checks.filter((c) => c.scored !== false).length, "check")}
       state={state}
       unavailable="Import a schedule to run the quality checks."
     >
@@ -1270,12 +1270,12 @@ function DcmaBlock({ project }: BlockContext) {
               label="DCMA checks by result"
               unit="checks"
               segments={[
-                { label: "Pass", value: data.checks.filter((c) => c.status === "pass").length, fill: "good" },
-                { label: "Warn", value: data.checks.filter((c) => c.status === "warn").length, fill: "warn" },
-                { label: "Fail", value: data.checks.filter((c) => c.status === "fail").length, fill: "crit" },
+                { label: "Pass", value: data.checks.filter((c) => c.scored !== false && c.status === "pass").length, fill: "good" },
+                { label: "Warn", value: data.checks.filter((c) => c.scored !== false && c.status === "warn").length, fill: "warn" },
+                { label: "Fail", value: data.checks.filter((c) => c.scored !== false && c.status === "fail").length, fill: "crit" },
                 {
                   label: "Not tracked",
-                  value: data.checks.filter((c) => c.status === "not_tracked").length,
+                  value: data.checks.filter((c) => c.scored !== false && c.status === "not_tracked").length,
                   fill: "neutral",
                 },
               ]}
@@ -1301,7 +1301,7 @@ function DcmaBlock({ project }: BlockContext) {
             </tr>
           </thead>
           <tbody>
-            {(data?.checks ?? []).map((c) => (
+            {(data?.checks ?? []).filter((c) => c.scored !== false).map((c) => (
               <tr key={c.id}>
                 <td className="num">{c.id}</td>
                 <td>{c.name}</td>

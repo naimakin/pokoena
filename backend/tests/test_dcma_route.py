@@ -23,7 +23,7 @@ def test_dcma_report_requires_import_free_schedule_still_returns(client, db_sess
     assert response.status_code == 200
     body = response.json()
     assert body["total_activities"] == 0
-    assert len(body["checks"]) == 15
+    assert len(body["checks"]) == 16
     oos = next(c for c in body["checks"] if c["id"] == 15)
     assert oos["scored"] is False
     assert oos["basis"] == "relationships"

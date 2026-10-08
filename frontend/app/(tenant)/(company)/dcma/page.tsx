@@ -18,7 +18,9 @@ import {
   XIcon,
 } from "@/components/icons";
 import { api, ApiError } from "@/lib/api";
+import { PokoChecks } from "@/components/dcma/PokoChecks";
 import {
+  categoryLabel,
   checksCsv,
   countLabel,
   countShort,
@@ -142,26 +144,31 @@ export default function DcmaPage() {
     [report],
   );
 
+  // The summary, filters and score are DCMA's 14; POKO's own (unscored) checks
+  // get their own section below.
+  const dcmaChecks = useMemo(() => (report?.checks ?? []).filter((c) => c.scored !== false), [report]);
+  const pokoChecks = useMemo(() => (report?.checks ?? []).filter((c) => c.scored === false), [report]);
+
   const counts = useMemo(() => {
     const c = { pass: 0, warn: 0, fail: 0, not_tracked: 0 };
-    for (const check of report?.checks ?? []) c[check.status] += 1;
+    for (const check of dcmaChecks) c[check.status] += 1;
     return c;
-  }, [report]);
+  }, [dcmaChecks]);
 
   const visible = useMemo(
     () =>
-      (report?.checks ?? []).filter(
+      dcmaChecks.filter(
         (c) =>
           (statusFilter === "all" || c.status === statusFilter) &&
           (category === "all" || metaFor(c, t).category === category),
       ),
-    [report, statusFilter, category, t],
+    [dcmaChecks, statusFilter, category, t],
   );
 
   const byCategory = useMemo(
     () =>
       DCMA_CATEGORIES.map((cat) => {
-        const all = (report?.checks ?? []).filter((c) => metaFor(c, t).category === cat.key);
+        const all = dcmaChecks.filter((c) => metaFor(c, t).category === cat.key);
         const applicable = all.filter((c) => c.status !== "not_tracked");
         return {
           ...cat,
@@ -170,7 +177,7 @@ export default function DcmaPage() {
           shown: visible.filter((c) => metaFor(c, t).category === cat.key),
         };
       }),
-    [report, visible, t],
+    [dcmaChecks, visible, t],
   );
 
   function toggle(id: number) {
@@ -207,7 +214,9 @@ export default function DcmaPage() {
         <div className="page-head">
           <div>
             <div className="page-title">DCMA 14-Point</div>
-            <div className="page-desc">Schedule quality assessment per DCMA EA PAM 200.1</div>
+            <div className="page-desc">
+              Schedule quality assessment per DCMA EA PAM 200.1, plus POKO&apos;s own data and sequence checks
+            </div>
           </div>
         </div>
 
@@ -322,7 +331,7 @@ export default function DcmaPage() {
                   >
                     {f.label}{" "}
                     <span className="dcma-count">
-                      {f.key === "all" ? report.checks.length : counts[f.key]}
+                      {f.key === "all" ? dcmaChecks.length : counts[f.key]}
                     </span>
                   </button>
                 ))}
@@ -449,9 +458,7 @@ export default function DcmaPage() {
                                 <div style={{ fontWeight: 500 }}>{m.title}</div>
                                 <div className="dcma-table-sub">{m.measures}</div>
                               </td>
-                              <td style={{ color: "var(--text-secondary)" }}>
-                                {DCMA_CATEGORIES.find((c) => c.key === m.category)?.label}
-                              </td>
+                              <td style={{ color: "var(--text-secondary)" }}>{categoryLabel(m.category)}</td>
                               <td>
                                 <StatusChip status={check.status} />
                               </td>
@@ -493,6 +500,8 @@ export default function DcmaPage() {
                 </div>
               </div>
             )}
+
+            {pokoChecks.length > 0 && <PokoChecks checks={pokoChecks} />}
           </>
         )}
       </div>
@@ -595,7 +604,7 @@ function CheckCard({
               <ChevronDownIcon className="icon" style={{ width: 13, height: 13 }} />
             )}
             {open ? "Hide" : "Show"}{" "}
-            {isIndex(check) ? "activities behind plan" : check.id === 15 ? "out-of-sequence links" : "affected activities"}
+            {isIndex(check) ? "activities behind plan" : "affected activities"}
           </button>
           {open && <AffectedIds check={check} />}
         </>

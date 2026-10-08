@@ -5,7 +5,9 @@
 
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
 
-export type DcmaCategory = "logic" | "float" | "dates" | "duration" | "performance";
+// "poko" holds POKO's own checks (unscored, `scored: false`); they sit in their
+// own section under DCMA's five categories, never in the summary or filters.
+export type DcmaCategory = "logic" | "float" | "dates" | "duration" | "performance" | "poko";
 
 export const DCMA_CATEGORIES: { key: DcmaCategory; label: string }[] = [
   { key: "logic", label: "Logic" },
@@ -14,6 +16,15 @@ export const DCMA_CATEGORIES: { key: DcmaCategory; label: string }[] = [
   { key: "duration", label: "Duration & resources" },
   { key: "performance", label: "Performance" },
 ];
+
+export function categoryLabel(key: DcmaCategory): string {
+  return key === "poko" ? "POKO checks" : DCMA_CATEGORIES.find((c) => c.key === key)?.label ?? "";
+}
+
+/** POKO checks list each finding as " / "-separated fields (see the backend). */
+export function findingFields(detail: string): string[] {
+  return detail.split(" / ");
+}
 
 export type Thresholds = Record<string, number>;
 
@@ -157,7 +168,7 @@ const META: Record<number, CheckMeta> = {
   },
   15: {
     title: "Out of sequence",
-    category: "logic",
+    category: "poko",
     measures: text(
       "Progressed work ahead of its logic: a completed activity with an unfinished FS or FF predecessor, an in-progress one with an unfinished FS or a not-started SS predecessor",
     ),
@@ -166,6 +177,17 @@ const META: Record<number, CheckMeta> = {
     marks: () => [],
     fields: [],
     rule: "Any out-of-sequence link warns; it doesn't count toward the score.",
+  },
+  16: {
+    title: "Actuals after data date",
+    category: "poko",
+    measures: text(
+      "Activities with an actual start or actual finish later than the data date — progress recorded in the future",
+    ),
+    target: text("None"),
+    marks: () => [],
+    fields: [],
+    rule: "Any finding warns; it doesn't count toward the score.",
   },
 };
 
@@ -298,7 +320,7 @@ export function checksCsv(report: DcmaReport): string {
       return [
         String(c.id),
         m.title,
-        DCMA_CATEGORIES.find((k) => k.key === m.category)?.label ?? "",
+        categoryLabel(m.category),
         STATUS_LABEL[c.status],
         resultLabel(c),
         m.target,

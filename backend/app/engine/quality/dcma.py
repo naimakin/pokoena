@@ -29,13 +29,17 @@ DCMA 14 checks (reference: DCMA EA PAM 200.1):
   13. Total float = 0     — TF=0 but not on the longest path (>10% = warn)
   14. BEI                 — Baseline Execution Index (target: 0.95-1.05)
 
-Plus one POKO check, not DCMA's and left out of the overall score (`scored`):
+Plus POKO's own checks, not DCMA's and left out of the overall score
+(`scored`). No target: every finding is reported in full, and any finding at
+all warns. Findings are " / "-separated fields the page splits into columns.
   15. Out of sequence     — progressed work linked ahead of its predecessors:
                             completed A with an unfinished FS/FF predecessor,
                             in-progress A with an unfinished FS or a
                             not-started SS predecessor (the analyst's rules).
-                            No target: every finding is reported in full,
-                            and any finding at all warns.
+                            "PRED / LINK / SUCC".
+  16. Actuals after data date — an actual start or finish later than the data
+                            date: progress recorded in the future.
+                            "ACT / Actual start|Actual finish / ISO date / days".
 
 Those targets are DCMA's; a project can set its own (`DcmaThresholds`, stored
 per project as `projects.dcma_thresholds`, edited on the DCMA page). Which
@@ -415,6 +419,24 @@ def _check15_out_of_sequence(acts: list[Activity], rels: list[ActivityRelationsh
     )
 
 
+def _check16_actuals_after_data_date(acts: list[Activity], data_date: date) -> DcmaCheckResult:
+    scope = [a for a in acts if a.task_type != "TT_WBS"]
+    findings: list[tuple[int, str, str, date]] = []
+    for a in scope:
+        for label, value in (("Actual start", a.actual_start), ("Actual finish", a.actual_finish)):
+            if value is not None and value > data_date:
+                findings.append(((value - data_date).days, a.external_id, label, value))
+    findings.sort(key=lambda f: (-f[0], f[1], f[2]))
+    activities = len({f[1] for f in findings})
+    pct = round(activities / len(scope) * 100, 2) if scope else 0.0
+    return DcmaCheckResult(
+        id=16, name="Actuals After Data Date", status="warn" if findings else "pass",
+        value=float(activities), threshold=0.0, pct=pct, unit="%",
+        details=[f"{ext} / {label} / {value.isoformat()} / {days}" for days, ext, label, value in findings],
+        denominator=len(scope), scored=False,
+    )
+
+
 def run_dcma(
     activities: list[Activity],
     relationships: list[ActivityRelationship],
@@ -423,7 +445,7 @@ def run_dcma(
     assigned_activity_ids: Optional[set[uuid.UUID]] = None,
     thresholds: Optional[DcmaThresholds] = None,
 ) -> DcmaReport:
-    """Run the 14 DCMA checks (plus POKO's unscored #15) against a project's current activities/relationships.
+    """Run the 14 DCMA checks (plus POKO's unscored #15-#16) against a project's current activities/relationships.
     `assigned_activity_ids` (activity ids with >=1 resource_assignments row) makes
     check #10 real instead of "not_tracked" — see module docstring. `thresholds`
     defaults to DCMA's own targets."""
@@ -451,6 +473,7 @@ def run_dcma(
         _check13_total_float_zero(in_scope, total, t),
         _check14_bei(activities, dd, t),
         _check15_out_of_sequence(activities, relationships),
+        _check16_actuals_after_data_date(activities, dd),
     ]
 
     applicable = [c for c in checks if c.scored and c.status != "not_tracked"]

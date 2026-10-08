@@ -276,7 +276,7 @@ def test_oos_completed_finish_milestone_counts():
 def test_oos_is_not_scored():
     report, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "done"})
     assert c.scored is False and c.status == "warn"
-    scored = [x for x in report.checks if x.id != 15 and x.status != "not_tracked"]
+    scored = [x for x in report.checks if x.scored and x.status != "not_tracked"]
     points = sum(1.0 if x.status == "pass" else 0.5 if x.status == "warn" else 0.0 for x in scored)
     assert report.overall_score == round(points / len(scored) * 100, 1)
 
@@ -297,3 +297,43 @@ def test_oos_stored_target_from_an_older_version_is_ignored():
     t = DcmaThresholds.from_overrides({"out_of_sequence_max": 6.5})
     _, c = _oos([("P", "A", LinkType.FS)], {"P": "ip", "A": "done"}, thresholds=t)
     assert c.status == "warn"
+
+
+# --- #16 Actuals after data date (POKO's own check, unscored) --------------
+
+
+def _c16(acts, dd=datetime(2026, 9, 25)):
+    report = run_dcma(acts, [], hours_per_day=8, data_date=dd)
+    return report, next(c for c in report.checks if c.id == 16)
+
+
+def test_actuals_after_data_date_lists_start_and_finish():
+    a = _act(external_id="A", status_code="TK_Complete", actual_start=date(2026, 9, 20), actual_finish=date(2026, 9, 30))
+    b = _act(external_id="B", status_code="TK_Active", actual_start=date(2026, 10, 2))
+    _, c = _c16([a, b])
+    assert c.status == "warn"
+    assert c.details == ["B / Actual start / 2026-10-02 / 7", "A / Actual finish / 2026-09-30 / 5"]
+    assert c.value == 2
+
+
+def test_actuals_on_or_before_data_date_pass():
+    a = _act(external_id="A", status_code="TK_Complete", actual_start=date(2026, 9, 1), actual_finish=date(2026, 9, 25))
+    _, c = _c16([a])
+    assert c.status == "pass"
+    assert c.details == []
+
+
+def test_actuals_both_dates_count_the_activity_once():
+    a = _act(external_id="A", status_code="TK_Complete", actual_start=date(2026, 9, 26), actual_finish=date(2026, 9, 27))
+    _, c = _c16([a])
+    assert len(c.details) == 2
+    assert c.value == 1
+
+
+def test_actuals_after_data_date_is_not_scored():
+    a = _act(external_id="A", status_code="TK_Active", actual_start=date(2026, 10, 2))
+    report, c = _c16([a])
+    assert c.scored is False
+    scored = [x for x in report.checks if x.scored and x.status != "not_tracked"]
+    points = sum(1.0 if x.status == "pass" else 0.5 if x.status == "warn" else 0.0 for x in scored)
+    assert report.overall_score == round(points / len(scored) * 100, 1)
