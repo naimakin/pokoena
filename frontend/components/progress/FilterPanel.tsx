@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityCodes, ActivityStatus, SavedActivityFilter, WbsNode } from "@/lib/types";
+import type { ActivityCodes, SavedActivityFilter, WbsNode } from "@/lib/types";
 import { selectStyle } from "@/components/ScurveChart";
 import {
   EMPTY_CRITERIA,
@@ -15,12 +15,6 @@ import {
 } from "./filter";
 import { QuickFilters } from "./QuickFilters";
 import { WbsTreeSelect } from "./WbsTreeSelect";
-
-const STATUS_CHIPS: { value: ActivityStatus; label: string }[] = [
-  { value: "not_started", label: "Not Started" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "complete", label: "Completed" },
-];
 
 function blankPredicate(): FilterPredicate {
   const def = FIELD_DEFS[0];
@@ -65,14 +59,6 @@ export function FilterPanel({
 
   const set = (patch: Partial<FilterCriteria>) => onChange({ ...criteria, ...patch });
   const active = savedFilters.find((f) => f.id === activeSavedId) ?? null;
-
-  function toggleStatus(v: ActivityStatus) {
-    set({
-      statuses: criteria.statuses.includes(v)
-        ? criteria.statuses.filter((s) => s !== v)
-        : [...criteria.statuses, v],
-    });
-  }
 
   function setPredicate(i: number, patch: Partial<FilterPredicate>) {
     const predicates = criteria.predicates.map((p, idx) => (idx === i ? { ...p, ...patch } : p));
@@ -134,49 +120,7 @@ export function FilterPanel({
         </div>
       )}
 
-      {/* quick filter bar */}
-      <div className="filter-bar" style={{ padding: ".8rem 1rem" }}>
-        <div style={{ display: "flex", gap: ".3rem" }}>
-          {STATUS_CHIPS.map((s) => (
-            <button
-              key={s.value}
-              className={`pick-chip${criteria.statuses.includes(s.value) ? " selected" : ""}`}
-              onClick={() => toggleStatus(s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        <input
-          value={criteria.search}
-          onChange={(e) => set({ search: e.target.value })}
-          placeholder="Search ID or name…"
-          style={{ ...selectStyle, width: 190 }}
-        />
-
-        <WbsTreeSelect nodes={nodes} value={criteria.wbsId} onChange={(wbsId) => set({ wbsId })} />
-
-        <button
-          className={`btn btn-secondary btn-sm${criteria.predicates.length ? " " : ""}`}
-          onClick={() => setBuilderOpen((v) => !v)}
-        >
-          Advanced{criteria.predicates.length ? ` · ${criteria.predicates.length}` : ""}
-        </button>
-
-        {!criteriaIsEmpty(criteria) && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              onChange(EMPTY_CRITERIA);
-              onClearSaved();
-            }}
-          >
-            Clear all
-          </button>
-        )}
-      </div>
-
+      {/* one row: list filters on the left, the date windows on the right */}
       <QuickFilters
         criteria={criteria}
         set={set}
@@ -184,6 +128,43 @@ export function FilterPanel({
         codes={codes}
         codeMembership={codeMembership}
         tagOptions={tagOptions}
+        lead={
+          <>
+            <input
+              className="qf-search"
+              value={criteria.search}
+              onChange={(e) => set({ search: e.target.value })}
+              placeholder="Search ID or name…"
+              aria-label="Search activity ID or name"
+            />
+            <WbsTreeSelect nodes={nodes} value={criteria.wbsId} onChange={(wbsId) => set({ wbsId })} />
+          </>
+        }
+        tail={
+          <>
+            <button
+              type="button"
+              className={`qf-trigger qf-plain${criteria.predicates.length || builderOpen ? " is-active" : ""}`}
+              onClick={() => setBuilderOpen((v) => !v)}
+              aria-expanded={builderOpen}
+            >
+              <span className="qf-label">Advanced</span>
+              {criteria.predicates.length > 0 && <span className="qf-count">{criteria.predicates.length}</span>}
+            </button>
+            {!criteriaIsEmpty(criteria) && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  onChange(EMPTY_CRITERIA);
+                  onClearSaved();
+                }}
+              >
+                Clear all
+              </button>
+            )}
+          </>
+        }
       />
 
       {/* condition builder */}

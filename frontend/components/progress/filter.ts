@@ -86,6 +86,17 @@ export const ACTIVITY_TYPES: { value: string; label: string }[] = [
   { value: "wbs", label: "WBS summary" },
 ];
 
+export const IMPORTANCE: { value: string; label: string; hint: string }[] = [
+  { value: "important", label: "Important", hint: "Flagged as important in the activity window" },
+  { value: "not_important", label: "Not important", hint: "Not flagged as important" },
+];
+
+export const STATUS_OPTIONS: { value: ActivityStatus; label: string }[] = [
+  { value: "not_started", label: "Not Started" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "complete", label: "Completed" },
+];
+
 export const RISK_INDICATORS: { value: string; label: string; hint: string }[] = [
   { value: "critical", label: "Critical path", hint: "Unfinished, zero or negative float" },
   { value: "longest_path", label: "Longest path", hint: "On P6's longest path" },
@@ -112,7 +123,8 @@ export interface FilterCriteria {
   risks: string[];
   codesInclude: string[];
   codesExclude: string[];
-  importantOnly: boolean;
+  // "important" / "not_important"; empty = either.
+  importance: string[];
   tags: string[];
 }
 
@@ -128,7 +140,7 @@ export const EMPTY_CRITERIA: FilterCriteria = {
   risks: [],
   codesInclude: [],
   codesExclude: [],
-  importantOnly: false,
+  importance: [],
   tags: [],
 };
 
@@ -373,6 +385,7 @@ export function applyFilter(
   const statusSet = new Set(criteria.statuses);
   const typeSet = new Set(criteria.types);
   const tagSet = new Set(criteria.tags);
+  const importanceSet = new Set(criteria.importance);
 
   const codeSet = (ids: string[]) => {
     if (!env.codeMembership || ids.length === 0) return null;
@@ -388,7 +401,7 @@ export function applyFilter(
     if (typeSet.size > 0 && !typeSet.has(activityType(a))) return false;
     if (allowed && !allowed.has(a.id)) return false;
     if (denied && denied.has(a.id)) return false;
-    if (criteria.importantOnly && !a.is_important) return false;
+    if (importanceSet.size > 0 && !importanceSet.has(a.is_important ? "important" : "not_important")) return false;
     if (tagSet.size > 0 && !(a.tags ?? []).some((t) => tagSet.has(t))) return false;
     if (criteria.risks.length > 0 && !criteria.risks.some((r) => hasRisk(a, r, env.dataDate))) return false;
     if (!inRange(displayStart(a) ?? displayFinish(a), criteria.startRange, env.dataDate)) return false;
@@ -429,7 +442,12 @@ export function normalizeCriteria(raw: unknown): FilterCriteria {
     risks: strings(c.risks),
     codesInclude: strings(c.codesInclude),
     codesExclude: strings(c.codesExclude),
-    importantOnly: c.importantOnly === true,
+    // Saved before "Not important" existed: a plain important-only flag.
+    importance: Array.isArray(c.importance)
+      ? strings(c.importance)
+      : (c as { importantOnly?: boolean }).importantOnly === true
+        ? ["important"]
+        : [],
     tags: strings(c.tags),
   };
 }
@@ -446,7 +464,7 @@ export function criteriaIsEmpty(c: FilterCriteria): boolean {
     c.risks.length === 0 &&
     c.codesInclude.length === 0 &&
     c.codesExclude.length === 0 &&
-    !c.importantOnly &&
+    c.importance.length === 0 &&
     c.tags.length === 0
   );
 }

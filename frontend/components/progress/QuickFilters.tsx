@@ -7,8 +7,10 @@ import type { ActivityCodes } from "@/lib/types";
 import {
   ACTIVITY_TYPES,
   DATE_PRESETS,
+  IMPORTANCE,
   resolveRange,
   RISK_INDICATORS,
+  STATUS_OPTIONS,
   type DateAnchor,
   type DateRange,
   type FilterCriteria,
@@ -58,7 +60,7 @@ function Popover({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="qf-label">{label}</span>
-        {summary && <span className="qf-summary">{summary}</span>}
+        <span className={`qf-summary${summary ? "" : " is-empty"}`}>{summary ?? "All"}</span>
         <ChevronDownIcon className="icon qf-caret" />
       </button>
       {open && (
@@ -153,7 +155,7 @@ function DateRangeFilter({
   const summary = rangeSummary(value);
 
   return (
-    <Popover label={label} summary={summary} active={Boolean(summary)} width={330}>
+    <Popover label={label} summary={summary} active={Boolean(summary)} width={330} align="right">
       <div className="segmented qf-tabs" role="tablist">
         {ANCHORS.map((a) => (
           <button
@@ -231,7 +233,13 @@ export function QuickFilters({
   codes,
   codeMembership,
   tagOptions,
+  lead,
+  tail,
 }: {
+  // Rendered after Status (search, WBS) and after the last list filter
+  // (Advanced, Clear) — the date windows always close the row on the right.
+  lead?: ReactNode;
+  tail?: ReactNode;
   criteria: FilterCriteria;
   set: (patch: Partial<FilterCriteria>) => void;
   dataDate: string | null;
@@ -270,27 +278,33 @@ export function QuickFilters({
       ? null
       : [inc.length ? `${inc.length} included` : "", exc.length ? `${exc.length} excluded` : ""].filter(Boolean).join(" · ");
 
-  const flagCount = (criteria.importantOnly ? 1 : 0) + criteria.tags.length;
+  const flagCount = criteria.importance.length + criteria.tags.length;
+  const flagSummary =
+    flagCount === 0
+      ? null
+      : flagCount === 1 && criteria.importance.length === 1
+        ? IMPORTANCE.find((o) => o.value === criteria.importance[0])?.label ?? null
+        : flagCount === 1
+          ? criteria.tags[0]
+          : `${flagCount} selected`;
 
   return (
-    <div className="qf-row">
+    <div className="qf-bar">
+      <Popover label="Status" summary={listSummary(criteria.statuses, STATUS_OPTIONS)} active={criteria.statuses.length > 0} width={220}>
+        <CheckList
+          options={STATUS_OPTIONS}
+          selected={criteria.statuses}
+          onChange={(statuses) => set({ statuses: statuses as FilterCriteria["statuses"] })}
+        />
+        <PopFoot onClear={() => set({ statuses: [] })} disabled={criteria.statuses.length === 0} />
+      </Popover>
+
+      {lead}
+
       <Popover label="Activity type" summary={listSummary(criteria.types, ACTIVITY_TYPES)} active={criteria.types.length > 0} width={220}>
         <CheckList options={ACTIVITY_TYPES} selected={criteria.types} onChange={(types) => set({ types })} />
         <PopFoot onClear={() => set({ types: [] })} disabled={criteria.types.length === 0} />
       </Popover>
-
-      <DateRangeFilter
-        label="Start"
-        value={criteria.startRange}
-        onChange={(startRange) => set({ startRange })}
-        dataDate={dataDate}
-      />
-      <DateRangeFilter
-        label="Finish"
-        value={criteria.finishRange}
-        onChange={(finishRange) => set({ finishRange })}
-        dataDate={dataDate}
-      />
 
       <Popover
         label="Risk indicators"
@@ -349,22 +363,9 @@ export function QuickFilters({
         </Popover>
       )}
 
-      <Popover
-        label="Flags & tags"
-        summary={flagCount === 0 ? null : flagCount === 1 && criteria.importantOnly ? "Important" : `${flagCount} selected`}
-        active={flagCount > 0}
-        width={260}
-        align="right"
-      >
-        <div className="qf-checks">
-          <label className={`qf-check${criteria.importantOnly ? " is-on" : ""}`}>
-            <input type="checkbox" checked={criteria.importantOnly} onChange={(e) => set({ importantOnly: e.target.checked })} />
-            <span>
-              Important
-              <span className="qf-hint">Flagged as important in the activity window</span>
-            </span>
-          </label>
-        </div>
+      <Popover label="Flags & tags" summary={flagSummary} active={flagCount > 0} width={260}>
+        <div className="qf-section-head is-first">Importance</div>
+        <CheckList options={IMPORTANCE} selected={criteria.importance} onChange={(importance) => set({ importance })} />
         <div className="qf-section-head">Tags</div>
         {tagOptions.length === 0 ? (
           <p className="gantt-pop-empty">No tags on these activities yet.</p>
@@ -375,8 +376,25 @@ export function QuickFilters({
             onChange={(tags) => set({ tags })}
           />
         )}
-        <PopFoot onClear={() => set({ importantOnly: false, tags: [] })} disabled={flagCount === 0} />
+        <PopFoot onClear={() => set({ importance: [], tags: [] })} disabled={flagCount === 0} />
       </Popover>
+
+      {tail}
+
+      <div className="qf-time">
+        <DateRangeFilter
+          label="Start"
+          value={criteria.startRange}
+          onChange={(startRange) => set({ startRange })}
+          dataDate={dataDate}
+        />
+        <DateRangeFilter
+          label="Finish"
+          value={criteria.finishRange}
+          onChange={(finishRange) => set({ finishRange })}
+          dataDate={dataDate}
+        />
+      </div>
     </div>
   );
 }
