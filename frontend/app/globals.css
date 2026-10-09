@@ -3120,6 +3120,7 @@ select.rp-status:hover:not(:disabled){border-color:var(--border-strong)}
 
 /* tooltip */
 .viz-combo,.viz-bars{position:relative}
+.viz-combo-svg{height:auto}
 .viz-tip{
   position:absolute;z-index:5;pointer-events:none;min-width:170px;white-space:nowrap;
   display:flex;flex-direction:column;gap:.2rem;padding:.45rem .6rem;font-size:.75rem;
@@ -3177,13 +3178,14 @@ select.rp-status:hover:not(:disabled){border-color:var(--border-strong)}
 .viz-ring-seg.is-notstarted{stroke:var(--text-tertiary)}
 .viz-ring-seg.is-nobaseline{stroke:var(--border-strong)}
 .viz-ring-seg.is-faded{opacity:.45}
-.viz-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 30px;pointer-events:none}
-.viz-ring-value{font-family:var(--font-display);font-size:1.4rem;font-weight:var(--display-weight);line-height:1.15;color:var(--text-primary)}
+.viz-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.1rem;text-align:center;padding:0 36px;pointer-events:none}
+.viz-ring-value{font-family:var(--font-display);font-size:1.2rem;font-weight:var(--display-weight);line-height:1.1;color:var(--text-primary);white-space:nowrap}
+.viz-ring-value small{font-family:var(--font-ui);font-size:.6875rem;font-weight:500}
 .viz-ring-value.is-lg{font-size:2rem}
 .viz-ring-value.tone-good{color:var(--good)}
 .viz-ring-value.tone-warn{color:var(--warn)}
 .viz-ring-value.tone-crit{color:var(--crit)}
-.viz-ring-note{font-size:.6875rem;line-height:1.3;color:var(--text-muted)}
+.viz-ring-note{font-size:.625rem;line-height:1.25;color:var(--text-muted)}
 .viz-rings-legend{display:flex;flex-direction:column;gap:.55rem;min-width:150px;flex:1;max-width:240px}
 .viz-legend-row{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;font-size:.8125rem;color:var(--text-secondary)}
 .viz-legend-row.is-button{width:calc(100% + .9rem);padding:.3rem .45rem;margin:-.1rem -.45rem;border-radius:var(--radius-sm);font:inherit;font-size:.8125rem;text-align:left;cursor:pointer}
@@ -3280,7 +3282,8 @@ a.viz-bars-label:hover{color:var(--accent);text-decoration:underline}
   .viz-bars-row{grid-template-columns:minmax(0,40%) minmax(0,1fr) auto;gap:.5rem}
 }
 @media print{
-  .viz{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  /* Legend keys, bullets and tracks are backgrounds — print them. */
+  .viz,.viz-key,.viz-mini,.viz-mini-fill,.viz-mini-tick,.dash-swatch,.viz-kpi{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .viz-tip,.viz-toggle,.viz-bars-more{display:none!important}
   .viz-bar{animation:none!important}
 }

@@ -98,7 +98,15 @@ export function ComboBars({
   return (
     <div className="viz viz-combo" ref={wrapRef}>
       {width > 0 && n > 0 && (
-        <svg width={width} height={height} className="viz-svg" role="img" aria-label="Monthly planned vs actual">
+        // viewBox + width 100%: drawn at the measured screen width, but scales
+        // down instead of being cut off when the page prints narrower.
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          className="viz-svg viz-combo-svg"
+          role="img"
+          aria-label="Monthly planned vs actual"
+        >
           {ticks.map((t) => (
             <g key={t}>
               <line x1={plotL} x2={plotR} y1={y(yMax * t)} y2={y(yMax * t)} className="viz-grid" />

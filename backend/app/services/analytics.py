@@ -412,7 +412,9 @@ def behind_plan(
                     baseline_finish=f.baseline_finish,
                 )
             )
-    rows.sort(key=lambda r: (r.variance, r.activity.external_id))
+    # Ties (many rows sit at -100: due by now, not started) go oldest baseline
+    # finish first — the longest overdue.
+    rows.sort(key=lambda r: (r.variance, r.baseline_finish or date.max, r.activity.external_id))
     return len(rows), rows[:BEHIND_LIMIT]
 
 

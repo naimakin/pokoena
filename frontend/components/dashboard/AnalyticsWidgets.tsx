@@ -253,7 +253,13 @@ export function GroupBarsCard({ a }: { a: ProjectAnalytics }) {
     return <p className="viz-empty">No WBS levels or activity codes to group by.</p>;
   }
   const series = m === "hours" ? "actual" : "cost";
-  const rows: BarRow[] = grouping.groups.map((g, i) => {
+  // A branch with no budget in this measure (milestones, change management)
+  // has nothing to compare — leave it out rather than draw an empty row.
+  const measured = grouping.groups.filter((g) => {
+    const measure = m === "hours" ? g.hours : g.cost;
+    return measure.budget > 0 || measure.current_budget > 0;
+  });
+  const rows: BarRow[] = measured.map((g, i) => {
     const measure = m === "hours" ? g.hours : g.cost;
     const pcts = measurePcts(measure);
     const fmtAmt = (v: number) => (m === "hours" ? fmtHours(v) : fmtMoney(v, a.currency));
@@ -317,7 +323,11 @@ export function GroupBarsCard({ a }: { a: ProjectAnalytics }) {
           </span>
         )}
       </div>
-      <PairedBars rows={rows} series={series} max={unit === "pct" ? 100 : undefined} format={format} limit={10} />
+      {rows.length === 0 ? (
+        <p className="viz-empty">No {m === "hours" ? "labor hours" : "cost"} in this grouping.</p>
+      ) : (
+        <PairedBars rows={rows} series={series} max={unit === "pct" ? 100 : undefined} format={format} limit={10} />
+      )}
     </div>
   );
 }

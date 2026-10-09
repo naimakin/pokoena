@@ -54,7 +54,11 @@ export function TimeWorkRings({
           <Ring r={C - 26} pct={done ?? 0} stroke={12} cls="is-actual" />
         </svg>
         <div className="viz-ring-center">
-          <span className={`viz-ring-value num tone-${gap == null ? "neutral" : tone}`}>{fmtPts(gap)}</span>
+          {/* The number and a small unit — "−20.9 pts" in one size overflows the inner ring. */}
+          <span className={`viz-ring-value num tone-${gap == null ? "neutral" : tone}`}>
+            {gap == null ? "—" : fmtPts(gap).replace(" pts", "")}
+            {gap != null && <small> pts</small>}
+          </span>
           <span className="viz-ring-note">
             {gap == null ? "No comparison yet" : gap < 0 ? "Work behind time" : "Work ahead of time"}
           </span>
