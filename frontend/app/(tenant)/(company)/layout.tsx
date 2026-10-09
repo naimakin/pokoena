@@ -137,9 +137,9 @@ const TOP_SECTIONS: NavSection[] = [
       // DCMA's 14 checks plus POKO's own — more than DCMA, hence the name.
       { href: "/dcma", label: "Schedule Quality", icon: ShieldCheckIcon, visible: need("view_reports") },
       { href: "/reporting/float-path", label: "Float Path", icon: TrendingUpIcon, visible: need("view_reports") },
-      // What moved between two updates: read, not acted on (route unchanged).
-      { href: "/execution/changes", label: "Changes", icon: CompareIcon, visible: need("view_reports", "view_delivery") },
-      { href: "/logic-diff", label: "Logic Diff", icon: CompareIcon, visible: need("view_reports") },
+      // Two updates compared — Activities (was Changes) and Logic (was Logic
+      // Diff) tabs; /logic-diff redirects to the Logic tab.
+      { href: "/execution/changes", label: "Update Comparison", icon: CompareIcon, visible: need("view_reports", "view_delivery") },
       { href: "/reporting/reports", label: "Report Builder", icon: BarChartIcon, visible: need("view_reports") },
     ],
   },

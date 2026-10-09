@@ -1,6 +1,6 @@
 "use client";
 
-import { PageTabs } from "@/components/risk/PageTabs";
+import { PageTabs } from "@/components/PageTabs";
 import { RiskMatrixView } from "@/components/risk/RiskMatrixView";
 import { RiskRegisterView } from "@/components/risk/RiskRegisterView";
 

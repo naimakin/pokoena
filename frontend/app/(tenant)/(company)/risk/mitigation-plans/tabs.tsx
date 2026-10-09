@@ -1,7 +1,7 @@
 "use client";
 
 import { MitigationPlansView } from "@/components/risk/MitigationPlansView";
-import { PageTabs } from "@/components/risk/PageTabs";
+import { PageTabs } from "@/components/PageTabs";
 import { RecommendationsView } from "@/components/risk/RecommendationsView";
 
 // What the rules suggest and the plans that answer them: one job, two tabs.

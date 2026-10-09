@@ -1404,7 +1404,7 @@ tr.resolved{opacity:.45}
 .act-modal-badges{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.45rem}
 .act-modal-float{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted)}
 .act-modal-tabs{display:flex;gap:.15rem;padding:0 1.1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
-/* Sub-pages of one menu entry (components/risk/PageTabs.tsx) — same underline tabs. */
+/* Sub-pages of one menu entry (components/PageTabs.tsx) — same underline tabs. */
 .page-tabs{display:flex;gap:.15rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .act-modal-tabs button,.page-tabs button{
   font-size:.8125rem;font-weight:500;color:var(--text-muted);padding:.55rem .7rem;
