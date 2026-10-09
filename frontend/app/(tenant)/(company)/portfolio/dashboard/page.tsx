@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageState } from "@/components/PageShell";
 import { EmptyState } from "@/components/EmptyState";
 import { UploadScheduleIllo } from "@/components/illustrations";
 import { PortfolioTimeline } from "@/components/portfolio/PortfolioTimeline";
+import { PortfolioGlance, ProgressByProject, phaseOf, type Phase } from "@/components/portfolio/PortfolioGlance";
 import { ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, XIcon } from "@/components/icons";
 import { fmtP6Date } from "@/components/reporting/format";
 import { FoldCard } from "@/components/reporting/collapse";
@@ -92,6 +93,7 @@ export default function PortfolioDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [verdict, setVerdict] = useState<VerdictFilter | null>(null);
+  const [phase, setPhase] = useState<Phase | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
   const [windowMode, setWindowMode] = useState<Window>("2y");
@@ -117,13 +119,14 @@ export default function PortfolioDashboardPage() {
     const q = search.trim().toLowerCase();
     return (data?.projects ?? []).filter((p) => {
       if (q && !p.name.toLowerCase().includes(q) && !p.code.toLowerCase().includes(q)) return false;
+      if (phase && phaseOf(p) !== phase) return false;
       if (!verdict) return true;
       if (!p.has_schedule) return false;
       if (verdict.kind === "progress") return p.progress === verdict.key;
       if (verdict.kind === "risk") return p.risk === verdict.key;
       return p.quality === verdict.key;
     });
-  }, [data, search, verdict]);
+  }, [data, search, verdict, phase]);
 
   const sorted = useMemo(
     () =>
@@ -138,7 +141,7 @@ export default function PortfolioDashboardPage() {
   // The portfolio row follows the filter: the filtered projects' months, summed.
   const portfolioMonths = useMemo(() => {
     if (!data) return [];
-    if (!verdict && !search.trim()) return data.months;
+    if (!verdict && !phase && !search.trim()) return data.months;
     const sums = new Map<string, { month: string; score: number; tasks: number; critical: number; delay_drivers: number }>();
     for (const p of projects)
       for (const m of p.months) {
@@ -150,7 +153,7 @@ export default function PortfolioDashboardPage() {
         sums.set(m.month, s);
       }
     return [...sums.values()].sort((a, b) => a.month.localeCompare(b.month));
-  }, [data, projects, verdict, search]);
+  }, [data, projects, verdict, phase, search]);
 
   const range = useMemo<[number, number] | null>(() => {
     const keys = [...portfolioMonths.map((m) => m.month), ...projects.flatMap((p) => p.months.map((m) => m.month))];
@@ -181,10 +184,13 @@ export default function PortfolioDashboardPage() {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: key === "name" ? 1 : -1 }));
   }
 
-  function openProject(p: PortfolioProject) {
-    selectProject(p.id);
-    router.push("/dashboard");
-  }
+  const openProject = useCallback(
+    (p: PortfolioProject) => {
+      selectProject(p.id);
+      router.push("/dashboard");
+    },
+    [selectProject, router],
+  );
 
   if (loading) return <PageState kind="loading" section="Projects" title="Portfolio Dashboard" />;
   if (error) return <PageState kind="error" section="Projects" title="Portfolio Dashboard" message={error} />;
@@ -247,6 +253,9 @@ export default function PortfolioDashboardPage() {
               </div>
             </div>
 
+            {/* ---- at a glance ---- */}
+            <PortfolioGlance projects={data.projects} phase={phase} onPhase={setPhase} />
+
             {/* ---- overall status ---- */}
             <div className="card pf-status">
               <div className="card-head">
@@ -291,6 +300,9 @@ export default function PortfolioDashboardPage() {
                 />
               </div>
             </div>
+
+            {/* ---- progress by project ---- */}
+            <ProgressByProject projects={projects} currency={data.currency} onOpen={openProject} />
 
             {/* ---- scorecard ---- */}
             <div className="card pf-card">

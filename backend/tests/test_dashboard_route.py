@@ -213,3 +213,23 @@ def test_saved_flagged_widget_becomes_recovery(client, db_session):
     first = min(widgets, key=lambda w: w["order"])
     assert first["key"] == "recovery" and first["enabled"] is True
     assert "flagged" not in {w["key"] for w in widgets}
+
+
+def test_saved_layout_gains_new_analytics_widgets_switched_on():
+    from app.api.routes.dashboard import _merge_with_catalogue
+
+    merged = _merge_with_catalogue(
+        [
+            {"key": "update-period", "order": 0, "enabled": True},
+            {"key": "s-curve", "order": 1, "enabled": True},
+            {"key": "health-badge", "order": 2, "enabled": False},
+        ]
+    )
+    keys = [w.key for w in merged]
+    by_key = {w.key: w for w in merged}
+    assert by_key["hours-gauge"].enabled and by_key["behind-plan"].enabled
+    assert keys.index("update-period") < keys.index("hours-gauge") < keys.index("s-curve")
+    assert keys.index("s-curve") < keys.index("monthly-hours") < keys.index("health-badge")
+    assert by_key["health-badge"].enabled is False
+    assert by_key["scope-table"].enabled is False
+    assert [w.order for w in merged] == list(range(len(merged)))

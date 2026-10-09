@@ -34,6 +34,7 @@ from app.models.activity_relationship import ActivityRelationship
 from app.models.project import Project
 from app.models.project_membership import ProjectMembership
 from app.models.user_tenant_role import TenantRole
+from app.services.analytics import Measure, has_cost, load_figures, totals
 from app.services.criticality import criticality, shown_dates
 from app.services.project_status import load_status_inputs, real_activities, rollup_from_inputs
 
@@ -108,6 +109,11 @@ class ProjectPortfolio:
     negative_float_count: int = 0
     months: list[MonthCell] = field(default_factory=list)
     scored: list[ScoredActivity] = field(default_factory=list)
+    has_baseline: bool = False
+    # Labor hours / cost, budget vs planned vs actual (services/analytics.py);
+    # cost is None when the programme carries none.
+    hours: Optional[Measure] = None
+    cost: Optional[Measure] = None
 
 
 def visible_projects(db: Session, tenant_id: uuid.UUID, user_id: uuid.UUID, role: TenantRole) -> list[Project]:
@@ -236,9 +242,15 @@ def project_portfolio(db: Session, tenant_id: uuid.UUID, project: Project) -> Pr
         else max((a.planned_finish for a in activities if a.planned_finish), default=None)
     )
 
+    _, figures = load_figures(db, tenant_id, project.id, baseline)
+    hours, cost = totals(figures)
+
     return ProjectPortfolio(
         project=project,
         has_schedule=True,
+        has_baseline=baseline is not None,
+        hours=hours,
+        cost=cost if has_cost(cost) else None,
         data_date=rollup.data_date,
         activity_count=rollup.activity_count,
         spi=rollup.spi,

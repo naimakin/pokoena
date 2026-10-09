@@ -10,11 +10,24 @@ import type {
   HealthStatus,
   ProgressCurve,
   Project,
+  ProjectAnalytics,
   ProjectHealth,
   RiskHighlight,
 } from "@/lib/types";
 import { ProgressCurveChart, curveReadout } from "@/components/charts/ProgressCurveChart";
 import { fmtNum, fmtP6Date, fmtPct } from "@/components/reporting/format";
+import {
+  AnalyticsState,
+  BehindPlanLink,
+  BehindPlanTable,
+  BudgetActualCard,
+  CostGauge,
+  GroupBarsCard,
+  HoursGauge,
+  MonthlyCard,
+  TimeVsWork,
+  type AnalyticsStatus,
+} from "@/components/dashboard/AnalyticsWidgets";
 import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "@/components/icons";
 
 export type CurveStatus = "idle" | "loading" | "ready" | "locked" | "error";
@@ -27,12 +40,14 @@ export interface WidgetContext {
   curve: ProgressCurve | null;
   curveStatus: CurveStatus;
   deadlineDays: number | null;
+  analytics: ProjectAnalytics | null;
+  analyticsStatus: AnalyticsStatus;
 }
 
 interface WidgetDef {
   title: string;
   description: string;
-  span: "kpi" | "half" | "full";
+  span: "kpi" | "third" | "half" | "full";
   // true → page wraps the body in card padding; false → widget draws edge-to-edge
   // (tables, lists, self-padded blocks).
   pad?: boolean;
@@ -41,6 +56,15 @@ interface WidgetDef {
   /** Optional count shown beside the title in the muted weight. */
   count?: (ctx: WidgetContext) => number | null;
   render: (ctx: WidgetContext) => ReactNode;
+  /** Leave the widget off the page (it stays in the configure modal). */
+  hidden?: (ctx: WidgetContext) => boolean;
+}
+
+/** Render an analytics block once the payload is in, a status line until then. */
+function withAnalytics(what: string, body: (a: ProjectAnalytics) => ReactNode) {
+  return function AnalyticsBlock({ analytics, analyticsStatus }: WidgetContext) {
+    return analytics ? body(analytics) : <AnalyticsState status={analyticsStatus} what={what} />;
+  };
 }
 
 type Tone = "good" | "warn" | "crit" | "info" | "neutral";
@@ -421,6 +445,59 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     },
   },
 
+  "hours-gauge": {
+    title: "Labor Hours",
+    description: "Actual vs planned units % against the baseline",
+    span: "third",
+    render: withAnalytics("labor hours", (a) => <HoursGauge a={a} />),
+  },
+
+  "cost-gauge": {
+    title: "Cost",
+    description: "Spent vs planned spend against the baseline",
+    span: "third",
+    // Without cost-loaded resources the card would only ever say so.
+    hidden: ({ analytics }) => analytics != null && analytics.cost == null,
+    render: withAnalytics("cost", (a) => <CostGauge a={a} />),
+  },
+
+  "time-vs-work": {
+    title: "Time vs Work",
+    description: "Share of the baseline span elapsed vs share of work done",
+    span: "third",
+    render: withAnalytics("time vs work", (a) => <TimeVsWork a={a} />),
+  },
+
+  "monthly-hours": {
+    title: "Monthly Progress",
+    description: "Planned vs actual by month, with the cumulative curves",
+    span: "full",
+    render: withAnalytics("monthly progress", (a) => <MonthlyCard a={a} />),
+  },
+
+  "hours-by-group": {
+    title: "Progress by WBS / Code",
+    description: "Planned to date vs actual for each branch or code value",
+    span: "half",
+    render: withAnalytics("progress by group", (a) => <GroupBarsCard a={a} />),
+  },
+
+  "behind-plan": {
+    title: "Behind Plan",
+    description: "Unfinished activities trailing the baseline's planned %",
+    span: "half",
+    count: ({ analytics }) => (analytics ? analytics.behind_total : null),
+    action: () => <BehindPlanLink />,
+    render: withAnalytics("behind-plan activities", (a) => <BehindPlanTable a={a} />),
+  },
+
+  "budget-actual": {
+    title: "Budget vs Actual",
+    description: "Budget at completion, actual to date and the cumulative trend",
+    span: "half",
+    render: withAnalytics("budget vs actual", (a) => <BudgetActualCard a={a} />),
+  },
+
   "health-badge": {
     title: "Project Health",
     description: "Composite score across schedule, cost and submissions",
@@ -606,13 +683,21 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
 };
 
 // Recommended order — also what an unsaved (default) layout is shown in: the
-// KPI row, the progress curve full width, then Health and Top Risks side by side.
+// KPI row, the three gauges, the progress curve and monthly bars full width,
+// then the half-width pairs (by group | behind plan, budget | health).
 export const WIDGET_ORDER: DashboardWidgetKey[] = [
   "update-period",
   "deadline",
   "scopes-submitted",
   "recovery",
+  "hours-gauge",
+  "cost-gauge",
+  "time-vs-work",
   "s-curve",
+  "monthly-hours",
+  "hours-by-group",
+  "behind-plan",
+  "budget-actual",
   "health-badge",
   "risk-top3",
   "scope-table",

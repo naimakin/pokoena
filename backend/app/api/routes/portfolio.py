@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.deps import AuthContext, check_capability, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.models.project import Project
 from app.models.user_tenant_role import Capability, TenantRole
+from app.schemas.dashboard import MeasureOut
 from app.schemas.portfolio import (
     PortfolioActivityOut,
     PortfolioMonthActivitiesOut,
@@ -18,6 +19,7 @@ from app.schemas.portfolio import (
     PortfolioProjectOut,
     PortfolioSummaryOut,
 )
+from app.services.analytics import CURRENCY
 from app.services.portfolio import (
     ProjectPortfolio,
     ScoredActivity,
@@ -82,6 +84,9 @@ def _project_out(pp: ProjectPortfolio) -> PortfolioProjectOut:
         critical_count=pp.critical_count,
         negative_float_count=pp.negative_float_count,
         months=[PortfolioMonthOut(**vars(m)) for m in pp.months],
+        has_baseline=pp.has_baseline,
+        hours=MeasureOut.of(pp.hours) if pp.hours else None,
+        cost=MeasureOut.of(pp.cost) if pp.cost else None,
     )
 
 
@@ -124,6 +129,7 @@ def get_portfolio(db: Session = Depends(get_db), ctx: AuthContext = Depends(get_
 
     return PortfolioOut(
         generated_at=datetime.utcnow(),
+        currency=CURRENCY,
         projects=[_project_out(pp) for pp in projects],
         months=[PortfolioMonthOut(**vars(m)) for m in portfolio_months(projects)],
         summary=_summary(projects),

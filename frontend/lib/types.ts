@@ -864,6 +864,13 @@ export type DashboardWidgetKey =
   | "deadline"
   | "scopes-submitted"
   | "recovery"
+  | "hours-gauge"
+  | "cost-gauge"
+  | "time-vs-work"
+  | "monthly-hours"
+  | "hours-by-group"
+  | "behind-plan"
+  | "budget-actual"
   | "health-badge"
   | "s-curve"
   | "risk-top3"
@@ -1718,4 +1725,67 @@ export interface MyMention {
   href: string | null;
   created_at: string;
   read_at: string | null;
+}
+
+// --- Dashboard analytics: GET /dashboard/analytics (services/analytics.py) ---
+
+/** Labor hours or cost. `budget` is the locked baseline's, `current_budget`
+ *  the current programme's; `planned` is the baseline spread to the data date. */
+export interface AnalyticsMeasure {
+  budget: number;
+  current_budget: number;
+  planned: number;
+  actual: number;
+  remaining: number;
+}
+
+export interface AnalyticsMonth {
+  month: string; // "YYYY-MM"
+  planned_hours: number;
+  actual_hours: number;
+  planned_cost: number;
+  actual_cost: number;
+}
+
+export interface AnalyticsGroup {
+  label: string;
+  hours: AnalyticsMeasure;
+  cost: AnalyticsMeasure;
+}
+
+export interface AnalyticsGrouping {
+  key: string; // "wbs:2", "code:<uuid>"
+  label: string;
+  groups: AnalyticsGroup[];
+}
+
+export interface BehindActivity {
+  activity_id: string;
+  external_id: string;
+  name: string;
+  wbs_name: string | null;
+  planned_pct: number;
+  actual_pct: number;
+  variance: number;
+  baseline_finish: string | null;
+}
+
+export interface ProjectAnalytics {
+  data_date: string;
+  currency: string;
+  baseline_label: string;
+  baseline_start: string | null;
+  baseline_finish: string | null;
+  forecast_finish: string | null;
+  finish_variance_days: number | null;
+  planned_pct: number | null;
+  actual_pct: number | null;
+  spi: number | null;
+  elapsed_pct: number | null;
+  hours: AnalyticsMeasure;
+  cost: AnalyticsMeasure | null;
+  months: AnalyticsMonth[];
+  groupings: AnalyticsGrouping[];
+  behind_total: number;
+  behind: BehindActivity[];
 }

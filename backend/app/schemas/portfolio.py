@@ -3,6 +3,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel
 
+from app.schemas.dashboard import MeasureOut
+
 
 class PortfolioMonthOut(BaseModel):
     month: str  # "YYYY-MM"
@@ -35,6 +37,9 @@ class PortfolioProjectOut(BaseModel):
     critical_count: int = 0
     negative_float_count: int = 0
     months: list[PortfolioMonthOut] = []
+    has_baseline: bool = False
+    hours: MeasureOut | None = None
+    cost: MeasureOut | None = None
 
 
 class PortfolioActivityOut(BaseModel):
@@ -65,6 +70,7 @@ class PortfolioOut(BaseModel):
     months: list[PortfolioMonthOut]  # the portfolio row: every project summed
     summary: PortfolioSummaryOut
     top_activities: list[PortfolioActivityOut]
+    currency: str = "EUR"
 
 
 class PortfolioMonthActivitiesOut(BaseModel):

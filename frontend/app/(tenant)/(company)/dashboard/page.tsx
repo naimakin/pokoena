@@ -12,6 +12,7 @@ import type {
   DashboardWidgetConfig,
   DashboardWidgetKey,
   ProgressCurve,
+  ProjectAnalytics,
   ProjectHealth,
   RiskHighlight,
 } from "@/lib/types";
@@ -23,6 +24,7 @@ import {
   type WidgetContext,
 } from "@/components/dashboard/DashboardWidgets";
 import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
+import { KpiStrip, type AnalyticsStatus } from "@/components/dashboard/AnalyticsWidgets";
 import { NoProjectIllo } from "@/components/illustrations";
 import { fmtP6Date } from "@/components/reporting/format";
 
@@ -49,6 +51,8 @@ export default function DashboardPage() {
   const [risks, setRisks] = useState<RiskHighlight[] | null>(null);
   const [curve, setCurve] = useState<ProgressCurve | null>(null);
   const [curveStatus, setCurveStatus] = useState<CurveStatus>("idle");
+  const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
+  const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus>("idle");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +120,18 @@ export default function DashboardPage() {
           .then(setRisks)
           .catch(() => setRisks(null));
       }
+      // Always: the KPI strip on top reads it too.
+      setAnalyticsStatus("loading");
+      api
+        .get<ProjectAnalytics>(`/dashboard/analytics?project_id=${project.id}`)
+        .then((res) => {
+          setAnalytics(res);
+          setAnalyticsStatus("ready");
+        })
+        .catch((err) => {
+          setAnalytics(null);
+          setAnalyticsStatus(err instanceof ApiError && err.status === 423 ? "locked" : "error");
+        });
       if (wanted.has("s-curve")) {
         setCurveStatus("loading");
         api
@@ -141,6 +157,8 @@ export default function DashboardPage() {
     setRisks(null);
     setCurve(null);
     setCurveStatus("idle");
+    setAnalytics(null);
+    setAnalyticsStatus("idle");
     load();
   }, [load]);
 
@@ -218,15 +236,31 @@ export default function DashboardPage() {
     curve,
     curveStatus,
     deadlineDays,
+    analytics,
+    analyticsStatus,
   };
 
   const kpiKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span === "kpi");
-  const blockKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span !== "kpi");
-  // Half-width cards pair up (the grid packs densely, so a later half fills the
-  // gap beside an earlier one); an odd one out takes the full row instead of
-  // leaving an empty column beside it.
-  const halfKeys = blockKeys.filter((k) => WIDGET_REGISTRY[k].span === "half");
-  const loneHalf = halfKeys.length % 2 === 1 ? halfKeys[halfKeys.length - 1] : null;
+  const blockKeys = enabledKeys.filter((k) => {
+    const def = WIDGET_REGISTRY[k];
+    return def.span !== "kpi" && !def.hidden?.(ctx);
+  });
+  // A six-column grid: thirds take two columns, halves three. Thirds that
+  // don't fill a row of three widen — two left over become halves, one left
+  // over takes the full row — and an odd half out takes the full row (the
+  // grid packs densely, so a later half fills the gap beside an earlier one).
+  const cellOf = new Map<DashboardWidgetKey, "third" | "half" | "full">();
+  const thirds = blockKeys.filter((k) => WIDGET_REGISTRY[k].span === "third");
+  const thirdsRest = thirds.length % 3;
+  thirds.forEach((k, i) => {
+    const inTail = i >= thirds.length - thirdsRest;
+    cellOf.set(k, !inTail ? "third" : thirdsRest === 2 ? "half" : "full");
+  });
+  for (const k of blockKeys) {
+    if (!cellOf.has(k)) cellOf.set(k, WIDGET_REGISTRY[k].span === "full" ? "full" : "half");
+  }
+  const halfKeys = blockKeys.filter((k) => cellOf.get(k) === "half");
+  if (halfKeys.length % 2 === 1) cellOf.set(halfKeys[halfKeys.length - 1], "full");
 
   const inPeriod = Boolean(summary?.active_period_id);
   const currentUpdate = summary?.current_update ?? null;
@@ -306,6 +340,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="dash-stack">
+            {analytics && <KpiStrip a={analytics} />}
             {kpiKeys.length > 0 && (
               <div className="kpi-row">
                 {kpiKeys.map((key) => (
@@ -318,11 +353,11 @@ export default function DashboardPage() {
               <div className="dash-grid">
                 {blockKeys.map((key) => {
                   const def = WIDGET_REGISTRY[key];
-                  const full = def.span === "full" || key === loneHalf;
+                  const cell = cellOf.get(key) ?? "half";
                   const action = def.action ? def.action(ctx) : null;
                   const count = def.count ? def.count(ctx) : null;
                   return (
-                    <section key={key} className={`card dash-card${full ? " dash-cell-full" : ""}`}>
+                    <section key={key} className={`card dash-card dash-cell-${cell}`}>
                       <div className="card-head">
                         <div>
                           <div className="card-title">

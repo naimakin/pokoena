@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import AuthContext, get_tenant_scoped_or_404, require_capability
+from app.deps import (
+    AuthContext,
+    get_current_tenant_user,
+    get_tenant_scoped_or_404,
+    require_capability,
+    require_project_permission,
+)
 from app.engine.durations import activity_days
 from app.models.activity import Activity, ActivityStatus
 from app.models.baseline import Baseline, BaselineStatus
@@ -17,9 +23,16 @@ from app.models.scope_submission import ScopeSubmission
 from app.models.subcontractor_organization import SubcontractorOrganization
 from app.models.update_period import UpdatePeriod
 from app.models.user_tenant_role import Capability
+from app.services.analytics import CURRENCY, compute_project_analytics
 from app.services.mitigation import build_slip_report
 from app.services.progress_summary import compute_current_update, compute_progress_summary, evm_point_at
 from app.schemas.dashboard import (
+    AnalyticsGroupingOut,
+    AnalyticsGroupOut,
+    AnalyticsMonthOut,
+    BehindActivityOut,
+    MeasureOut,
+    ProjectAnalyticsOut,
     CurrentUpdateOut,
     DashboardLayoutOut,
     DashboardLayoutUpdate,
@@ -45,11 +58,31 @@ WIDGET_KEYS = (
     "deadline",
     "scopes-submitted",
     "recovery",
-    "health-badge",
+    "hours-gauge",
+    "cost-gauge",
+    "time-vs-work",
     "s-curve",
+    "monthly-hours",
+    "hours-by-group",
+    "behind-plan",
+    "budget-actual",
+    "health-badge",
     "risk-top3",
     "scope-table",
 )
+
+# Widgets added after people had saved layouts (2026-10 analytics). A saved
+# layout that has never seen one gets it switched on, in its catalogue place —
+# older catalogue additions still arrive switched off.
+NEW_ENABLED_WIDGETS = {
+    "hours-gauge",
+    "cost-gauge",
+    "time-vs-work",
+    "monthly-hours",
+    "hours-by-group",
+    "behind-plan",
+    "budget-actual",
+}
 
 DEFAULT_WIDGETS: list[dict] = [
     {"key": key, "order": i, "enabled": True, "options": {}}
@@ -159,8 +192,9 @@ def dashboard_summary(
 
 def _merge_with_catalogue(saved: list[dict]) -> list[DashboardWidgetConfig]:
     """Keep the user's saved widgets (order/enabled/options preserved), drop
-    any keys no longer in the catalogue, and append catalogue widgets the user
-    has never seen as disabled entries so the configure modal can still show
+    any keys no longer in the catalogue, and add catalogue widgets the user
+    has never seen: NEW_ENABLED_WIDGETS switched on in their catalogue place,
+    the rest appended switched off so the configure modal can still show
     them."""
     # "flagged" (Flag Reviews, removed) took the slot "recovery" now fills.
     saved = [{**w, "key": "recovery"} if w.get("key") == "flagged" else w for w in saved]
@@ -174,12 +208,21 @@ def _merge_with_catalogue(saved: list[dict]) -> list[DashboardWidgetConfig]:
         )
         for i, w in enumerate(by_key.values())
     ]
-    next_order = max((w.order for w in merged), default=-1) + 1
-    for key in WIDGET_KEYS:
-        if key not in by_key:
-            merged.append(DashboardWidgetConfig(key=key, order=next_order, enabled=False))
-            next_order += 1
     merged.sort(key=lambda w: w.order)
+    for i, key in enumerate(WIDGET_KEYS):
+        if key in by_key or key not in NEW_ENABLED_WIDGETS:
+            continue
+        # Right after the nearest earlier catalogue widget the layout holds.
+        earlier = set(WIDGET_KEYS[:i])
+        at = max((j + 1 for j, w in enumerate(merged) if w.key in earlier), default=0)
+        merged.insert(at, DashboardWidgetConfig(key=key, order=0, enabled=True))
+    merged.extend(
+        DashboardWidgetConfig(key=key, order=0, enabled=False)
+        for key in WIDGET_KEYS
+        if key not in by_key and key not in NEW_ENABLED_WIDGETS
+    )
+    for order, w in enumerate(merged):
+        w.order = order
     return merged
 
 
@@ -540,3 +583,83 @@ def get_risk_highlights(
 
     candidates.sort(key=lambda c: (_SEV_RANK[c[1].severity], -c[0]))
     return [rh for _, rh in candidates[:3]]
+
+
+# ---------------------------------------------------------------------------
+# Analytics — hours and cost, budget vs planned vs actual (services/analytics.py)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/analytics", response_model=ProjectAnalyticsOut)
+def get_dashboard_analytics(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_current_tenant_user),
+) -> ProjectAnalyticsOut:
+    """The Dashboard's and Project Status's charts: KPI strip, hours / cost
+    gauges, monthly bars, hours by WBS / activity code, behind-plan table.
+    Measured against the active baseline, so 423 without one."""
+    get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    require_project_permission(db, project_id, ctx, Capability.view_overview, Capability.view_reports)
+    baseline = (
+        db.query(Baseline)
+        .filter(
+            Baseline.tenant_id == ctx.tenant_id,
+            Baseline.project_id == project_id,
+            Baseline.status == BaselineStatus.active,
+        )
+        .first()
+    )
+    if baseline is None:
+        raise HTTPException(status_code=423, detail="No active baseline for this project")
+
+    a = compute_project_analytics(db, ctx.tenant_id, project_id, baseline)
+    return ProjectAnalyticsOut(
+        data_date=a.data_date,
+        currency=CURRENCY,
+        baseline_label=baseline.version_label,
+        baseline_start=a.baseline_start,
+        baseline_finish=a.baseline_finish,
+        forecast_finish=a.forecast_finish,
+        finish_variance_days=a.finish_variance_days,
+        planned_pct=a.planned_pct,
+        actual_pct=a.actual_pct,
+        spi=a.spi,
+        elapsed_pct=a.elapsed_pct,
+        hours=MeasureOut.of(a.hours),
+        cost=MeasureOut.of(a.cost) if a.cost else None,
+        months=[
+            AnalyticsMonthOut(
+                month=m.month,
+                planned_hours=round(m.planned_hours, 2),
+                actual_hours=round(m.actual_hours, 2),
+                planned_cost=round(m.planned_cost, 2),
+                actual_cost=round(m.actual_cost, 2),
+            )
+            for m in a.months
+        ],
+        groupings=[
+            AnalyticsGroupingOut(
+                key=g.key,
+                label=g.label,
+                groups=[
+                    AnalyticsGroupOut(label=x.label, hours=MeasureOut.of(x.hours), cost=MeasureOut.of(x.cost)) for x in g.groups
+                ],
+            )
+            for g in a.groupings
+        ],
+        behind_total=a.behind_total,
+        behind=[
+            BehindActivityOut(
+                activity_id=r.activity.id,
+                external_id=r.activity.external_id,
+                name=r.activity.name,
+                wbs_name=r.wbs_name,
+                planned_pct=r.planned_pct,
+                actual_pct=r.actual_pct,
+                variance=round(r.variance, 1),
+                baseline_finish=r.baseline_finish,
+            )
+            for r in a.behind
+        ],
+    )

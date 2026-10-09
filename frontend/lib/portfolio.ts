@@ -1,6 +1,8 @@
 // Portfolio Dashboard — types for GET /portfolio (backend/app/api/routes/
 // portfolio.py) and the timeline's month / density helpers.
 
+import type { AnalyticsMeasure } from "@/lib/types";
+
 export interface PortfolioMonth {
   month: string; // "YYYY-MM"
   score: number; // sum of Criticality Scores of the activities active that month
@@ -35,6 +37,11 @@ export interface PortfolioProject {
   critical_count: number;
   negative_float_count: number;
   months: PortfolioMonth[];
+  has_baseline: boolean;
+  /** Labor hours, budget vs planned vs actual (services/analytics.py). */
+  hours: AnalyticsMeasure | null;
+  /** Null when the programme carries no cost. */
+  cost: AnalyticsMeasure | null;
 }
 
 export interface PortfolioActivity {
@@ -63,6 +70,7 @@ export interface Portfolio {
     quality: Record<QualityLevel, number>;
   };
   top_activities: PortfolioActivity[];
+  currency: string;
 }
 
 export interface PortfolioMonthActivities {

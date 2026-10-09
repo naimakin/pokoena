@@ -112,3 +112,82 @@ class RiskHighlight(BaseModel):
     detail: str
     severity: Literal["low", "medium", "high"]
     source: str
+
+
+# ---------------------------------------------------------------------------
+# Analytics: hours and cost, budget vs planned vs actual (services/analytics.py)
+# ---------------------------------------------------------------------------
+
+
+class MeasureOut(BaseModel):
+    """Labor hours or cost. `budget` is the locked baseline's, `current_budget`
+    the current programme's; `planned` is the baseline spread to the data date."""
+
+    budget: float
+    current_budget: float
+    planned: float
+    actual: float
+    remaining: float
+
+    @classmethod
+    def of(cls, m) -> "MeasureOut":
+        """From a services.analytics.Measure, rounded for the wire."""
+        return cls(
+            budget=round(m.budget, 2),
+            current_budget=round(m.current_budget, 2),
+            planned=round(m.planned, 2),
+            actual=round(m.actual, 2),
+            remaining=round(m.remaining, 2),
+        )
+
+
+class AnalyticsMonthOut(BaseModel):
+    month: str  # "YYYY-MM"
+    planned_hours: float
+    actual_hours: float
+    planned_cost: float
+    actual_cost: float
+
+
+class AnalyticsGroupOut(BaseModel):
+    label: str
+    hours: MeasureOut
+    cost: MeasureOut
+
+
+class AnalyticsGroupingOut(BaseModel):
+    key: str  # "wbs:2", "code:<uuid>"
+    label: str
+    groups: list[AnalyticsGroupOut]
+
+
+class BehindActivityOut(BaseModel):
+    activity_id: uuid.UUID
+    external_id: str
+    name: str
+    wbs_name: str | None
+    planned_pct: float
+    actual_pct: float
+    variance: float
+    baseline_finish: date | None
+
+
+class ProjectAnalyticsOut(BaseModel):
+    data_date: date
+    currency: str
+    baseline_label: str
+    baseline_start: date | None
+    baseline_finish: date | None
+    forecast_finish: date | None
+    finish_variance_days: int | None
+    planned_pct: float | None
+    actual_pct: float | None
+    spi: float | None
+    elapsed_pct: float | None
+    hours: MeasureOut
+    # None when the programme carries no cost at all.
+    cost: MeasureOut | None
+    months: list[AnalyticsMonthOut]
+    groupings: list[AnalyticsGroupingOut]
+    behind_total: int
+    behind: list[BehindActivityOut]
