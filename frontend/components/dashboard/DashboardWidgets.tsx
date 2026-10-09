@@ -338,6 +338,11 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
                     ? `${fmtPct(pct)} complete · ${fmtNum(cu.activities_in_progress, 0)} in progress`
                     : `${fmtNum(done, 0)} of ${fmtNum(total, 0)} complete · ${fmtNum(cu.activities_in_progress, 0)} in progress`}
                 </div>
+                {!firstUpdate && (
+                  <div className="kpi-sub" title="Completed activities over all activities — a count, not weighted by duration or manhours">
+                    <b className="num">{fmtPct(pct)}</b> of activities complete
+                  </div>
+                )}
               </>
             }
           >
