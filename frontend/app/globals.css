@@ -1862,6 +1862,16 @@ tr.resolved{opacity:.45}
 .fold-meta{display:flex;align-items:center;gap:.5rem;flex:none;margin-left:auto;color:var(--text-muted)}
 .fold-hint{font-family:var(--font-mono);font-size:.6875rem;color:var(--text-muted);white-space:nowrap}
 .fold-body.is-folded{display:none}
+/* FoldPanel: the card title is the toggle; header controls sit beside it. */
+.fold-panel-head{gap:.75rem}
+.fold-panel-head.is-folded{border-bottom-color:transparent}
+.fold-panel-toggle{display:flex;align-items:flex-start;gap:.55rem;flex:1;min-width:0;padding:0;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.fold-panel-toggle .section-caret{margin-top:.15rem}
+.fold-panel-toggle[aria-expanded="false"] .section-caret{transform:rotate(-90deg)}
+.fold-panel-toggle .card-title,.fold-panel-toggle .card-title-sub{display:block}
+.fold-panel-toggle:hover .card-title{color:var(--accent-strong)}
+.fold-panel-actions{flex:none;display:flex;align-items:center;gap:.5rem}
+@media print{.fold-panel-toggle .section-caret{display:none!important}}
 .fold-controls{display:inline-flex;gap:.2rem;flex-wrap:wrap}
 .fold-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-bottom:-.75rem}
 .fold-toolbar-note{font-size:.75rem;color:var(--text-muted)}
@@ -2133,6 +2143,9 @@ tr.resolved{opacity:.45}
 .risk-settings{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;padding:1rem 1.1rem}
 .risk-settings label{display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;color:var(--text-muted);font-weight:500}
 .risk-settings select,.risk-settings input{height:32px;font-size:.8125rem}
+.risk-settings-field{display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;color:var(--text-muted);font-weight:500}
+.risk-settings .act-picker{width:320px}
+.risk-settings .act-picker-value{height:32px}
 .ew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
 .ew-card{display:flex;flex-direction:column;gap:.5rem;padding:1rem 1.1rem;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
 .ew-card.is-open{box-shadow:inset 3px 0 0 var(--accent-line),var(--shadow-xs)}
@@ -3047,3 +3060,19 @@ select.rp-status:hover:not(:disabled){border-color:var(--border-strong)}
   .rp-action-tools{display:none}
   select.rp-status{appearance:none;border:0}
 }
+
+/* ActivityPicker (components/ActivityPicker.tsx): pick one activity by ID or name. */
+.act-picker{position:relative;display:flex;align-items:center;min-width:240px}
+.act-picker input{width:100%;padding-right:1.8rem}
+.act-picker-value{display:flex;align-items:center;gap:.45rem;width:100%;min-width:0;height:var(--control-h,36px);padding:0 1.8rem 0 .6rem;font:inherit;font-weight:400;font-size:.8125rem;text-align:left;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer}
+.act-picker-value:hover{border-color:var(--accent)}
+.act-picker-value .mono,.act-picker-opt .mono{flex:none;font-size:.75rem;color:var(--text-secondary)}
+.act-picker-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.act-picker-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);display:flex;padding:.2rem;border-radius:var(--radius-xs);color:var(--text-muted)}
+.act-picker-clear:hover{background:var(--surface-2);color:var(--text-primary)}
+.act-picker-clear .icon{width:12px;height:12px}
+.act-picker-list{position:absolute;top:calc(100% + 4px);left:0;z-index:40;width:max(100%,420px);max-height:300px;overflow:auto;padding:.3rem;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-md)}
+.act-picker-opt{display:flex;align-items:center;gap:.5rem;width:100%;padding:.4rem .5rem;font:inherit;font-weight:400;font-size:.8125rem;text-align:left;border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer}
+.act-picker-opt.is-cursor{background:var(--surface-2)}
+.act-picker-opt[aria-selected="true"]{background:var(--accent-soft)}
+.act-picker-empty{padding:.5rem;font-size:.75rem;color:var(--text-muted)}

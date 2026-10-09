@@ -6,13 +6,15 @@
 // The old flat ±% simulation this page used to run still backs the Reporting
 // block; this page no longer calls it.
 
+import { FoldPanel } from "@/components/reporting/collapse";
 import Link from "next/link";
 import { PageState } from "@/components/PageShell";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { useToast } from "@/components/Toast";
-import type { QsraRun, QsraRunSummary, QsraSettings } from "@/lib/types";
+import type { Activity, QsraRun, QsraRunSummary, QsraSettings } from "@/lib/types";
+import { ActivityPicker } from "@/components/ActivityPicker";
 import { DiceIcon, SettingsIcon } from "@/components/icons";
 import { CdfChart, fmtDate, fmtNum, HBarList, HistogramChart } from "@/components/risk/RiskCharts";
 import { RecommendationList } from "@/components/risk/RecommendationList";
@@ -38,6 +40,7 @@ export default function QsraPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<"pre" | "post">("pre");
   const [onlyHidden, setOnlyHidden] = useState(false);
+  const [activities, setActivities] = useState<Activity[] | null>(null);
 
   const load = useCallback(async () => {
     if (!project) {
@@ -66,6 +69,18 @@ export default function QsraPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Only the measure-milestone picker needs the activity list: fetch it when
+  // Settings first opens.
+  useEffect(() => {
+    if (!settingsOpen || activities !== null || !project) return;
+    api
+      .get<Activity[]>(`/activities?project_id=${project.id}`)
+      .then(setActivities)
+      .catch(() => setActivities([]));
+  }, [settingsOpen, activities, project]);
+
+  useEffect(() => setActivities(null), [project]);
 
   async function runQsra() {
     if (!project) return;
@@ -178,13 +193,10 @@ export default function QsraPage() {
         </div>
 
         {settingsOpen && settings && (
-          <div className="card">
-            <div className="card-head">
-              <div>
-                <div className="card-title">Simulation settings</div>
-                <div className="card-title-sub">Apply to the next run. The seed is fixed, so reruns are comparable.</div>
-              </div>
-            </div>
+          <FoldPanel
+            title="Simulation settings"
+            sub={<>Apply to the next run. The seed is fixed, so reruns are comparable.</>}
+          >
             <div className="risk-settings">
               <label>
                 Schedule confidence
@@ -207,15 +219,16 @@ export default function QsraPage() {
                   {settings.baseline_finish ? `Empty = baseline finish ${fmtDate(settings.baseline_finish)}` : "Empty = none"}
                 </span>
               </label>
-              <label>
-                Measure milestone (activity ID)
-                <input
-                  className="mono"
-                  placeholder="Project finish"
+              <div className="risk-settings-field">
+                <span>Measure milestone</span>
+                <ActivityPicker
+                  activities={activities ?? []}
                   value={s.finish_activity_external_id ?? ""}
-                  onChange={(e) => setDraft({ ...draft, finish_activity_external_id: e.target.value })}
+                  onChange={(id) => setDraft({ ...draft, finish_activity_external_id: id })}
+                  placeholder={activities === null ? "Loading activities…" : "Project finish — or search a milestone"}
+                  preferMilestones
                 />
-              </label>
+              </div>
               <label>
                 Iterations
                 <input type="number" min={200} max={5000} step={100} value={s.iterations}
@@ -233,7 +246,7 @@ export default function QsraPage() {
               </label>
               <button className="btn btn-primary btn-sm" disabled={!dirty} onClick={saveSettings}>Save settings</button>
             </div>
-          </div>
+          </FoldPanel>
         )}
 
         {!run || !res || !dist ? (
@@ -306,15 +319,10 @@ export default function QsraPage() {
               </div>
             </div>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Probability of finishing by date</div>
-                  <div className="card-title-sub">
-                    Plan at P50, commit at P80. The CPM date is optimistic wherever parallel paths converge (merge bias).
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="Probability of finishing by date"
+              sub={<>Plan at P50, commit at P80. The CPM date is optimistic wherever parallel paths converge (merge bias).</>}
+            >
               <CdfChart series={cdfSeries} markers={markers} />
               <HistogramChart bins={dist.histogram} bin={dist.bin} />
               <div className="table-wrap">
@@ -333,18 +341,13 @@ export default function QsraPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">From the CPM date to P80</div>
-                  <div className="card-title-sub">
-                    Working days each layer adds at P80. Risk exposure {signedDays(res.risk_exposure_p80_days)}
-                    {res.mitigation_benefit_p80_days !== null && ` · mitigation recovers ${fmtNum(res.mitigation_benefit_p80_days, 1)} d`}
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="From the CPM date to P80"
+              sub={<>Working days each layer adds at P80. Risk exposure {signedDays(res.risk_exposure_p80_days)}
+                    {res.mitigation_benefit_p80_days !== null && ` · mitigation recovers ${fmtNum(res.mitigation_benefit_p80_days, 1)} d`}</>}
+            >
               <HBarList
                 rows={res.waterfall.map((w) => ({
                   key: w.label,
@@ -355,22 +358,17 @@ export default function QsraPage() {
                 }))}
                 unit="working days"
               />
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">What drives the risk</div>
-                  <div className="card-title-sub">
-                    {run.ranking
+            <FoldPanel
+              title="What drives the risk"
+              sub={<>{run.ranking
                       ? `Change in P80 when each risk is switched off (${run.results.ranking_meta?.iterations ?? ""} iterations each). Contributions don't add up — risks interact through the network.`
-                      : "Screening: expected delay = probability × how much later the finish is when the risk hits."}
-                  </div>
-                </div>
-                <button className="btn btn-secondary btn-sm" onClick={runRanking} disabled={ranking || res.drivers.length === 0}>
+                      : "Screening: expected delay = probability × how much later the finish is when the risk hits."}</>}
+              actions={<><button className="btn btn-secondary btn-sm" onClick={runRanking} disabled={ranking || res.drivers.length === 0}>
                   {ranking ? "Ranking…" : run.ranking ? "Re-rank" : "Run full risk ranking"}
-                </button>
-              </div>
+                </button></>}
+            >
               {res.drivers.length === 0 ? (
                 <p className="empty-state" style={{ padding: "1rem 1.1rem" }}>
                   No quantified risks — the spread above is background uncertainty only.{" "}
@@ -428,22 +426,17 @@ export default function QsraPage() {
                   </div>
                 </>
               )}
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Activity sensitivity</div>
-                  <div className="card-title-sub">
-                    Criticality = share of runs on the driving path. SSI = criticality × duration spread ÷ finish spread —
-                    where recovery effort moves the finish most.
-                  </div>
-                </div>
-                <label className="checkbox-row">
+            <FoldPanel
+              title="Activity sensitivity"
+              sub={<>Criticality = share of runs on the driving path. SSI = criticality × duration spread ÷ finish spread —
+                    where recovery effort moves the finish most.</>}
+              actions={<><label className="checkbox-row">
                   <input type="checkbox" checked={onlyHidden} onChange={(e) => setOnlyHidden(e.target.checked)} />
                   Critical in simulation, not in P6
-                </label>
-              </div>
+                </label></>}
+            >
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -474,32 +467,22 @@ export default function QsraPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Recommendations from this run</div>
-                  <div className="card-title-sub">
-                    Early warnings and resource checks are added on the <Link href="/risk/mitigation-plans?tab=recommendations">Recommendations</Link> tab of Mitigation.
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="Recommendations from this run"
+              sub={<>Early warnings and resource checks are added on the <Link href="/risk/mitigation-plans?tab=recommendations">Recommendations</Link> tab of Mitigation.</>}
+            >
               <RecommendationList items={res.recommendations} empty="Nothing flagged by this run." />
-            </div>
+            </FoldPanel>
           </>
         )}
 
         {history.length > 0 && (
-          <div className="card">
-            <div className="card-head">
-              <div>
-                <div className="card-title">Confidence across runs</div>
-                <div className="card-title-sub">
-                  Probability of meeting {history[history.length - 1].target_date ? "the target" : "the CPM date"} at each run
-                </div>
-              </div>
-            </div>
+          <FoldPanel
+            title="Confidence across runs"
+            sub={<>Probability of meeting {history[history.length - 1].target_date ? "the target" : "the CPM date"} at each run</>}
+          >
             <div style={{ padding: ".6rem 1.1rem" }}>
               <TrendLine
                 points={history.map((h) => ({
@@ -530,7 +513,7 @@ export default function QsraPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </FoldPanel>
         )}
       </div>
     </>

@@ -134,3 +134,40 @@ export function FoldAllControls({
     </div>
   );
 }
+
+/** A card that folds shut from its header, for cards whose header also
+ *  carries controls (a button, a checkbox): the title is the toggle and
+ *  `actions` sit beside it, outside the button. Shares the fold registry, so
+ *  a page's Expand all / Collapse all reaches it through <FoldKey>. */
+export function FoldPanel({
+  title,
+  sub,
+  actions,
+  defaultOpen = true,
+  children,
+}: {
+  title: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const { open, toggle, bodyId } = useFold(defaultOpen);
+  return (
+    <section className="card fold-panel">
+      <div className={`card-head fold-panel-head${open ? "" : " is-folded"}`}>
+        <button type="button" className="fold-panel-toggle" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
+          <ChevronDownIcon className="icon icon-sm section-caret" aria-hidden="true" />
+          <span className="fold-head-text">
+            <span className="card-title">{title}</span>
+            {sub && <span className="card-title-sub">{sub}</span>}
+          </span>
+        </button>
+        {actions && open && <div className="fold-panel-actions">{actions}</div>}
+      </div>
+      <div id={bodyId} className={`fold-body${open ? "" : " is-folded"}`}>
+        {children}
+      </div>
+    </section>
+  );
+}

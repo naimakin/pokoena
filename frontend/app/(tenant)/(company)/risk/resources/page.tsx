@@ -6,6 +6,7 @@
 // because the two answer different questions and disagree for a reason: the
 // network can say "possible", production can say "not at this pace".
 
+import { FoldPanel } from "@/components/reporting/collapse";
 import { useCallback, useEffect, useState } from "react";
 import { PageState } from "@/components/PageShell";
 import Link from "next/link";
@@ -160,16 +161,11 @@ export default function ResourcesAnalysisPage() {
               </div>
             )}
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Two forecasts, two questions</div>
-                  <div className="card-title-sub">
-                    The network (QSRA) asks what logic and risks allow; production asks what the pace of work supports.
-                    When production is later, the plan needs more crews, not just better logic.
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="Two forecasts, two questions"
+              sub={<>The network (QSRA) asks what logic and risks allow; production asks what the pace of work supports.
+                    When production is later, the plan needs more crews, not just better logic.</>}
+            >
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -200,31 +196,21 @@ export default function ResourcesAnalysisPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Units per week</div>
-                  <div className="card-title-sub">
-                    Planned from the baseline dates; earned is budget × physical % between updates, spread evenly over
-                    each update period; remaining is P6&apos;s remaining units over the current forecast dates.
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="Units per week"
+              sub={<>Planned from the baseline dates; earned is budget × physical % between updates, spread evenly over
+                    each update period; remaining is P6&apos;s remaining units over the current forecast dates.</>}
+            >
               <WeeklyUnitsChart weeks={data.weeks} dataDate={data.data_date} unit={unit} />
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">Production between updates</div>
-                  <div className="card-title-sub">
-                    Productivity = earned ÷ actual units in the period (needs assignment history —{" "}
-                    {data.snapshots_with_actuals} of {data.updates} updates carry it).
-                  </div>
-                </div>
-              </div>
+            <FoldPanel
+              title="Production between updates"
+              sub={<>Productivity = earned ÷ actual units in the period (needs assignment history —{" "}
+                    {data.snapshots_with_actuals} of {data.updates} updates carry it).</>}
+            >
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -249,15 +235,12 @@ export default function ResourcesAnalysisPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </FoldPanel>
 
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <div className="card-title">By resource</div>
-                  <div className="card-title-sub">Largest budgets first. Required ÷ demonstrated above 1.10 means the plan needs a productivity jump.</div>
-                </div>
-              </div>
+            <FoldPanel
+              title="By resource"
+              sub={<>Largest budgets first. Required ÷ demonstrated above 1.10 means the plan needs a productivity jump.</>}
+            >
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -289,7 +272,7 @@ export default function ResourcesAnalysisPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </FoldPanel>
           </>
         )}
       </div>

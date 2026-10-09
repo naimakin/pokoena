@@ -5,6 +5,7 @@
 // every indicator is read from the frozen per-update snapshots, the baseline
 // and the saved QSRA runs.
 
+import { FoldPanel } from "@/components/reporting/collapse";
 import { useCallback, useEffect, useState } from "react";
 import { PageState } from "@/components/PageShell";
 import { api, ApiError } from "@/lib/api";
@@ -141,14 +142,11 @@ export default function EarlyWarningsPage() {
         </div>
 
         {selected && (
-          <div className="card">
-            <div className="card-head">
-              <div>
-                <div className="card-title">{selected.name}</div>
-                <div className="card-title-sub">{selected.detail}</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setOpen(null)}>Close</button>
-            </div>
+          <FoldPanel
+            title={selected.name}
+            sub={selected.detail}
+            actions={<><button className="btn btn-ghost btn-sm" onClick={() => setOpen(null)}>Close</button></>}
+          >
             {selected.series.length > 0 && (
               <div className="table-wrap">
                 <table>
@@ -195,7 +193,7 @@ export default function EarlyWarningsPage() {
             ) : (
               selected.series.length === 0 && <p className="empty-state" style={{ padding: "1rem 1.1rem" }}>Nothing to list.</p>
             )}
-          </div>
+          </FoldPanel>
         )}
 
         <p style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
