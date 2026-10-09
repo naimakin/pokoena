@@ -17,7 +17,6 @@ import { TrendLine } from "@/components/charts/TrendLine";
 import { selectStyle } from "@/components/ScurveChart";
 import { NoProjectIllo } from "@/components/illustrations";
 import { BaselineVariancePanel } from "@/components/reporting/BaselineVariancePanel";
-import { ProjectGlance } from "@/components/dashboard/ProjectGlance";
 
 function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -208,9 +207,6 @@ export default function ProjectStatusPage() {
             </div>
           </div>
         </div>
-
-        {/* --- At a glance: whole project, the filters below don't apply --- */}
-        {!noSchedule && <ProjectGlance projectId={project.id} />}
 
         {/* --- Filter bar --- */}
         <div className="card" style={{ padding: "0.9rem 1.1rem" }}>
