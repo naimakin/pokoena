@@ -871,6 +871,8 @@ export type DashboardWidgetKey =
   | "hours-by-group"
   | "behind-plan"
   | "budget-actual"
+  | "project-timeline"
+  | "critical-activities"
   | "health-badge"
   | "s-curve"
   | "risk-top3"

@@ -1,4 +1,4 @@
-// Portfolio Dashboard — types for GET /portfolio (backend/app/api/routes/
+// Projects Dashboard (portfolio) — types for GET /portfolio (backend/app/api/routes/
 // portfolio.py) and the timeline's month / density helpers.
 
 import type { AnalyticsMeasure } from "@/lib/types";
@@ -177,4 +177,10 @@ export function varianceMonths(days: number | null): string {
   const months = days / 30.44;
   if (Math.abs(months) < 0.05) return "On baseline";
   return `${months > 0 ? "+" : "−"}${Math.abs(months).toFixed(1)} months`;
+}
+
+/** GET /dashboard/timeline — one project's timeline and most critical work. */
+export interface ProjectTimeline {
+  months: PortfolioMonth[];
+  top_activities: PortfolioActivity[];
 }

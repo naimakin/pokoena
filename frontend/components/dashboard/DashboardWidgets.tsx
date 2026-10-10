@@ -29,6 +29,9 @@ import {
   type AnalyticsStatus,
 } from "@/components/dashboard/AnalyticsWidgets";
 import { HelpTip } from "@/components/HelpTip";
+import { ActivityTable } from "@/components/portfolio/PortfolioParts";
+import { ProjectTimelineCard } from "@/components/dashboard/ProjectTimelineCard";
+import type { ProjectTimeline } from "@/lib/portfolio";
 import type { HelpKey } from "@/lib/help";
 import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "@/components/icons";
 
@@ -44,6 +47,8 @@ export interface WidgetContext {
   deadlineDays: number | null;
   analytics: ProjectAnalytics | null;
   analyticsStatus: AnalyticsStatus;
+  timeline: ProjectTimeline | null;
+  timelineStatus: AnalyticsStatus;
 }
 
 interface WidgetDef {
@@ -518,6 +523,33 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
     render: withAnalytics("budget vs actual", (a) => <BudgetActualCard a={a} />),
   },
 
+  "project-timeline": {
+    title: "Project Timeline",
+    description: "Where criticality concentrates, month by month",
+    span: "full",
+    help: "dash.timeline",
+    render: ({ project, timeline, timelineStatus, analytics }) =>
+      timeline ? (
+        <ProjectTimelineCard project={project} timeline={timeline} analytics={analytics} />
+      ) : (
+        <AnalyticsState status={timelineStatus === "locked" ? "error" : timelineStatus} what="the project timeline" />
+      ),
+  },
+
+  "critical-activities": {
+    title: "Most Critical Activities",
+    description: "Highest Criticality Scores, unfinished work only",
+    span: "full",
+    help: "dash.critical",
+    count: ({ timeline }) => (timeline ? timeline.top_activities.length : null),
+    render: ({ timeline, timelineStatus }) =>
+      timeline ? (
+        <ActivityTable rows={timeline.top_activities} />
+      ) : (
+        <AnalyticsState status={timelineStatus === "locked" ? "error" : timelineStatus} what="critical activities" />
+      ),
+  },
+
   "health-badge": {
     help: "dash.health",
     title: "Project Health",
@@ -719,10 +751,12 @@ export const WIDGET_ORDER: DashboardWidgetKey[] = [
   "time-vs-work",
   "s-curve",
   "monthly-hours",
+  "project-timeline",
   "hours-by-group",
   "behind-plan",
   "budget-actual",
   "health-badge",
   "risk-top3",
+  "critical-activities",
   "scope-table",
 ];

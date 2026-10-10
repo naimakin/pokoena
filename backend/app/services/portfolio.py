@@ -37,6 +37,7 @@ from app.models.user_tenant_role import TenantRole
 from app.services.analytics import Measure, has_cost, load_figures, totals
 from app.services.criticality import criticality, shown_dates
 from app.services.project_status import load_status_inputs, real_activities, rollup_from_inputs
+from app.services.schedule_current import get_current_import
 
 # Progress buckets on SPI — Project Status's three verdicts split one step finer
 # so a portfolio can tell "a little behind" from "behind".
@@ -214,6 +215,31 @@ def _months(scored: list[ScoredActivity]) -> list[MonthCell]:
         return []
     lo, hi = min(cells), max(cells)
     return [cells.get(i) or MonthCell(month=_month_from_index(i)) for i in range(lo, hi + 1)]
+
+
+def project_timeline(
+    db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID
+) -> tuple[list[MonthCell], list[ScoredActivity]]:
+    """One project's month-by-month criticality timeline and its scored
+    activities — what the portfolio row shows for it, without the Project
+    Status rollup (DCMA etc.) the scorecard needs. The Dashboard's Project
+    Timeline and the timeline's month drill-down read this."""
+    current = get_current_import(db, tenant_id, project_id)
+    activities = real_activities(
+        _current_programme(
+            db.query(Activity).filter(Activity.tenant_id == tenant_id, Activity.project_id == project_id).all(),
+            current.id if current else None,
+        )
+    )
+    scored = score_activities(db, tenant_id, project_id, activities)
+    return _months(scored), scored
+
+
+def top_critical(scored: list[ScoredActivity], limit: int) -> list[ScoredActivity]:
+    """Unfinished activities with a Criticality Score, highest first."""
+    ranked = [s for s in scored if s.score is not None]
+    ranked.sort(key=lambda s: (-(s.score or 0), s.activity.external_id))
+    return ranked[:limit]
 
 
 def project_portfolio(db: Session, tenant_id: uuid.UUID, project: Project) -> ProjectPortfolio:

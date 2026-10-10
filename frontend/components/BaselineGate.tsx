@@ -26,7 +26,7 @@ export const BASELINE_GATED_PATHS = new Set(["/recovery-plan"]);
 // P6 computed and the .xer import stored, none of which involve a baseline.
 // My Desk is the user's own pins, notes and approval queues — a project with no
 // baseline yet mustn't lock anyone out of their own notes.
-// Portfolio Dashboard spans every project, so one project lacking a baseline
+// Projects Dashboard (portfolio) spans every project, so one project lacking a baseline
 // mustn't hide it.
 // Changes compares two schedule updates with each other; the baseline is only
 // its fallback when a single update exists.

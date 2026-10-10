@@ -82,7 +82,6 @@ const TOP_SECTIONS: NavSection[] = [
       // The personal, cross-project inbox — the first stop of the day.
       { href: "/execution/my-desk", label: "My Desk", icon: PinIcon, visible: need("view_delivery") },
       { href: "/dashboard", label: "Dashboard", icon: GridIcon, visible: need("view_overview") },
-      { href: "/portfolio/dashboard", label: "Portfolio Dashboard", icon: BuildingIcon, visible: need("view_overview") },
     ],
   },
   {
@@ -149,6 +148,9 @@ const TOP_SECTIONS: NavSection[] = [
 // top-right corner (components/UserMenu.tsx), not the sidebar.
 const ADMIN_LINKS: NavChild[] = [
   { href: "/projects", label: "Projects", icon: FolderIcon, visible: need("manage_projects") },
+  // Every project side by side. Moved here from Overview: the header's project
+  // switcher already picks the one project the rest of the app shows.
+  { href: "/portfolio/dashboard", label: "Projects Dashboard", icon: BuildingIcon, visible: need("view_overview") },
   { href: "/user-management", label: "Users", icon: UsersIcon, visible: need("manage_users") },
   { href: "/administration/scopes", label: "Subcontractors", icon: LayersIcon, visible: need("manage_projects") },
 ];
@@ -162,6 +164,7 @@ const EXTRA_ROUTES: { prefix: string; visible: Visible }[] = [
 // Browser-tab labels for pages that aren't in the sidebar.
 const ACCOUNT_PAGE_LABELS: Record<string, string> = {
   "/projects": "Projects",
+  "/portfolio/dashboard": "Projects Dashboard",
   "/user-management": "Users",
   "/administration/scopes": "Subcontractors",
   "/administration/profile": "My Profile",

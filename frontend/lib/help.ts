@@ -18,7 +18,7 @@ export const HELP = {
     body: "Your own corner: approvals waiting on you, @mentions, pinned activities and private notes. Only you see it.",
   },
   "page.portfolio": {
-    title: "Portfolio Dashboard",
+    title: "Projects Dashboard",
     body: "Every project you can open, side by side. Click a phase, a status row or a project to narrow the page down.",
   },
   "page.projects": {
@@ -162,6 +162,14 @@ export const HELP = {
   "dash.budget-actual": {
     title: "Budget vs actual",
     body: "Budget at completion against actual to date, with the cumulative trend. Remaining is what P6 still has to spend.",
+  },
+  "dash.timeline": {
+    title: "Project timeline",
+    body: "Each month shaded by how critical the work active in it is; the strip below marks negative-float (red) and zero-float (amber) months. Click a month for its activities.",
+  },
+  "dash.critical": {
+    title: "Most critical activities",
+    body: "Unfinished activities with the highest Criticality Score — float, duration, free float and site risk combined.",
   },
   "dash.health": {
     title: "Project health",

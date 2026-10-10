@@ -26,6 +26,7 @@ import {
 import { HelpTip } from "@/components/HelpTip";
 import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
 import { KpiStrip, type AnalyticsStatus } from "@/components/dashboard/AnalyticsWidgets";
+import type { ProjectTimeline } from "@/lib/portfolio";
 import { NoProjectIllo } from "@/components/illustrations";
 import { fmtP6Date } from "@/components/reporting/format";
 
@@ -54,6 +55,8 @@ export default function DashboardPage() {
   const [curveStatus, setCurveStatus] = useState<CurveStatus>("idle");
   const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
   const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus>("idle");
+  const [timeline, setTimeline] = useState<ProjectTimeline | null>(null);
+  const [timelineStatus, setTimelineStatus] = useState<AnalyticsStatus>("idle");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +134,19 @@ export default function DashboardPage() {
           setAnalytics(null);
           setAnalyticsStatus(err instanceof ApiError && err.status === 423 ? "locked" : "error");
         });
+      if (wanted.has("project-timeline") || wanted.has("critical-activities")) {
+        setTimelineStatus("loading");
+        api
+          .get<ProjectTimeline>(`/dashboard/timeline?project_id=${project.id}`)
+          .then((res) => {
+            setTimeline(res);
+            setTimelineStatus("ready");
+          })
+          .catch(() => {
+            setTimeline(null);
+            setTimelineStatus("error");
+          });
+      }
       if (wanted.has("s-curve")) {
         setCurveStatus("loading");
         api
@@ -159,6 +175,8 @@ export default function DashboardPage() {
     setCurveStatus("idle");
     setAnalytics(null);
     setAnalyticsStatus("idle");
+    setTimeline(null);
+    setTimelineStatus("idle");
     load();
   }, [load]);
 
@@ -238,6 +256,8 @@ export default function DashboardPage() {
     deadlineDays,
     analytics,
     analyticsStatus,
+    timeline,
+    timelineStatus,
   };
 
   const kpiKeys = enabledKeys.filter((k) => WIDGET_REGISTRY[k].span === "kpi");

@@ -78,3 +78,11 @@ class PortfolioMonthActivitiesOut(BaseModel):
     month: str
     total: int
     activities: list[PortfolioActivityOut]
+
+
+class ProjectTimelineOut(BaseModel):
+    """One project's criticality timeline and its most critical activities —
+    the Dashboard's Project Timeline / Most Critical Activities cards."""
+
+    months: list[PortfolioMonthOut]
+    top_activities: list[PortfolioActivityOut]

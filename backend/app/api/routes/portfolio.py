@@ -29,6 +29,7 @@ from app.services.portfolio import (
     float_days,
     portfolio_months,
     project_portfolio,
+    project_timeline,
     visible_projects,
 )
 
@@ -45,7 +46,7 @@ def _require_company(ctx: AuthContext) -> None:
     check_capability(ctx, Capability.view_overview)
 
 
-def _activity_out(p: Project, s: ScoredActivity) -> PortfolioActivityOut:
+def activity_out(p: Project, s: ScoredActivity) -> PortfolioActivityOut:
     a = s.activity
     return PortfolioActivityOut(
         project_id=p.id,
@@ -134,7 +135,7 @@ def _portfolio(db: Session, ctx: AuthContext, visible: list[Project]) -> Portfol
 
     top: list[PortfolioActivityOut] = []
     for pp in projects:
-        top.extend(_activity_out(pp.project, s) for s in pp.scored if s.score is not None)
+        top.extend(activity_out(pp.project, s) for s in pp.scored if s.score is not None)
     top.sort(key=lambda a: (-(a.criticality_score or 0), a.project_code, a.external_id))
 
     return PortfolioOut(
@@ -159,11 +160,11 @@ def get_month_activities(
     _require_company(ctx)
     project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx, Capability.view_overview)
-    pp = project_portfolio(db, ctx.tenant_id, project)
-    in_month = activities_in_month(pp.scored, month)
+    _months, scored = project_timeline(db, ctx.tenant_id, project.id)
+    in_month = activities_in_month(scored, month)
     return PortfolioMonthActivitiesOut(
         project_id=project.id,
         month=month,
         total=len(in_month),
-        activities=[_activity_out(project, s) for s in in_month[:_MONTH_ACTIVITIES]],
+        activities=[activity_out(project, s) for s in in_month[:_MONTH_ACTIVITIES]],
     )

@@ -27,7 +27,10 @@ from app.models.update_period import UpdatePeriod
 from app.models.user_tenant_role import Capability
 from app.services.analytics import CURRENCY, compute_project_analytics
 from app.services.mitigation import build_slip_report
+from app.services.portfolio import project_timeline, top_critical
 from app.services.progress_summary import compute_current_update, compute_progress_summary, evm_point_at
+from app.api.routes.portfolio import activity_out
+from app.schemas.portfolio import PortfolioMonthOut, ProjectTimelineOut
 from app.schemas.dashboard import (
     AnalyticsGroupingOut,
     AnalyticsGroupOut,
@@ -65,11 +68,13 @@ WIDGET_KEYS = (
     "time-vs-work",
     "s-curve",
     "monthly-hours",
+    "project-timeline",
     "hours-by-group",
     "behind-plan",
     "budget-actual",
     "health-badge",
     "risk-top3",
+    "critical-activities",
     "scope-table",
 )
 
@@ -84,6 +89,8 @@ NEW_ENABLED_WIDGETS = {
     "hours-by-group",
     "behind-plan",
     "budget-actual",
+    "project-timeline",
+    "critical-activities",
 }
 
 DEFAULT_WIDGETS: list[dict] = [
@@ -699,4 +706,35 @@ def _get_dashboard_analytics(db: Session, ctx: AuthContext, project_id: uuid.UUI
             )
             for r in a.behind
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Project timeline — the portfolio's timeline row and most-critical list for
+# this one project (services/portfolio.py::project_timeline)
+# ---------------------------------------------------------------------------
+
+_TIMELINE_TOP = 15
+
+
+@router.get("/timeline", response_model=ProjectTimelineOut)
+def get_project_timeline(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
+) -> Response:
+    project = get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    return cached_json(
+        "dashboard-timeline",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id],
+        compute=lambda: _project_timeline(db, ctx, project),
+    )
+
+
+def _project_timeline(db: Session, ctx: AuthContext, project: Project) -> ProjectTimelineOut:
+    months, scored = project_timeline(db, ctx.tenant_id, project.id)
+    return ProjectTimelineOut(
+        months=[PortfolioMonthOut(**vars(m)) for m in months],
+        top_activities=[activity_out(project, s) for s in top_critical(scored, _TIMELINE_TOP)],
     )

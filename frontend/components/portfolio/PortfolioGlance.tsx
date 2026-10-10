@@ -1,6 +1,6 @@
 "use client";
 
-// Portfolio Dashboard's visual summary: the phase donut (which also filters
+// Projects Dashboard's visual summary: the phase donut (which also filters
 // the page), the portfolio's labor hours gauge, a portfolio SPI tile, and
 // "Progress by project" — one bullet row per project, built to stay legible
 // from two projects to forty.

@@ -64,3 +64,24 @@ def test_analytics_rolls_up_baseline_hours_and_cost(client, db_session):
     assert body["planned_pct"] is None or 0 <= body["planned_pct"] <= 100
     for grouping in body["groupings"]:
         assert len(grouping["groups"]) >= 2
+
+
+def test_project_timeline_lists_months_and_critical_activities(client, db_session):
+    _, project = _setup(db_session)
+    _login(client)
+    client.post(
+        f"/projects/{project.id}/evm/baseline/program",
+        files={"file": (RESOURCE_FIXTURE.name, RESOURCE_FIXTURE.read_bytes(), "application/octet-stream")},
+    )
+
+    res = client.get(f"/dashboard/timeline?project_id={project.id}")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["months"] and all(m["tasks"] >= 0 for m in body["months"])
+    scores = [a["criticality_score"] for a in body["top_activities"]]
+    assert scores == sorted(scores, reverse=True)
+
+    month = next(m["month"] for m in body["months"] if m["tasks"] > 0)
+    drill = client.get(f"/portfolio/projects/{project.id}/months/{month}")
+    assert drill.status_code == 200 and drill.json()["total"] > 0

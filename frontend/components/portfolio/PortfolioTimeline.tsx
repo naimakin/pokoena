@@ -40,12 +40,15 @@ export function PortfolioTimeline({
   range,
   showDensity,
   onMonthClick,
+  showPortfolioRow = true,
 }: {
   projects: PortfolioProject[];
   portfolio: PortfolioMonth[];
   range: [number, number]; // inclusive month indexes
   showDensity: boolean;
   onMonthClick: (project: PortfolioProject, month: string) => void;
+  /** The summed "Portfolio" row — off on a single project's Dashboard. */
+  showPortfolioRow?: boolean;
 }) {
   const [hover, setHover] = useState<Hover | null>(null);
   const [lo, hi] = range;
@@ -149,15 +152,17 @@ export function PortfolioTimeline({
           </div>
 
           {/* portfolio row */}
-          <div className="pf-tl-row pf-tl-portfolio" style={{ gridTemplateColumns: columns }}>
-            <div className="pf-tl-label">
-              <span className="pf-tl-name">Portfolio</span>
-              <span className="pf-tl-meta" title="Every project below, added together month by month">
-                Sum of {projects.length} project{projects.length === 1 ? "" : "s"}
-              </span>
+          {showPortfolioRow && (
+            <div className="pf-tl-row pf-tl-portfolio" style={{ gridTemplateColumns: columns }}>
+              <div className="pf-tl-label">
+                <span className="pf-tl-name">Portfolio</span>
+                <span className="pf-tl-meta" title="Every project below, added together month by month">
+                  Sum of {projects.length} project{projects.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {cells(portfolio, portfolioCuts, "Portfolio")}
             </div>
-            {cells(portfolio, portfolioCuts, "Portfolio")}
-          </div>
+          )}
 
           {projects.map((p) => (
             <div key={p.id} className="pf-tl-project">
