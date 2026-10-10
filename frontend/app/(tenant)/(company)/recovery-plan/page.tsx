@@ -14,6 +14,7 @@ import { selectStyle } from "@/components/ScurveChart";
 import { RecoveryPlanPanel } from "@/components/recovery/RecoveryPlanPanel";
 import { can } from "@/lib/permissions";
 import { NoProjectIllo } from "@/components/illustrations";
+import { HelpTip } from "@/components/HelpTip";
 
 type Grouping = "contractor" | "wbs" | "flat";
 const GROUP_KEY = "poko:recovery:grouping";
@@ -309,7 +310,9 @@ export default function RecoveryPlanPage() {
       <div className="a-content recovery-print rp-page">
         <div className="page-head">
           <div>
-            <div className="page-title">Recovery Plan</div>
+            <div className="page-title">
+              Recovery Plan <HelpTip id="page.recovery-plan" />
+            </div>
             <div className="page-desc">
               {!report || report.comparison_basis === "none"
                 ? "Slippage tracking starts once two schedule updates carry an activity snapshot."

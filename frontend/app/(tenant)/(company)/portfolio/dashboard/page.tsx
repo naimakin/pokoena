@@ -32,6 +32,7 @@ import {
   type PortfolioProject,
 } from "@/lib/portfolio";
 import { useProjectContext } from "@/lib/project-context";
+import { HelpTip } from "@/components/HelpTip";
 
 type Window = "1m" | "3m" | "6m" | "1y" | "2y" | "4y" | "all" | "custom";
 type VerdictFilter =
@@ -206,7 +207,9 @@ export default function PortfolioDashboardPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Portfolio Dashboard</div>
+            <div className="page-title">
+              Portfolio Dashboard <HelpTip id="page.portfolio" />
+            </div>
             <div className="page-desc">
               Every project side by side — schedule performance, quality, and where criticality concentrates month by
               month
@@ -260,7 +263,9 @@ export default function PortfolioDashboardPage() {
             <div className="card pf-status">
               <div className="card-head">
                 <div>
-                  <div className="card-title">Overall status</div>
+                  <div className="card-title">
+                    Overall status <HelpTip id="pf.status" />
+                  </div>
                   <div className="card-title-sub">Click a row to filter the scorecard and timelines</div>
                 </div>
                 {verdict && (
@@ -308,7 +313,9 @@ export default function PortfolioDashboardPage() {
             <div className="card pf-card">
               <div className="card-head">
                 <div>
-                  <div className="card-title">Portfolio scorecard</div>
+                  <div className="card-title">
+                    Portfolio scorecard <HelpTip id="pf.scorecard" />
+                  </div>
                   <div className="card-title-sub">
                     {sorted.length} of {data.projects.length} projects · click a project to open its dashboard
                   </div>
@@ -405,7 +412,9 @@ export default function PortfolioDashboardPage() {
             <div className="card pf-card">
               <div className="card-head">
                 <div>
-                  <div className="card-title">Portfolio timelines</div>
+                  <div className="card-title">
+                    Portfolio timelines <HelpTip id="pf.timelines" />
+                  </div>
                   <div className="card-title-sub">
                     Monthly criticality density — the summed Criticality Scores of the work active each month. Click
                     a month for its activities.
@@ -494,6 +503,7 @@ export default function PortfolioDashboardPage() {
             <FoldCard
               className="pf-card"
               title="Most critical activities"
+              help="pf.critical"
               subtitle="Highest Criticality Scores across the portfolio, unfinished work only"
               hint={`${data.top_activities.length} activities`}
             >

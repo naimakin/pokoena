@@ -12,6 +12,7 @@ import { StatusDonut, type DonutSegment } from "@/components/charts/Rings";
 import { PairedBars, type BarRow } from "@/components/charts/PairedBars";
 import { fmtCompact, fmtHours, fmtMoney, pctOf, ratioTone } from "@/components/charts/viz";
 import { fmtNum } from "@/components/reporting/format";
+import { HelpTip } from "@/components/HelpTip";
 
 export type Phase = "complete" | "progress" | "notstarted" | "nobaseline";
 
@@ -83,6 +84,7 @@ export function PortfolioGlance({
             <div className="card-title">Projects by phase</div>
             <div className="card-title-sub">Click a phase to filter the page</div>
           </div>
+          <HelpTip id="pf.phase" className="card-head-help" />
         </div>
         <div className="pf-glance-body">
           <StatusDonut
@@ -102,6 +104,7 @@ export function PortfolioGlance({
               {measured.length} of {projects.length} projects with a baseline, hours-weighted
             </div>
           </div>
+          <HelpTip id="pf.hours" className="card-head-help" />
         </div>
         <div className="pf-glance-body">
           <Gauge
@@ -131,6 +134,7 @@ export function PortfolioGlance({
             <div className="card-title">Portfolio performance</div>
             <div className="card-title-sub">Hours-weighted across baselined projects</div>
           </div>
+          <HelpTip id="pf.performance" className="card-head-help" />
         </div>
         <div className="pf-glance-body pf-spi">
           <div>
@@ -226,7 +230,9 @@ export function ProgressByProject({
     <section className="card pf-card">
       <div className="card-head">
         <div>
-          <div className="card-title">Progress by project</div>
+          <div className="card-title">
+            Progress by project <HelpTip id="pf.progress" />
+          </div>
           <div className="card-title-sub">
             Bar = actual, tick = planned by the data date
             {behind > 0 && ` · ${behind} well behind plan`}

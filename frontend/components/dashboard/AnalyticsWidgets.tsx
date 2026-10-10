@@ -10,6 +10,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { AnalyticsMeasure, ProjectAnalytics } from "@/lib/types";
 import { fmtNum, fmtP6Date } from "@/components/reporting/format";
 import { CheckIcon, ChevronRightIcon } from "@/components/icons";
+import { HelpTip } from "@/components/HelpTip";
+import type { HelpKey } from "@/lib/help";
 import { Gauge } from "@/components/charts/Gauge";
 import { TimeWorkRings } from "@/components/charts/Rings";
 import { PairedBars, type BarRow } from "@/components/charts/PairedBars";
@@ -73,6 +75,7 @@ function KpiCell({
   tone,
   late,
   lead,
+  help,
 }: {
   label: string;
   value: ReactNode;
@@ -80,12 +83,14 @@ function KpiCell({
   tone?: string;
   late?: boolean;
   lead?: ReactNode;
+  help?: HelpKey;
 }) {
   return (
     <div className={`viz-kpi${late ? " is-late" : ""}`}>
       <span className="viz-kpi-label">
         {lead}
         {label}
+        {help && <HelpTip id={help} />}
       </span>
       <span className={`viz-kpi-value num${tone && tone !== "neutral" ? ` tone-${tone}` : ""}`}>{value}</span>
       {sub && <span className="viz-kpi-sub">{sub}</span>}
@@ -102,6 +107,7 @@ export function KpiStrip({ a }: { a: ProjectAnalytics }) {
       <KpiCell label="Forecast finish" value={fmtP6Date(a.forecast_finish)} sub="Current schedule" />
       <KpiCell
         label="Delay"
+        help="dash.kpi-delay"
         late={delay != null && delay > 0}
         tone={delay == null ? undefined : delay > 0 ? "crit" : "good"}
         value={
@@ -115,7 +121,7 @@ export function KpiStrip({ a }: { a: ProjectAnalytics }) {
         }
         sub="Forecast vs baseline finish"
       />
-      <KpiCell label="SPI" value={fmtNum(a.spi)} tone={spiTone(a.spi)} sub={spiNote(a.spi)} />
+      <KpiCell label="SPI" help="dash.kpi-spi" value={fmtNum(a.spi)} tone={spiTone(a.spi)} sub={spiNote(a.spi)} />
       <KpiCell
         label="Data date"
         value={fmtP6Date(a.data_date)}

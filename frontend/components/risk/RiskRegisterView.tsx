@@ -8,6 +8,7 @@ import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { Activity, RiskItem, RiskStatusValue, User, WbsNode } from "@/lib/types";
 import { QsraRiskEditor } from "@/components/risk/QsraRiskEditor";
+import { HelpTip } from "@/components/HelpTip";
 
 const CATEGORIES = ["Design", "Procurement", "Construction", "Weather", "Commercial", "Permitting", "Interface", "Other"];
 const STATUSES: RiskStatusValue[] = ["open", "mitigating", "closed", "occurred"];
@@ -142,7 +143,9 @@ export function RiskRegisterView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Risk Register</div>
+            <div className="page-title">
+              Risk Register <HelpTip id="page.risk-register" />
+            </div>
             <div className="page-desc">
               {risks.length} risks · probability × impact scored 1–25 · {risks.filter((r) => r.qsra_enabled).length}{" "}
               quantified for <Link href="/risk">QSRA</Link>

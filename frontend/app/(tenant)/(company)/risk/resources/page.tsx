@@ -14,6 +14,7 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { ResourceAnalysis } from "@/lib/types";
 import { fmtDate, fmtNum, WeeklyUnitsChart } from "@/components/risk/RiskCharts";
+import { HelpTip } from "@/components/HelpTip";
 
 function ratioChip(r: number | null) {
   if (r === null) return <span className="chip chip-neutral">—</span>;
@@ -76,7 +77,9 @@ export default function ResourcesAnalysisPage() {
       <div className="a-content" style={{ opacity: refreshing ? 0.6 : 1 }}>
         <div className="page-head">
           <div>
-            <div className="page-title">Resources Analysis</div>
+            <div className="page-title">
+              Resources Analysis <HelpTip id="page.resources" />
+            </div>
             <div className="page-desc">
               Planned, earned and remaining work per week, and the finish range the job&apos;s demonstrated
               production supports. Data date {fmtDate(data.data_date)} · {data.updates} update
@@ -163,6 +166,7 @@ export default function ResourcesAnalysisPage() {
 
             <FoldPanel
               title="Two forecasts, two questions"
+            help="res.two-forecasts"
               sub={<>The network (QSRA) asks what logic and risks allow; production asks what the pace of work supports.
                     When production is later, the plan needs more crews, not just better logic.</>}
             >
@@ -200,6 +204,7 @@ export default function ResourcesAnalysisPage() {
 
             <FoldPanel
               title="Units per week"
+            help="res.weekly"
               sub={<>Planned from the baseline dates; earned is budget × physical % between updates, spread evenly over
                     each update period; remaining is P6&apos;s remaining units over the current forecast dates.</>}
             >
@@ -208,6 +213,7 @@ export default function ResourcesAnalysisPage() {
 
             <FoldPanel
               title="Production between updates"
+            help="res.production"
               sub={<>Productivity = earned ÷ actual units in the period (needs assignment history —{" "}
                     {data.snapshots_with_actuals} of {data.updates} updates carry it).</>}
             >
@@ -239,6 +245,7 @@ export default function ResourcesAnalysisPage() {
 
             <FoldPanel
               title="By resource"
+            help="res.by-resource"
               sub={<>Largest budgets first. Required ÷ demonstrated above 1.10 means the plan needs a productivity jump.</>}
             >
               <div className="table-wrap">

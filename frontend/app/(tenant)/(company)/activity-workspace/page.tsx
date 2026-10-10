@@ -39,6 +39,7 @@ import {
 } from "@/components/workspace/model";
 import { useSavedFilters } from "@/components/workspace/useSavedFilters";
 import { WorkspacePanes } from "@/components/workspace/WorkspacePanes";
+import { HelpTip } from "@/components/HelpTip";
 
 const TITLE = "Activity Workspace";
 const SECTION = "Programme";
@@ -436,7 +437,9 @@ function ActivityWorkspace() {
       <div ref={contentRef} className={`a-content fill-viewport ws-content${isFullscreen ? " is-fullscreen" : ""}`}>
         <div className="page-head">
           <div>
-            <div className="page-title">{TITLE}</div>
+            <div className="page-title">
+              {TITLE} <HelpTip id="page.activity-workspace" />
+            </div>
             <div className="page-desc">{summary}</div>
           </div>
           {imports.length > 0 && (

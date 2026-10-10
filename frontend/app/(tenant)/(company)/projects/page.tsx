@@ -6,6 +6,7 @@ import { useToast } from "@/components/Toast";
 import { DeleteProjectModal } from "@/components/DeleteProjectModal";
 import { CheckIcon, FolderPlusIcon, PencilIcon, XIcon } from "@/components/icons";
 import type { Project, ProjectCreatePayload, User } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 export default function ProjectsPage() {
   const { showToast } = useToast();
@@ -123,7 +124,11 @@ export default function ProjectsPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Projects</div>
+            <div className="page-title">
+
+              Projects <HelpTip id="page.projects" />
+
+            </div>
             <div className="page-desc">Every project your company runs through Poko.</div>
           </div>
           {isCompanyAdmin && (

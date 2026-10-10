@@ -19,6 +19,7 @@ import { DiceIcon, SettingsIcon } from "@/components/icons";
 import { CdfChart, fmtDate, fmtNum, HBarList, HistogramChart } from "@/components/risk/RiskCharts";
 import { RecommendationList } from "@/components/risk/RecommendationList";
 import { TrendLine } from "@/components/charts/TrendLine";
+import { HelpTip } from "@/components/HelpTip";
 
 function signedDays(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
@@ -170,7 +171,9 @@ export default function QsraPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">QSRA &amp; Forecast</div>
+            <div className="page-title">
+              QSRA &amp; Forecast <HelpTip id="page.qsra" />
+            </div>
             <div className="page-desc">
               Monte Carlo on the live logic network with the risks in the register — the credible earliest and
               latest finish, what drives the spread, and where to act.
@@ -321,6 +324,7 @@ export default function QsraPage() {
 
             <FoldPanel
               title="Probability of finishing by date"
+              help="qsra.probability"
               sub={<>Plan at P50, commit at P80. The CPM date is optimistic wherever parallel paths converge (merge bias).</>}
             >
               <CdfChart series={cdfSeries} markers={markers} />
@@ -345,6 +349,7 @@ export default function QsraPage() {
 
             <FoldPanel
               title="From the CPM date to P80"
+              help="qsra.cpm-to-p80"
               sub={<>Working days each layer adds at P80. Risk exposure {signedDays(res.risk_exposure_p80_days)}
                     {res.mitigation_benefit_p80_days !== null && ` · mitigation recovers ${fmtNum(res.mitigation_benefit_p80_days, 1)} d`}</>}
             >
@@ -362,6 +367,7 @@ export default function QsraPage() {
 
             <FoldPanel
               title="What drives the risk"
+              help="qsra.drivers"
               sub={<>{run.ranking
                       ? `Change in P80 when each risk is switched off (${run.results.ranking_meta?.iterations ?? ""} iterations each). Contributions don't add up — risks interact through the network.`
                       : "Screening: expected delay = probability × how much later the finish is when the risk hits."}</>}
@@ -430,6 +436,7 @@ export default function QsraPage() {
 
             <FoldPanel
               title="Activity sensitivity"
+              help="qsra.sensitivity"
               sub={<>Criticality = share of runs on the driving path. SSI = criticality × duration spread ÷ finish spread —
                     where recovery effort moves the finish most.</>}
               actions={<><label className="checkbox-row">
@@ -471,6 +478,7 @@ export default function QsraPage() {
 
             <FoldPanel
               title="Recommendations from this run"
+              help="qsra.recommendations"
               sub={<>Early warnings and resource checks are added on the <Link href="/risk/mitigation-plans?tab=recommendations">Recommendations</Link> tab of Mitigation.</>}
             >
               <RecommendationList items={res.recommendations} empty="Nothing flagged by this run." />
@@ -481,6 +489,7 @@ export default function QsraPage() {
         {history.length > 0 && (
           <FoldPanel
             title="Confidence across runs"
+            help="qsra.confidence"
             sub={<>Probability of meeting {history[history.length - 1].target_date ? "the target" : "the CPM date"} at each run</>}
           >
             <div style={{ padding: ".6rem 1.1rem" }}>

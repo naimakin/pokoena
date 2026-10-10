@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "@/components/icons";
+import { HelpTip } from "@/components/HelpTip";
+import type { HelpKey } from "@/lib/help";
 
 // Expand/collapse for report blocks and the long sections on the Reporting
 // pages. A page that wants "Expand all / Collapse all" owns the set of closed
@@ -68,6 +70,7 @@ export function FoldCard({
   hint,
   defaultOpen = true,
   className,
+  help,
   children,
 }: {
   title: ReactNode;
@@ -76,6 +79,8 @@ export function FoldCard({
   hint?: string;
   defaultOpen?: boolean;
   className?: string;
+  /** A "?" beside the header (lib/help.ts) — outside the fold button. */
+  help?: HelpKey;
   children: ReactNode;
 }) {
   const { open, toggle, bodyId } = useFold(defaultOpen);
@@ -103,6 +108,7 @@ export function FoldCard({
             </span>
           )}
         </button>
+        {help && <HelpTip id={help} />}
       </h2>
       <div id={bodyId} className={`fold-body${open ? "" : " is-folded"}`}>
         {children}
@@ -144,12 +150,15 @@ export function FoldPanel({
   sub,
   actions,
   defaultOpen = true,
+  help,
   children,
 }: {
   title: ReactNode;
   sub?: ReactNode;
   actions?: ReactNode;
   defaultOpen?: boolean;
+  /** A "?" at the header's right end (lib/help.ts), shown folded or not. */
+  help?: HelpKey;
   children: ReactNode;
 }) {
   const { open, toggle, bodyId } = useFold(defaultOpen);
@@ -163,7 +172,12 @@ export function FoldPanel({
             {sub && <span className="card-title-sub">{sub}</span>}
           </span>
         </button>
-        {actions && open && <div className="fold-panel-actions">{actions}</div>}
+        {((actions && open) || help) && (
+          <div className="card-head-end">
+            {actions && open && <div className="fold-panel-actions">{actions}</div>}
+            {help && <HelpTip id={help} />}
+          </div>
+        )}
       </div>
       <div id={bodyId} className={`fold-body${open ? "" : " is-folded"}`}>
         {children}

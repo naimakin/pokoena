@@ -16,6 +16,7 @@ import type {
   ReportFormat,
   ReportHeader,
 } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const REQUIREMENT_LABEL: Record<string, string> = {
   baseline: "Needs a locked baseline",
@@ -176,7 +177,9 @@ export default function ReportsPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Report Builder</div>
+            <div className="page-title">
+              Report Builder <HelpTip id="page.report-builder" />
+            </div>
             <div className="page-desc">
               Pick the blocks a report contains, save it as a named format, then open it to read or
               print. Everything is generated from the current programme, so a report and the .xer it

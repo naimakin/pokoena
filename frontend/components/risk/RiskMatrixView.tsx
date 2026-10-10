@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { RiskItem, RiskStatusValue } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const STATUSES: RiskStatusValue[] = ["open", "mitigating", "closed", "occurred"];
 
@@ -77,7 +78,9 @@ export function RiskMatrixView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Risk Register</div>
+            <div className="page-title">
+              Risk Register <HelpTip id="page.risk-register" />
+            </div>
             <div className="page-desc">Probability × Impact, {filtered.length} risks</div>
           </div>
         </div>

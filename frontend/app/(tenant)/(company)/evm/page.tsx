@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
 import { can } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/user-context";
+import { HelpTip } from "@/components/HelpTip";
 
 const GRANULARITIES = ["daily", "weekly", "monthly"] as const;
 type Granularity = (typeof GRANULARITIES)[number];
@@ -153,7 +154,9 @@ export default function EvmPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">S-Curve &amp; EVM</div>
+            <div className="page-title">
+              S-Curve &amp; EVM <HelpTip id="page.evm" />
+            </div>
             <div className="page-desc">Earned Value Management against a locked Performance Measurement Baseline</div>
           </div>
         </div>
@@ -278,6 +281,7 @@ export default function EvmPage() {
               <div className="card" style={{ marginTop: "1rem" }}>
                 <div className="card-head">
                   <div className="card-title">Baseline History</div>
+                  <HelpTip id="evm.history" className="card-head-help" />
                 </div>
                 <div className="table-wrap">
                   <table>

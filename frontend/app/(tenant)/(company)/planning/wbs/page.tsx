@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { useProjectContext } from "@/lib/project-context";
 import type { ScheduleImport, WbsNode } from "@/lib/types";
 import { ChevronDownIcon, EyeIcon, EyeOffIcon, XIcon } from "@/components/icons";
+import { HelpTip } from "@/components/HelpTip";
 
 interface TreeNode extends WbsNode {
   children: TreeNode[];
@@ -291,7 +292,9 @@ export default function WbsPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">WBS</div>
+            <div className="page-title">
+              WBS <HelpTip id="page.wbs" />
+            </div>
             <div className="page-desc">
               {nodesLoading
                 ? "Loading…"

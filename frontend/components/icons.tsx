@@ -427,3 +427,15 @@ export function AtSignIcon({ className = "icon", ...rest }: IconProps) {
     </svg>
   );
 }
+
+/** Filled info disc (AppDynamics-style help marker): the disc takes
+ *  currentColor, the "i" is cut out in the surface colour. */
+export function HelpIcon({ className = "icon", ...rest }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" {...rest}>
+      <circle cx="12" cy="12" r="10" fill="currentColor" stroke="none" />
+      <line x1="12" y1="11" x2="12" y2="16.5" stroke="var(--surface)" strokeWidth="2.2" />
+      <circle cx="12" cy="7.6" r="1.35" fill="var(--surface)" stroke="none" />
+    </svg>
+  );
+}

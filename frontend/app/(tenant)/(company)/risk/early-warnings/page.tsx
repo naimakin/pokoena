@@ -12,6 +12,7 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { EarlyWarningIndicator, EarlyWarnings, SignalStatus } from "@/lib/types";
 import { fmtDate, Sparkline } from "@/components/risk/RiskCharts";
+import { HelpTip } from "@/components/HelpTip";
 
 const STATUS: Record<SignalStatus, { chip: string; label: string }> = {
   red: { chip: "chip-crit", label: "Act now" },
@@ -101,7 +102,9 @@ export default function EarlyWarningsPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Early Warnings</div>
+            <div className="page-title">
+              Early Warnings <HelpTip id="page.early-warnings" />
+            </div>
             <div className="page-desc">
               Weak signals read from {data.updates.length} schedule update{data.updates.length === 1 ? "" : "s"}
               {data.updates.length > 0 && ` (${data.updates[0].label} → ${data.updates[data.updates.length - 1].label})`} —

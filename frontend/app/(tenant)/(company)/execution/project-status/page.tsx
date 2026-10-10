@@ -17,6 +17,7 @@ import { TrendLine } from "@/components/charts/TrendLine";
 import { selectStyle } from "@/components/ScurveChart";
 import { NoProjectIllo } from "@/components/illustrations";
 import { BaselineVariancePanel } from "@/components/reporting/BaselineVariancePanel";
+import { HelpTip } from "@/components/HelpTip";
 
 function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -199,7 +200,9 @@ export default function ProjectStatusPage() {
       <div className="a-content" data-dash-theme="calm">
         <div className="page-head">
           <div>
-            <div className="page-title">Project Status</div>
+            <div className="page-title">
+              Project Status <HelpTip id="page.project-status" />
+            </div>
             <div className="page-desc">
               {noSchedule
                 ? "No schedule imported yet — upload a .xer from Programme Files."
@@ -304,7 +307,7 @@ export default function ProjectStatusPage() {
         {/* --- Project Summary --- */}
         <div className="card-head" style={{ border: "none", padding: 0 }}>
           <div className="card-title" style={{ fontFamily: "var(--font-display)", fontSize: "1rem", letterSpacing: "-.01em" }}>
-            Project summary
+            Project summary <HelpTip id="status.summary" />
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
@@ -351,7 +354,7 @@ export default function ProjectStatusPage() {
         {/* --- Priorities Matrix --- */}
         <div className="card-head" style={{ border: "none", padding: 0 }}>
           <div className="card-title" style={{ fontFamily: "var(--font-display)", fontSize: "1rem", letterSpacing: "-.01em" }}>
-            Priorities matrix
+            Priorities matrix <HelpTip id="status.priorities" />
           </div>
           <div className="card-title-sub">
             {status.priorities.filtered_total} activities · Important × Urgent

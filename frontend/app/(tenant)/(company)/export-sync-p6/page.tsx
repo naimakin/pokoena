@@ -8,6 +8,7 @@ import type { Activity, ScheduleImport, SyncLogEntry } from "@/lib/types";
 import { DownloadIcon } from "@/components/icons";
 import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
+import { HelpTip } from "@/components/HelpTip";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -217,7 +218,9 @@ export default function ExportSyncP6Page() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Export / Sync to P6</div>
+            <div className="page-title">
+              Export / Sync to P6 <HelpTip id="page.export-sync" />
+            </div>
             <div className="page-desc">
               Download a programme as a .xer file to update it back in Primavera P6. Every export
               and import is numbered per project — <span className="mono">EXP-n</span> going out,{" "}

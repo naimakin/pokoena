@@ -28,6 +28,8 @@ import {
   TimeVsWork,
   type AnalyticsStatus,
 } from "@/components/dashboard/AnalyticsWidgets";
+import { HelpTip } from "@/components/HelpTip";
+import type { HelpKey } from "@/lib/help";
 import { CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "@/components/icons";
 
 export type CurveStatus = "idle" | "loading" | "ready" | "locked" | "error";
@@ -53,6 +55,8 @@ interface WidgetDef {
   pad?: boolean;
   /** Optional right-hand side of the card header (a chip, a link). */
   action?: (ctx: WidgetContext) => ReactNode;
+  /** The "?" in the card header (lib/help.ts). */
+  help?: HelpKey;
   /** Optional count shown beside the title in the muted weight. */
   count?: (ctx: WidgetContext) => number | null;
   render: (ctx: WidgetContext) => ReactNode;
@@ -132,6 +136,7 @@ function Kpi({
   icon,
   tone,
   title,
+  help,
   children,
   footer,
 }: {
@@ -139,13 +144,17 @@ function Kpi({
   icon: ReactNode;
   tone: Tone;
   title?: string;
+  help?: HelpKey;
   children: ReactNode;
   footer?: ReactNode;
 }) {
   return (
     <div className="card kpi" title={title}>
       <div className="kpi-top">
-        <span className="kpi-label">{label}</span>
+        <span className="kpi-label">
+          {label}
+          {help && <HelpTip id={help} />}
+        </span>
         <div className={`kpi-icon is-${tone}`}>{icon}</div>
       </div>
       {children}
@@ -213,6 +222,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
         return (
           <Kpi
             label="Current update"
+            help="dash.current-update"
             tone="info"
             icon={<CalendarIcon className="icon" />}
             title={cu.filename}
@@ -302,6 +312,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
         return (
           <Kpi
             label="Next update"
+            help="dash.next-update"
             tone={tone}
             icon={<ClockIcon className="icon" />}
             footer={
@@ -350,6 +361,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
         return (
           <Kpi
             label="This update"
+            help="dash.this-update"
             tone="good"
             icon={<CheckIcon className="icon" />}
             footer={
@@ -422,6 +434,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
       return (
         <Kpi
           label="Recovery plans"
+          help="dash.recovery"
           tone={open > 0 ? "warn" : "neutral"}
           icon={<TrendingUpIcon className="icon" />}
           footer={
@@ -446,6 +459,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "hours-gauge": {
+    help: "dash.hours",
     title: "Labor Hours",
     description: "Actual vs planned units % against the baseline",
     span: "third",
@@ -453,6 +467,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "cost-gauge": {
+    help: "dash.cost",
     title: "Cost",
     description: "Spent vs planned spend against the baseline",
     span: "third",
@@ -462,6 +477,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "time-vs-work": {
+    help: "dash.time-vs-work",
     title: "Time vs Work",
     description: "Share of the baseline span elapsed vs share of work done",
     span: "third",
@@ -469,6 +485,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "monthly-hours": {
+    help: "dash.monthly",
     title: "Monthly Progress",
     description: "Planned vs actual by month, with the cumulative curves",
     span: "full",
@@ -476,6 +493,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "hours-by-group": {
+    help: "dash.by-group",
     title: "Progress by WBS / Code",
     description: "Planned to date vs actual for each branch or code value",
     span: "half",
@@ -483,6 +501,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "behind-plan": {
+    help: "dash.behind-plan",
     title: "Behind Plan",
     description: "Unfinished activities trailing the baseline's planned %",
     span: "half",
@@ -492,6 +511,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "budget-actual": {
+    help: "dash.budget-actual",
     title: "Budget vs Actual",
     description: "Budget at completion, actual to date and the cumulative trend",
     span: "half",
@@ -499,6 +519,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "health-badge": {
+    help: "dash.health",
     title: "Project Health",
     description: "Composite score across schedule, cost and submissions",
     span: "half",
@@ -551,6 +572,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "s-curve": {
+    help: "dash.s-curve",
     title: "Progress Curve",
     description: "Planned vs actual % complete against the baseline",
     span: "full",
@@ -598,6 +620,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "risk-top3": {
+    help: "dash.risks",
     title: "Top Risks",
     description: "Highest-signal schedule and delivery risks",
     span: "half",
@@ -632,6 +655,7 @@ export const WIDGET_REGISTRY: Record<DashboardWidgetKey, WidgetDef> = {
   },
 
   "scope-table": {
+    help: "dash.scopes",
     title: "Scope Submission Status",
     description: "Per-subcontractor submission and progress",
     span: "full",

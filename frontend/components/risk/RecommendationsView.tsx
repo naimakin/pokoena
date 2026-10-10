@@ -13,6 +13,7 @@ import { useProjectContext } from "@/lib/project-context";
 import type { QsraRunSummary, RiskRecommendation } from "@/lib/types";
 import { RecommendationList } from "@/components/risk/RecommendationList";
 import { fmtDate } from "@/components/risk/RiskCharts";
+import { HelpTip } from "@/components/HelpTip";
 
 export function RecommendationsView({ tabs }: { tabs?: ReactNode }) {
   const { project, loading: loadingProject } = useProjectContext();
@@ -69,7 +70,9 @@ export function RecommendationsView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Mitigation</div>
+            <div className="page-title">
+              Mitigation <HelpTip id="page.mitigation" />
+            </div>
             <div className="page-desc">
               {red} to act on, {amber} to watch — from{" "}
               {run ? `the QSRA run of ${fmtDate(run.created_at)}` : <Link href="/risk">no QSRA run yet</Link>}, the early

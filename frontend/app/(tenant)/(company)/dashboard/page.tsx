@@ -23,6 +23,7 @@ import {
   type CurveStatus,
   type WidgetContext,
 } from "@/components/dashboard/DashboardWidgets";
+import { HelpTip } from "@/components/HelpTip";
 import { DashboardConfigModal } from "@/components/dashboard/DashboardConfigModal";
 import { KpiStrip, type AnalyticsStatus } from "@/components/dashboard/AnalyticsWidgets";
 import { NoProjectIllo } from "@/components/illustrations";
@@ -286,7 +287,9 @@ export default function DashboardPage() {
       <div className="a-content" data-dash-theme={layout?.theme_key ?? "calm"}>
         <div className="page-head">
           <div>
-            <div className="page-title">Dashboard</div>
+            <div className="page-title">
+              Dashboard <HelpTip id="page.dashboard" />
+            </div>
             <div className="page-desc">{pageDesc}</div>
           </div>
           <div className="dash-actions">
@@ -365,7 +368,12 @@ export default function DashboardPage() {
                           </div>
                           <div className="card-title-sub">{def.description}</div>
                         </div>
-                        {action}
+                        {(action || def.help) && (
+                          <div className="card-head-end">
+                            {action}
+                            {def.help && <HelpTip id={def.help} />}
+                          </div>
+                        )}
                       </div>
                       <div className={`dash-card-body${def.pad ? " is-padded" : ""}`}>{def.render(ctx)}</div>
                     </section>

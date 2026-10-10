@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import type { LogicDiffChangeType, LogicDiffReport, ScheduleImport } from "@/lib/types";
 import { ArrowRightIcon, CompareIcon } from "@/components/icons";
+import { HelpTip } from "@/components/HelpTip";
 
 const CHANGE_CHIP: Record<LogicDiffChangeType, string> = {
   ADDED: "chip-good",
@@ -91,7 +92,9 @@ export function LogicDiffView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Update Comparison</div>
+            <div className="page-title">
+              Update Comparison <HelpTip id="page.update-comparison" />
+            </div>
             <div className="page-desc">Compare relationships (predecessors/successors) between two schedule imports</div>
           </div>
         </div>

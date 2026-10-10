@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
 import { can } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/user-context";
+import { HelpTip } from "@/components/HelpTip";
 
 const selectStyle: CSSProperties = {
   fontSize: ".8125rem",
@@ -272,7 +273,9 @@ export default function ProgramLibraryPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Programme Files</div>
+            <div className="page-title">
+              Programme Files <HelpTip id="page.programme-files" />
+            </div>
             <div className="page-desc">
               Upload update / progress programmes (Primavera P6 .xer) to recompute the live schedule — dates,
               float, and critical path. Set the baseline by editing an import below and ticking <b>Baseline</b> (or on{" "}
@@ -377,6 +380,7 @@ export default function ProgramLibraryPage() {
             <div className="card" style={{ marginTop: "1rem" }}>
               <div className="card-head">
                 <div className="card-title">Import history</div>
+                <HelpTip id="files.history" className="card-head-help" />
               </div>
               <div className="table-wrap">
                 <table>

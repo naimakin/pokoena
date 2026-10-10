@@ -10,6 +10,8 @@ import { fmtNum, fmtP6Date } from "@/components/reporting/format";
 import { ArrowRightIcon, CheckIcon, ChevronDownIcon, DownloadIcon } from "@/components/icons";
 import type { ActivityChange, ScheduleChangeReport, ScheduleImport } from "@/lib/types";
 import { NoProjectIllo } from "@/components/illustrations";
+import { HelpTip } from "@/components/HelpTip";
+import type { HelpKey } from "@/lib/help";
 
 type SectionKey = "added" | "removed" | "modified" | "logic";
 
@@ -91,27 +93,33 @@ function Section({
   sub,
   collapsed,
   onToggle,
+  help,
   children,
 }: {
   id: string;
   title: string;
   count: number;
   sub?: ReactNode;
+  help?: HelpKey;
   collapsed: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
     <section className="card chg-section" id={id}>
-      <button className="section-head" aria-expanded={!collapsed} aria-controls={`${id}-body`} onClick={onToggle}>
-        <ChevronDownIcon className="icon section-caret" />
-        <span>
-          <span className="card-title">
-            {title} <span className="card-count">{fmtNum(count, 0)}</span>
+      {/* The "?" sits beside the fold button, never inside it. */}
+      <div className="chg-section-head">
+        <button className="section-head" aria-expanded={!collapsed} aria-controls={`${id}-body`} onClick={onToggle}>
+          <ChevronDownIcon className="icon section-caret" />
+          <span>
+            <span className="card-title">
+              {title} <span className="card-count">{fmtNum(count, 0)}</span>
+            </span>
+            {sub && <span className="card-title-sub">{sub}</span>}
           </span>
-          {sub && <span className="card-title-sub">{sub}</span>}
-        </span>
-      </button>
+        </button>
+        {help && <HelpTip id={help} />}
+      </div>
       {!collapsed && <div id={`${id}-body`}>{children}</div>}
     </section>
   );
@@ -340,7 +348,9 @@ export function ActivityChangesView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content changes-print">
         <div className="page-head">
           <div>
-            <div className="page-title">Update Comparison</div>
+            <div className="page-title">
+              Update Comparison <HelpTip id="page.update-comparison" />
+            </div>
             <div className="page-desc">
               {noData
                 ? "Need at least two schedule updates with an activity snapshot."
@@ -533,6 +543,7 @@ export function ActivityChangesView({ tabs }: { tabs?: ReactNode }) {
               <Section
                 id="chg-added"
                 title="Added activities"
+          help="changes.added"
                 count={added.length}
                 collapsed={collapsed.has("added")}
                 onToggle={() => toggleSection("added")}
@@ -572,6 +583,7 @@ export function ActivityChangesView({ tabs }: { tabs?: ReactNode }) {
               <Section
                 id="chg-removed"
                 title="Removed activities"
+          help="changes.removed"
                 count={removed.length}
                 collapsed={collapsed.has("removed")}
                 onToggle={() => toggleSection("removed")}
@@ -608,6 +620,7 @@ export function ActivityChangesView({ tabs }: { tabs?: ReactNode }) {
               <Section
                 id="chg-modified"
                 title="Modified activities"
+          help="changes.modified"
                 count={modifiedRows.length}
                 sub={
                   modifiedRows.length < s.activities_modified
@@ -677,6 +690,7 @@ export function ActivityChangesView({ tabs }: { tabs?: ReactNode }) {
               <Section
                 id="chg-logic"
                 title="Logic changes"
+          help="changes.logic"
                 count={logicRows.length}
                 sub={`${report.relationships.summary.added} added · ${report.relationships.summary.removed} removed · ${report.relationships.summary.modified} modified`}
                 collapsed={collapsed.has("logic")}

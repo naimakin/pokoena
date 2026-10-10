@@ -17,6 +17,7 @@ import type {
   FloatPathMethod,
   FloatPathReport,
 } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const PATH_COUNTS = [3, 5, 10];
 
@@ -219,7 +220,9 @@ export default function FloatPathPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Float Path</div>
+            <div className="page-title">
+              Float Path <HelpTip id="page.float-path" />
+            </div>
             <div className="page-desc">
               The chains of driving logic into one activity, ranked. Path 1 is what is holding the date
               today; the paths behind it are what will hold it next.

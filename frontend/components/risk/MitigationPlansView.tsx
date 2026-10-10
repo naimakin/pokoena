@@ -8,6 +8,7 @@ import { useProjectContext } from "@/lib/project-context";
 import { ActionItems } from "@/components/ActionItems";
 import { DownloadIcon } from "@/components/icons";
 import type { MitigationStrategyValue, RiskItem, User } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 type Grouping = "status" | "category" | "flat";
 const GROUP_KEY = "poko:risk-mitigation:grouping";
@@ -144,7 +145,9 @@ export function MitigationPlansView({ tabs }: { tabs?: ReactNode }) {
       <div className="a-content mitigation-print">
         <div className="page-head">
           <div>
-            <div className="page-title">Mitigation</div>
+            <div className="page-title">
+              Mitigation <HelpTip id="page.mitigation" />
+            </div>
             <div className="page-desc">Response plans for register risks scoring ≥ {PLAN_REQUIRED_SCORE}</div>
           </div>
           <button className="btn btn-secondary no-print" onClick={() => window.print()}>

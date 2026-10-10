@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageState } from "@/components/PageShell";
 import { useToast } from "@/components/Toast";
+import { HelpTip } from "@/components/HelpTip";
 import { AlertTriangleIcon, PencilIcon, TrashIcon } from "@/components/icons";
 import { NoProjectIllo, UploadScheduleIllo } from "@/components/illustrations";
 import { ProgrammeGrid } from "@/components/simulation/ProgrammeGrid";
@@ -360,6 +361,7 @@ export default function ScheduleSimulationPage() {
             <div className="page-title sim-title">
               {TITLE}
               <span className="chip chip-info">Beta</span>
+              <HelpTip id="page.scenario-lab" />
             </div>
             <div className="page-desc">
               Try changes against a copy of the current programme and see what moves, by how much, and why. Nothing here

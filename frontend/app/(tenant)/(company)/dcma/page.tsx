@@ -44,6 +44,7 @@ import { useProjectContext } from "@/lib/project-context";
 import type { DcmaCheckResult, DcmaReport } from "@/lib/types";
 import { can } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/user-context";
+import { HelpTip } from "@/components/HelpTip";
 
 type Status = DcmaCheckResult["status"];
 type StatusFilter = "all" | "fail" | "warn" | "pass";
@@ -275,7 +276,9 @@ export default function DcmaPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Schedule Quality</div>
+            <div className="page-title">
+              Schedule Quality <HelpTip id="page.schedule-quality" />
+            </div>
             <div className="page-desc">
               DCMA 14-Point assessment per DCMA EA PAM 200.1, plus POKO&apos;s own data and sequence checks
             </div>
@@ -312,7 +315,9 @@ export default function DcmaPage() {
 
               <div style={{ minWidth: 0 }}>
                 <div className="dcma-summary-title">
-                  <span className="card-title">Overall schedule quality</span>
+                  <span className="card-title">
+                    Overall schedule quality <HelpTip id="dcma.overall" />
+                  </span>
                   <StatusChip status={report.overall_status as Status} />
                 </div>
                 <div className="dcma-summary-meta">

@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { NoProjectIllo } from "@/components/illustrations";
 import { can } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/user-context";
+import { HelpTip } from "@/components/HelpTip";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -228,7 +229,9 @@ export default function BaselinesPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Baselines</div>
+            <div className="page-title">
+              Baselines <HelpTip id="page.baselines" />
+            </div>
             <div className="page-desc">
               The baseline programme is the project&apos;s frozen plan. Every update programme uploaded to
               Programme Files is measured back against it — see Reports › Project Status for date variance and the
@@ -255,6 +258,7 @@ export default function BaselinesPage() {
             <div className="card">
               <div className="card-head">
                 <div className="card-title">Baseline programme</div>
+                <HelpTip id="baselines.programme" className="card-head-help" />
               </div>
               <div style={{ padding: "1rem 1.1rem" }}>
                 {!active ? (

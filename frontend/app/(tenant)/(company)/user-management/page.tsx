@@ -22,6 +22,7 @@ import {
   type TenantRole,
   type User,
 } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 // Company roles follow the menus (backend: models/user_tenant_role.py). A
 // subcontractor never holds these — their only permission is whether they may
@@ -336,7 +337,9 @@ export default function UserManagementPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Users</div>
+            <div className="page-title">
+              Users <HelpTip id="page.users" />
+            </div>
             <div className="page-desc">
               Add employees and subcontractors, choose the projects or scopes they reach, and set what they&rsquo;re
               allowed to do.

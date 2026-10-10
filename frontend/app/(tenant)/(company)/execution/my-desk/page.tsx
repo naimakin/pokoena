@@ -14,6 +14,7 @@ import { AtSignIcon, CheckIcon, ChevronDownIcon, LockIcon, PinIcon, XIcon } from
 import { MentionText } from "@/components/MentionText";
 import { NoProjectIllo } from "@/components/illustrations";
 import type { Activity, DeskInboxItem, DeskPin, DeskSuggestion, MyMention, PersonalNote } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 // Execution → My Desk: the one personal, cross-project page. Every other page
 // shows the shared programme of one project; this one shows what waits on the
@@ -315,7 +316,9 @@ export default function MyDeskPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">My Desk</div>
+            <div className="page-title">
+              My Desk <HelpTip id="page.my-desk" />
+            </div>
             <div className="page-desc">
               {allMode ? "All your projects" : project?.name}
               {" · "}
@@ -334,6 +337,7 @@ export default function MyDeskPage() {
                   <div className="card-title">Waiting on you</div>
                   <div className="card-title-sub">Reviews, revisions and update deadlines across the approval queues</div>
                 </div>
+                <HelpTip id="desk.waiting" className="card-head-help" />
               </div>
               {inbox.length === 0 ? (
                 <div className="desk-quiet">
@@ -371,6 +375,7 @@ export default function MyDeskPage() {
                 <div>
                   <div className="card-title">
                     Mentions{unreadMentions ? <span className="mention-count">{unreadMentions} new</span> : null}
+                    <HelpTip id="desk.mentions" />
                   </div>
                   <div className="card-title-sub">Comments and recovery plans where someone tagged you with @</div>
                 </div>
@@ -436,6 +441,7 @@ export default function MyDeskPage() {
                   <div className="card-title">Pinned activities{pins.length ? ` · ${pins.length}` : ""}</div>
                   <div className="card-title-sub">How each one moved since you pinned it, and since the previous update</div>
                 </div>
+                <HelpTip id="desk.pins" className="card-head-help" />
               </div>
 
               {pins.length > 0 ? (
@@ -609,6 +615,7 @@ export default function MyDeskPage() {
                     <LockIcon className="icon icon-xs" /> Only you can see these
                   </div>
                 </div>
+                <HelpTip id="desk.notes" className="card-head-help" />
               </div>
               <div className="card-body">
                 <NoteComposer

@@ -24,6 +24,7 @@ import type {
   UpdatePeriod,
   WbsNode,
 } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const selectStyle = {
   background: "var(--surface)",
@@ -145,7 +146,9 @@ export default function ScopesPage() {
       <div className="a-content">
         <div className="page-head">
           <div>
-            <div className="page-title">Subcontractors</div>
+            <div className="page-title">
+              Subcontractors <HelpTip id="page.subcontractors" />
+            </div>
             <div className="page-desc">
               A scope is the part of the programme a subcontractor sees and updates, picked by WBS (each with
               everything under it) and/or activity codes — it follows the programme through every upload. Assign
