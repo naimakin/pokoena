@@ -11,7 +11,7 @@ import { toDays } from "@/lib/duration";
 import { displayFinish, displayStart, finishIsActual, startIsActual } from "@/lib/schedule-dates";
 import type { Activity } from "@/lib/types";
 import { bandFinishIsActual, bandStartIsActual, fmtUnitsPercent, type BandRow } from "@/lib/wbs-tree";
-import { durationDays, fmtDate, milestoneDates, spanDays, type BaselineDates } from "./model";
+import { durationDays, earliestDate, fmtDate, milestoneDates, spanDays, type BaselineDates } from "./model";
 
 export type ColKey =
   | "name"
@@ -49,6 +49,44 @@ export interface ColumnDef {
   mergeIntoLabel?: boolean;
   activity: (a: Activity, ctx: CellCtx) => ReactNode;
   band?: (row: BandRow, ctx: CellCtx) => ReactNode;
+  /** What a header click sorts on; null (blank) always sorts last. */
+  sortValue: (a: Activity, ctx: CellCtx) => string | number | null;
+}
+
+export type SortDir = "asc" | "desc";
+export interface SortState {
+  key: ColKey;
+  dir: SortDir;
+}
+/** The page's starting order: by start date, as P6 opens a layout. */
+export const DEFAULT_SORT: SortState = { key: "start", dir: "asc" };
+
+const byId = (x: Activity, y: Activity) => x.external_id.localeCompare(y.external_id, undefined, { numeric: true });
+
+/** Comparator for one column. Blanks stay at the bottom in both directions;
+ *  ties fall back to Activity ID (ascending), so the order is stable. */
+export function activityComparator(col: ColumnDef, dir: SortDir, ctx: CellCtx) {
+  const sign = dir === "asc" ? 1 : -1;
+  return (x: Activity, y: Activity) => {
+    const a = col.sortValue(x, ctx);
+    const b = col.sortValue(y, ctx);
+    if (a === null || b === null) {
+      if (a !== b) return a === null ? 1 : -1;
+      return byId(x, y);
+    }
+    const c =
+      typeof a === "number" && typeof b === "number"
+        ? a - b
+        : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+    return c !== 0 ? c * sign : byId(x, y);
+  };
+}
+
+const STATUS_ORDER: Record<string, number> = { not_started: 0, in_progress: 1, complete: 2 };
+
+function baselineOf(a: Activity, ctx: CellCtx) {
+  const bl = ctx.baselineByActivity.get(a.id);
+  return milestoneDates(a, bl?.start ?? null, bl?.finish ?? null);
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -97,6 +135,7 @@ function dateCell(date: string | null, actual: boolean, warn: ReactNode = null) 
 export const COLUMNS: ColumnDef[] = [
   {
     key: "name",
+    sortValue: (a) => a.name,
     label: "Activity",
     width: 260,
     align: "left",
@@ -110,6 +149,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "id",
+    sortValue: (a) => a.external_id,
     label: "Activity ID",
     width: 116,
     align: "left",
@@ -123,6 +163,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "status",
+    sortValue: (a) => STATUS_ORDER[a.status] ?? null,
     label: "Status",
     width: 100,
     align: "left",
@@ -132,6 +173,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "start",
+    sortValue: (a) => earliestDate(a),
     label: "Start",
     title: "A = actual date",
     width: 112,
@@ -147,6 +189,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "finish",
+    sortValue: (a) => displayFinish(a),
     label: "Finish",
     title: "A = actual date",
     width: 112,
@@ -162,6 +205,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "duration",
+    sortValue: (a) => durationDays(a),
     label: "Duration",
     title: "Original duration, in the activity's own calendar days",
     width: 84,
@@ -178,6 +222,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "baseline_start",
+    sortValue: (a, ctx) => baselineOf(a, ctx).start,
     label: "Baseline Start",
     width: 108,
     align: "left",
@@ -190,6 +235,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "baseline_finish",
+    sortValue: (a, ctx) => baselineOf(a, ctx).finish,
     label: "Baseline Finish",
     width: 108,
     align: "left",
@@ -202,6 +248,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "finish_var",
+    sortValue: (a, { baselineByActivity }) => baselineByActivity.get(a.id)?.finishVar ?? null,
     label: "Finish Var",
     title: "Finish variance against the active baseline, in days (+ = later than baseline)",
     width: 84,
@@ -214,6 +261,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "float",
+    sortValue: (a) => toDays(a.total_float_hours, a),
     label: "Total Float",
     width: 90,
     align: "right",
@@ -222,6 +270,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "pct",
+    sortValue: (a) => a.percent_complete ?? null,
     label: "%",
     title: "% complete; on a WBS row, units % (Σ actual / Σ budgeted labor hours of the activities shown)",
     width: 72,
@@ -236,6 +285,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "criticality",
+    sortValue: (a) => a.criticality_score ?? null,
     label: "Criticality",
     title: "Criticality Score (0-100): total float, duration, free float and site risk",
     width: 86,
@@ -250,6 +300,7 @@ export const COLUMNS: ColumnDef[] = [
   },
   {
     key: "flags",
+    sortValue: (a) => (a.is_important ? 1000 : 0) + (a.tags?.length ?? 0) + (a.percent_complete === 100 && !a.actual_finish ? 1 : 0),
     label: "Flags",
     width: 132,
     align: "left",

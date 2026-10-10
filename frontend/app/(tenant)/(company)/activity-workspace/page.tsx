@@ -14,7 +14,6 @@ import { api, ApiError } from "@/lib/api";
 import { useProjectContext } from "@/lib/project-context";
 import { useCurrentUser } from "@/lib/user-context";
 import { can } from "@/lib/permissions";
-import { toDays } from "@/lib/duration";
 import type { Activity, ActivityCodes, BaselineStatus, BaselineVariance, ScheduleImport, WbsNode } from "@/lib/types";
 import { applyFilter, EMPTY_CRITERIA, type FilterCriteria } from "@/components/progress/filter";
 import { FilterPanel } from "@/components/progress/FilterPanel";
@@ -23,12 +22,20 @@ import { ActivityModal } from "@/components/ActivityModal";
 import { buildGridRows, groupByLeaf, UNGROUPED_KEY } from "@/lib/wbs-tree";
 import { GanttIcon, MaximizeIcon, MinimizeIcon } from "@/components/icons";
 import { NoProjectIllo } from "@/components/illustrations";
-import { COLUMN_BY_KEY, DEFAULT_VISIBLE, parseVisible, type CellCtx, type ColKey } from "@/components/workspace/columns";
+import {
+  activityComparator,
+  COLUMN_BY_KEY,
+  DEFAULT_SORT,
+  DEFAULT_VISIBLE,
+  parseVisible,
+  type CellCtx,
+  type ColKey,
+  type SortState,
+} from "@/components/workspace/columns";
 import { ColumnsMenu } from "@/components/workspace/ColumnsMenu";
 import type { GanttViewToggles } from "@/components/workspace/gantt";
 import {
   COLUMNS_PREF_KEY,
-  earliestDate,
   fmtDate,
   fmtDateShort,
   GANTT_PREF_KEY,
@@ -45,7 +52,6 @@ const TITLE = "Activity Workspace";
 const SECTION = "Programme";
 
 type Mode = "status" | "manhours";
-type SortKey = "start" | "id" | "float";
 
 const selectStyle: CSSProperties = {
   fontSize: ".75rem",
@@ -98,7 +104,8 @@ function ActivityWorkspace() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // WBS depth shown, from the Max level slider; null = all levels open.
   const [maxLevel, setMaxLevel] = useState<number | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("start");
+  // Order of activities within each WBS band, set by clicking a column header.
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [toggles, setToggles] = useState<GanttViewToggles>(NO_TOGGLES);
   const [ganttPref, setGanttPref] = useState(true);
   const [visibleCols, setVisibleCols] = useState<ColKey[]>(DEFAULT_VISIBLE);
@@ -142,7 +149,7 @@ function ActivityWorkspace() {
     clearSaved();
     if (risks.length > 0) {
       setMode("status");
-      setSortKey("float");
+      setSort({ key: "float", dir: "asc" });
     }
   }, [projectId, qParam, filterParam, clearSaved]);
 
@@ -302,30 +309,6 @@ function ActivityWorkspace() {
   const remaining = useMemo(() => shown.filter((a) => a.status !== "complete").length, [shown]);
   const hasUngrouped = useMemo(() => shown.some((a) => !a.wbs_path || !knownWbsIds.has(a.wbs_path)), [shown, knownWbsIds]);
 
-  const activitiesByLeaf = useMemo(() => {
-    const byLeaf = groupByLeaf(shown, knownWbsIds); // Activity ID order
-    if (sortKey === "start") {
-      for (const list of byLeaf.values()) {
-        list.sort((x, y) => {
-          const as = earliestDate(x) ?? "";
-          const bs = earliestDate(y) ?? "";
-          if (as !== bs) return as < bs ? -1 : 1;
-          return x.external_id.localeCompare(y.external_id, undefined, { numeric: true });
-        });
-      }
-    } else if (sortKey === "float") {
-      const tf = (a: Activity) => toDays(a.total_float_hours, a) ?? Number.POSITIVE_INFINITY;
-      for (const list of byLeaf.values()) list.sort((x, y) => tf(x) - tf(y));
-    }
-    return byLeaf;
-  }, [shown, knownWbsIds, sortKey]);
-
-  const allRows = useMemo(() => buildGridRows(wbsNodes, activitiesByLeaf, collapsed), [wbsNodes, activitiesByLeaf, collapsed]);
-  const rows = useMemo(
-    () => (activeToggles.wbsOnly ? allRows.filter((r) => r.kind === "band") : allRows),
-    [allRows, activeToggles.wbsOnly],
-  );
-
   const baselineByActivity = useMemo(() => {
     const m = new Map<string, BaselineDates>();
     for (const r of variance?.rows ?? []) {
@@ -333,6 +316,30 @@ function ActivityWorkspace() {
     }
     return m;
   }, [variance]);
+
+  // A column hidden from the grid stops ordering it: back to the start-date order.
+  const activeSort = visibleCols.includes(sort.key) ? sort : DEFAULT_SORT;
+  const onSort = useCallback((key: ColKey) => {
+    setSort((prev) => (prev.key === key && prev.dir === "asc" ? { key, dir: "desc" } : { key, dir: "asc" }));
+  }, []);
+
+  // Sorting stays within each WBS band (as P6 sorts a grouped layout): the
+  // bands keep their WBS order, the activities under each one are reordered.
+  const activitiesByLeaf = useMemo(() => {
+    const byLeaf = groupByLeaf(shown, knownWbsIds); // Activity ID order
+    const col = COLUMN_BY_KEY.get(activeSort.key);
+    if (col) {
+      const compare = activityComparator(col, activeSort.dir, { dataDate, baselineByActivity, bandBaseline: new Map() });
+      for (const list of byLeaf.values()) list.sort(compare);
+    }
+    return byLeaf;
+  }, [shown, knownWbsIds, activeSort.key, activeSort.dir, dataDate, baselineByActivity]);
+
+  const allRows = useMemo(() => buildGridRows(wbsNodes, activitiesByLeaf, collapsed), [wbsNodes, activitiesByLeaf, collapsed]);
+  const rows = useMemo(
+    () => (activeToggles.wbsOnly ? allRows.filter((r) => r.kind === "band") : allRows),
+    [allRows, activeToggles.wbsOnly],
+  );
 
   // Baseline span per WBS band — the same subtree walk buildGridRows does,
   // over the baseline dates.
@@ -549,14 +556,6 @@ function ActivityWorkspace() {
                   </label>
                   {mode === "status" && (
                     <>
-                      <label className="ws-field" title="Order of activities within each WBS band">
-                        Order
-                        <select style={selectStyle} value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
-                          <option value="start">Start date</option>
-                          <option value="id">Activity ID</option>
-                          <option value="float">Total float</option>
-                        </select>
-                      </label>
                       <ColumnsMenu visible={visibleCols} onChange={setColumns} />
                     </>
                   )}
@@ -601,6 +600,8 @@ function ActivityWorkspace() {
                   onToggles={(patch) => setToggles((prev) => ({ ...prev, ...patch }))}
                   onToggleBand={toggleBand}
                   onActivityClick={setOpenActivity}
+                  sort={activeSort}
+                  onSort={onSort}
                   emptyMessage="No activities match your filters."
                 />
               </div>

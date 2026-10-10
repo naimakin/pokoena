@@ -12,7 +12,7 @@ import {
 import { ChevronDownIcon } from "@/components/icons";
 import type { Activity } from "@/lib/types";
 import type { GridRow } from "@/lib/wbs-tree";
-import { COLUMNS, type CellCtx, type ColKey, type ColumnDef } from "./columns";
+import { COLUMNS, type CellCtx, type ColKey, type ColumnDef, type SortState } from "./columns";
 import { barColor, ChartRow, GanttScale, GanttToolbar, type GanttViewToggles, type LensKey } from "./gantt";
 import { HEAD_H_GANTT, HEAD_H_GRID, ROW_H } from "./model";
 import { useGanttTimeline } from "./useGanttTimeline";
@@ -42,6 +42,8 @@ export function WorkspacePanes({
   onToggles,
   onToggleBand,
   onActivityClick,
+  sort,
+  onSort,
   emptyMessage,
 }: {
   rows: GridRow[];
@@ -56,6 +58,8 @@ export function WorkspacePanes({
   onToggles: (patch: Partial<GanttViewToggles>) => void;
   onToggleBand: (wbsId: string) => void;
   onActivityClick: (a: Activity) => void;
+  sort: SortState;
+  onSort: (key: ColKey) => void;
   emptyMessage: string;
 }) {
   const [lens, setLens] = useState<LensKey>("progress");
@@ -213,7 +217,14 @@ export function WorkspacePanes({
             }
           >
             <div style={{ width: gridWidth, position: "relative" }}>
-              <GridHead columns={columns} widths={shownWidths} height={headH} onResizeStart={startColResize} />
+              <GridHead
+                columns={columns}
+                widths={shownWidths}
+                height={headH}
+                sort={sort}
+                onSort={onSort}
+                onResizeStart={startColResize}
+              />
               {rows.map((row, idx) => (
                 <GridRowCells
                   key={row.key}

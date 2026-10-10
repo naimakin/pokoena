@@ -1,10 +1,10 @@
 "use client";
 
 import type { KeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
-import { ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronUpIcon } from "@/components/icons";
 import type { Activity } from "@/lib/types";
 import type { GridRow } from "@/lib/wbs-tree";
-import type { CellCtx, ColKey, ColumnDef } from "./columns";
+import type { CellCtx, ColKey, ColumnDef, SortState } from "./columns";
 import { ROW_H } from "./model";
 
 // The left-hand grid of Activity Workspace: div rows of a fixed height, so the
@@ -14,23 +14,40 @@ export function GridHead({
   columns,
   widths,
   height,
+  sort,
+  onSort,
   onResizeStart,
 }: {
   columns: ColumnDef[];
   widths: Record<ColKey, number>;
   height: number;
+  sort: SortState;
+  /** Header click: first click ascending, the next one descending. */
+  onSort: (key: ColKey) => void;
   onResizeStart: (e: ReactMouseEvent, key: ColKey) => void;
 }) {
   return (
     <div className="gantt-head" style={{ height }}>
-      {columns.map((c) => (
+      {columns.map((c) => {
+        const dir = sort.key === c.key ? sort.dir : null;
+        const SortArrow = dir === "desc" ? ChevronDownIcon : ChevronUpIcon;
+        return (
         <div
           key={c.key}
-          className={`gantt-head-cell${c.align === "right" ? " is-num" : ""}`}
+          className={`gantt-head-cell${c.align === "right" ? " is-num" : ""}${dir ? " is-sorted" : ""}`}
           style={{ width: widths[c.key] }}
-          title={c.title}
+          aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}
         >
-          <span>{c.label}</span>
+          {/* The resizer is a sibling, so a drag that ends here never clicks this. */}
+          <button
+            type="button"
+            className="gantt-head-sort"
+            title={`${c.title ? `${c.title}. ` : ""}Click to sort${dir === "asc" ? " descending" : ""}`}
+            onClick={() => onSort(c.key)}
+          >
+            <span className="gantt-head-label">{c.label}</span>
+            <SortArrow className="icon gantt-sort-arrow" aria-hidden="true" />
+          </button>
           <span
             className="gantt-col-resizer"
             onMouseDown={(e) => onResizeStart(e, c.key)}
@@ -38,7 +55,8 @@ export function GridHead({
             aria-label={`Resize ${c.label} column`}
           />
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

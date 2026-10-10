@@ -1599,6 +1599,20 @@ tr.resolved{opacity:.45}
   border-right:1px solid var(--border);overflow:hidden;white-space:nowrap;
 }
 .gantt-head-cell.is-num{justify-content:flex-end}
+/* Click a header to sort: ascending, then descending. The arrow shows on hover
+   and stays on the sorted column. */
+.gantt-head-sort{
+  display:flex;align-items:center;gap:.25rem;min-width:0;max-width:100%;padding:0;
+  background:none;border:0;font:inherit;color:inherit;cursor:pointer;text-align:left;
+}
+.gantt-head-cell.is-num .gantt-head-sort{flex-direction:row-reverse}
+.gantt-head-label{overflow:hidden;text-overflow:ellipsis}
+.gantt-sort-arrow{width:11px;height:11px;flex-shrink:0;opacity:0;transition:opacity .12s}
+.gantt-head-sort:hover{color:var(--text-primary)}
+.gantt-head-sort:hover .gantt-sort-arrow{opacity:.45}
+.gantt-head-sort:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:2px}
+.gantt-head-cell.is-sorted{color:var(--text-primary)}
+.gantt-head-cell.is-sorted .gantt-sort-arrow{opacity:1;color:var(--accent)}
 .gantt-col-resizer{position:absolute;top:0;right:0;bottom:0;width:5px;cursor:col-resize;z-index:2}
 .gantt-col-resizer:hover{background:var(--accent-soft)}
 
