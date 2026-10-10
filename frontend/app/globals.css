@@ -3127,8 +3127,49 @@ select.rp-status:hover:not(:disabled){border-color:var(--border-strong)}
   background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-md);
 }
 .viz-tip-title{font-weight:500;color:var(--text-secondary);max-width:320px;overflow:hidden;text-overflow:ellipsis}
-.viz-tip-row{display:flex;align-items:center;gap:.45rem;color:var(--text-muted)}
-.viz-tip-row b{margin-left:auto;padding-left:.75rem;font-weight:500;color:var(--text-primary)}
+.viz-tip-row{display:flex;flex-direction:column;gap:.25rem;color:var(--text-muted)}
+.viz-tip-row.has-bar{padding:.1rem 0 .2rem}
+.viz-tip-line{display:flex;align-items:center;gap:.45rem}
+.viz-tip-line b{margin-left:auto;padding-left:.75rem;font-weight:500;color:var(--text-primary)}
+.viz-tip-line b.tone-warn{color:var(--warn)}
+.viz-tip-line b.tone-crit{color:var(--crit)}
+.viz-tip-sub{font-weight:400;color:var(--text-muted)}
+/* Tooltip keys are short lines (a filled box is too heavy at this density). */
+.viz-tip-key{display:inline-block;flex:none;width:12px;height:0;border-top:2.5px solid var(--text-tertiary)}
+.viz-tip-key.is-planned{border-top-color:var(--series-planned)}
+.viz-tip-key.is-actual{border-top-color:var(--series-actual)}
+.viz-tip-key.is-cost{border-top-color:var(--series-cost)}
+.viz-tip-key.is-rest{border-top-color:var(--border-strong)}
+.viz-tip-key.is-complete{border-top-color:var(--good)}
+.viz-tip-key.is-progress{border-top-color:var(--status-active)}
+.viz-tip-key.is-notstarted{border-top-color:var(--text-tertiary)}
+.viz-tip-key.is-nobaseline{border-top-color:var(--border-strong)}
+/* The share as a mini bar, with the plan as a tick. */
+.viz-tip-bar{position:relative;display:block;height:6px;min-width:170px;background:var(--surface-3);border-radius:var(--radius-xs)}
+.viz-tip-fill{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-xs);background:var(--series-actual)}
+.viz-tip-fill.is-planned{background:var(--series-planned)}
+.viz-tip-fill.is-cost{background:var(--series-cost)}
+.viz-tip-fill.is-rest{background:var(--border-strong)}
+.viz-tip-fill.is-complete{background:var(--good)}
+.viz-tip-fill.is-progress{background:var(--status-active)}
+.viz-tip-fill.is-notstarted{background:var(--text-tertiary)}
+.viz-tip-fill.is-nobaseline{background:var(--border-strong)}
+.viz-tip-mark{position:absolute;top:-3px;width:2px;height:12px;margin-left:-1px;background:var(--series-planned);box-shadow:0 0 0 1px var(--surface)}
+
+/* Hover: invisible hit areas wider than the marks; the hovered mark lifts. */
+.viz-hit{fill:none;stroke:transparent;pointer-events:stroke;cursor:default}
+.viz-gauge{position:relative;outline:none}
+.viz-gauge:focus-visible{box-shadow:inset 0 0 0 2px var(--focus);border-radius:var(--radius-md)}
+.viz-gauge-rest{fill:none;stroke:var(--surface-3);transition:stroke var(--dur-1) var(--ease)}
+.viz-gauge-rest.is-hover{stroke:var(--border-strong)}
+.viz-gauge-fill,.viz-gauge-short{transition:stroke-width var(--dur-1) var(--ease)}
+.viz-rings{position:relative}
+.viz-ring-seg{cursor:default}
+.viz-bars-row.is-hover{background:var(--surface-2);border-radius:var(--radius-sm)}
+.viz-bars-row.is-hover .viz-bar{filter:brightness(1.08)}
+.viz-combo-bar{transition:fill-opacity var(--dur-1) var(--ease)}
+.viz-combo-bar.is-hover{fill-opacity:.9}
+.viz-spark-box{position:relative;cursor:crosshair}
 
 /* KPI strip: one card, six cells */
 .viz-kpi-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:0;overflow:hidden}

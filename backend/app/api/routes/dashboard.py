@@ -2,8 +2,10 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core.cache import cached_json, project_scopes
 from app.db.session import get_db
 from app.deps import (
     AuthContext,
@@ -97,9 +99,17 @@ def dashboard_summary(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
-) -> DashboardSummary:
+) -> Response:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    return cached_json(
+        "dashboard-summary",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id],
+        compute=lambda: _dashboard_summary(db, ctx, project_id),
+    )
 
+
+def _dashboard_summary(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> DashboardSummary:
     period = (
         db.query(UpdatePeriod)
         .filter(UpdatePeriod.tenant_id == ctx.tenant_id, UpdatePeriod.project_id == project_id)
@@ -398,8 +408,17 @@ def get_project_health(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
-) -> ProjectHealth:
+) -> Response:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    return cached_json(
+        "dashboard-health",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id],
+        compute=lambda: _get_project_health(db, ctx, project_id),
+    )
+
+
+def _get_project_health(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> ProjectHealth:
     s = _gather_signals(db, ctx, project_id)
     activities: list[Activity] = s["activities"]
     factors: list[HealthFactor] = []
@@ -485,8 +504,17 @@ def get_risk_highlights(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(require_capability(Capability.view_overview)),
-) -> list[RiskHighlight]:
+) -> Response:
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
+    return cached_json(
+        "dashboard-risks",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id],
+        compute=lambda: _get_risk_highlights(db, ctx, project_id),
+    )
+
+
+def _get_risk_highlights(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> list[RiskHighlight]:
     s = _gather_signals(db, ctx, project_id)
     activities: list[Activity] = s["activities"]
     _SEV_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -595,12 +623,21 @@ def get_dashboard_analytics(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
     ctx: AuthContext = Depends(get_current_tenant_user),
-) -> ProjectAnalyticsOut:
+) -> Response:
     """The Dashboard's and Project Status's charts: KPI strip, hours / cost
     gauges, monthly bars, hours by WBS / activity code, behind-plan table.
     Measured against the active baseline, so 423 without one."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx, Capability.view_overview, Capability.view_reports)
+    return cached_json(
+        "dashboard-analytics",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id],
+        compute=lambda: _get_dashboard_analytics(db, ctx, project_id),
+    )
+
+
+def _get_dashboard_analytics(db: Session, ctx: AuthContext, project_id: uuid.UUID) -> ProjectAnalyticsOut:
     baseline = (
         db.query(Baseline)
         .filter(

@@ -2,19 +2,37 @@
 
 // Ring charts: "Time vs work" (two concentric rings — share of the baseline
 // span elapsed, share of the work done) and the portfolio's status donut.
+// Hovering a ring or segment lifts it and opens a tooltip that shows the
+// shares as mini bars.
 
-import { useState } from "react";
-import { fmtPts, ratioTone } from "./viz";
+import { useRef, useState } from "react";
+import { fmtPts, ratioTone, tipAt, VizTip } from "./viz";
 
 const SIZE = 148;
 const C = SIZE / 2;
+
+type Tip = { x: number; y: number; flip: boolean };
 
 function ringPath(r: number): string {
   // A full circle starting at 12 o'clock, drawn clockwise.
   return `M${C} ${C - r} a${r} ${r} 0 1 1 0 ${2 * r} a${r} ${r} 0 1 1 0 ${-2 * r}`;
 }
 
-function Ring({ r, pct, stroke, cls }: { r: number; pct: number; stroke: number; cls: string }) {
+function Ring({
+  r,
+  pct,
+  stroke,
+  cls,
+  lifted,
+  onHover,
+}: {
+  r: number;
+  pct: number;
+  stroke: number;
+  cls: string;
+  lifted: boolean;
+  onHover: (e: React.PointerEvent) => void;
+}) {
   const len = 2 * Math.PI * r;
   const v = Math.min(Math.max(pct, 0), 100);
   return (
@@ -24,10 +42,12 @@ function Ring({ r, pct, stroke, cls }: { r: number; pct: number; stroke: number;
         <path
           d={ringPath(r)}
           className={`viz-ring-seg ${cls}`}
-          strokeWidth={stroke}
+          strokeWidth={stroke + (lifted ? 4 : 0)}
           strokeDasharray={`${(len * v) / 100} ${len}`}
         />
       )}
+      {/* The whole ring (track too) is the hit target, a little wider than drawn. */}
+      <path d={ringPath(r)} className="viz-hit" strokeWidth={stroke + 6} onPointerMove={onHover} />
     </>
   );
 }
@@ -36,22 +56,45 @@ export function TimeWorkRings({
   elapsed,
   done,
   footnote,
+  elapsedNote,
 }: {
   elapsed: number | null;
   done: number | null;
   footnote?: string;
+  /** What the elapsed share means in days ("Day 360 of 480"). */
+  elapsedNote?: string;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<(Tip & { ring: "time" | "work" }) | null>(null);
   if (elapsed == null && done == null) {
     return <p className="viz-empty">Needs a baseline with dates and a data date.</p>;
   }
   const gap = elapsed != null && done != null ? done - elapsed : null;
   const tone = ratioTone(done, elapsed);
+  const at = (ring: "time" | "work") => (e: React.PointerEvent) => {
+    if (boxRef.current) setHover({ ring, ...tipAt(e, boxRef.current) });
+  };
+
   return (
-    <div className="viz viz-rings">
+    <div className="viz viz-rings" ref={boxRef} onPointerLeave={() => setHover(null)}>
       <div className="viz-rings-figure">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} role="img" aria-label="Time elapsed vs work done">
-          <Ring r={C - 8} pct={elapsed ?? 0} stroke={12} cls="is-planned" />
-          <Ring r={C - 26} pct={done ?? 0} stroke={12} cls="is-actual" />
+          <Ring
+            r={C - 8}
+            pct={elapsed ?? 0}
+            stroke={12}
+            cls="is-planned"
+            lifted={hover?.ring === "time"}
+            onHover={at("time")}
+          />
+          <Ring
+            r={C - 26}
+            pct={done ?? 0}
+            stroke={12}
+            cls="is-actual"
+            lifted={hover?.ring === "work"}
+            onHover={at("work")}
+          />
         </svg>
         <div className="viz-ring-center">
           {/* The number and a small unit — "−20.9 pts" in one size overflows the inner ring. */}
@@ -81,6 +124,30 @@ export function TimeWorkRings({
         </div>
         {footnote && <div className="viz-foot">{footnote}</div>}
       </div>
+      {hover && (
+        <VizTip
+          x={hover.x}
+          y={hover.y}
+          flip={hover.flip}
+          title={hover.ring === "time" ? "Time elapsed" : "Work done"}
+          rows={[
+            {
+              swatch: "planned",
+              label: elapsedNote ? `Time elapsed · ${elapsedNote}` : "Time elapsed",
+              value: elapsed == null ? "—" : `${elapsed.toFixed(1)}%`,
+              pct: elapsed,
+            },
+            {
+              swatch: "actual",
+              label: "Work done",
+              value: done == null ? "—" : `${done.toFixed(1)}%`,
+              pct: done,
+              markPct: elapsed,
+            },
+            { label: gap != null && gap < 0 ? "Work behind time" : "Work ahead of time", value: fmtPts(gap), tone },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -104,16 +171,28 @@ export function StatusDonut({
   selected?: string | null;
   onSelect?: (key: string | null) => void;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
   const total = segments.reduce((n, s) => n + s.value, 0);
   const r = C - 14;
   const len = 2 * Math.PI * r;
   const gap = segments.filter((s) => s.value > 0).length > 1 ? 2 : 0;
   let offset = 0;
   const focus = selected ?? hover;
+  const hovered = segments.find((s) => s.key === hover) ?? null;
+
+  const move = (key: string) => (e: React.PointerEvent) => {
+    setHover(key);
+    if (boxRef.current) setTip(tipAt(e, boxRef.current));
+  };
+  const out = () => {
+    setHover(null);
+    setTip(null);
+  };
 
   return (
-    <div className="viz viz-rings">
+    <div className="viz viz-rings" ref={boxRef} onPointerLeave={out}>
       <div className="viz-rings-figure">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} role="img" aria-label={`${total} ${centerLabel}`}>
           <path d={ringPath(r)} className="viz-ring-track" strokeWidth={20} />
@@ -129,8 +208,7 @@ export function StatusDonut({
                   strokeWidth={focus === s.key ? 24 : 20}
                   strokeDasharray={`${Math.max(segLen - gap, 0.5)} ${len}`}
                   strokeDashoffset={-offset}
-                  onMouseEnter={() => setHover(s.key)}
-                  onMouseLeave={() => setHover(null)}
+                  onPointerMove={move(s.key)}
                   onClick={onSelect ? () => onSelect(selected === s.key ? null : s.key) : undefined}
                 />
               );
@@ -177,6 +255,23 @@ export function StatusDonut({
           );
         })}
       </div>
+      {hovered && tip && (
+        <VizTip
+          x={tip.x}
+          y={tip.y}
+          flip={tip.flip}
+          title={hovered.label}
+          rows={[
+            {
+              swatch: hovered.tone,
+              label: `${hovered.value} of ${total} ${centerLabel}`,
+              value: total > 0 ? `${((hovered.value / total) * 100).toFixed(0)}%` : "—",
+              pct: total > 0 ? (hovered.value / total) * 100 : null,
+            },
+            ...(onSelect ? [{ label: "Click to filter the page", value: "" }] : []),
+          ]}
+        />
+      )}
     </div>
   );
 }

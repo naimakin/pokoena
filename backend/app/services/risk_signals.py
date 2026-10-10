@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.engine.durations import activity_days, valid_hours_per_day
 from app.models.activity import Activity
@@ -97,6 +97,7 @@ class Update:
 def load_updates(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> list[Update]:
     rows = (
         db.query(ScheduleImport)
+        .options(undefer(ScheduleImport.activities_snapshot))
         .filter(ScheduleImport.tenant_id == tenant_id, ScheduleImport.project_id == project_id)
         .all()
     )

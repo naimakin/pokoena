@@ -69,3 +69,8 @@ def _reapply_rls_context_on_new_transaction(session: Session, transaction, conne
             text("SELECT set_config('app.current_tenant_id', :tenant_id, true)"),
             {"tenant_id": tenant_id},
         )
+
+
+# Registers the session events that invalidate the result cache on commit
+# (app/core/cache.py) for every session this module hands out.
+import app.core.cache  # noqa: E402,F401

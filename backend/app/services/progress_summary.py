@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.engine.evm.progress_engine import (
     VersionFacts,
@@ -60,19 +60,27 @@ def data_date_of(current: Optional[ScheduleImport]) -> date:
     return (dd or datetime.utcnow()).date()
 
 
-def baseline_planned_percent(
-    baseline_activities: list[BaselineActivity], activities_by_id: dict[uuid.UUID, Activity], as_of: date
-) -> Optional[float]:
-    """Planned % from the frozen baseline rows. Task type comes from the live
+def baseline_planned_rows(
+    baseline_activities: list[BaselineActivity], activities_by_id: dict[uuid.UUID, Activity]
+) -> list[tuple[float, Optional[date], Optional[date]]]:
+    """(hours, baseline start, baseline finish) per baseline row that counts
+    toward progress — `planned_percent`'s input. Task type comes from the live
     activity (BaselineActivity doesn't store it); a row whose activity is gone
-    counts as ordinary work."""
+    counts as ordinary work. Build it once when asking for many dates."""
     rows = []
     for ba in baseline_activities:
         act = activities_by_id.get(ba.activity_id)
         if act is not None and not counts_toward_progress(act.task_type):
             continue
         rows.append((ba.planned_manhours or 0.0, ba.baseline_start, ba.baseline_end))
-    return planned_percent(rows, as_of)
+    return rows
+
+
+def baseline_planned_percent(
+    baseline_activities: list[BaselineActivity], activities_by_id: dict[uuid.UUID, Activity], as_of: date
+) -> Optional[float]:
+    """Planned % from the frozen baseline rows (see baseline_planned_rows)."""
+    return planned_percent(baseline_planned_rows(baseline_activities, activities_by_id), as_of)
 
 
 def programme_actual_percent(activities: list[Activity]) -> Optional[float]:
@@ -219,11 +227,17 @@ def _month_ends(start: date, end: date) -> list[date]:
         y, m = nxt.year, nxt.month
 
 
-def numbered_updates(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID) -> list[ScheduleImport]:
+def numbered_updates(
+    db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID, *, with_activities: bool = False
+) -> list[ScheduleImport]:
     """UPD-1, UPD-2… with a data date, oldest first; one per data date (the
-    latest upload wins when an update was re-imported)."""
+    latest upload wins when an update was re-imported). `with_activities`
+    loads every activities_snapshot in the same query (it's deferred)."""
+    query = db.query(ScheduleImport)
+    if with_activities:
+        query = query.options(undefer(ScheduleImport.activities_snapshot))
     rows = (
-        db.query(ScheduleImport)
+        query
         .filter(
             ScheduleImport.tenant_id == tenant_id,
             ScheduleImport.project_id == project_id,
@@ -257,7 +271,7 @@ def compute_progress_curve(
     baseline_rows = db.query(BaselineActivity).filter(BaselineActivity.baseline_id == baseline.id).all()
 
     actual_by_date: dict[date, float] = {baseline.target_start_date: 0.0}
-    for imp in numbered_updates(db, tenant_id, project_id):
+    for imp in numbered_updates(db, tenant_id, project_id, with_activities=True):
         dd = to_naive(imp.data_date).date()
         if dd >= as_of or not imp.activities_snapshot:
             continue
@@ -285,12 +299,13 @@ def compute_progress_curve(
     end = max(finishes)
 
     dates = set(_month_ends(baseline.target_start_date, end)) | set(actual_by_date) | {as_of}
+    planned_rows = baseline_planned_rows(baseline_rows, by_id)
     points = []
     for d in sorted(dates):
         points.append(
             CurvePoint(
                 date=d,
-                planned=baseline_planned_percent(baseline_rows, by_id, d),
+                planned=planned_percent(planned_rows, d),
                 actual=actual_by_date.get(d),
                 forecast=forecast_percent(forecast_rows, as_of, d) if d >= as_of else None,
             )

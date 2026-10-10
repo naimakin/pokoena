@@ -139,6 +139,12 @@ export function HoursGauge({ a }: { a: ProjectAnalytics }) {
       actual={has ? actual : null}
       planned={has ? planned : null}
       emptyText="No labor resources in this schedule"
+      amounts={{
+        done: fmtHours(h.actual),
+        planned: fmtHours(h.planned),
+        rest: fmtHours(Math.max((h.current_budget || h.budget) - h.actual, 0)),
+        total: fmtHours(h.current_budget || h.budget),
+      }}
       caption={
         <>
           Actual <b className="num">{fmtCompact(h.actual)}</b> of {fmtHours(h.current_budget || h.budget)}
@@ -158,6 +164,16 @@ export function CostGauge({ a }: { a: ProjectAnalytics }) {
       actual={c ? actual : null}
       planned={c ? planned : null}
       emptyText="No cost loaded in this schedule"
+      amounts={
+        c
+          ? {
+              done: fmtMoney(c.actual, a.currency),
+              planned: fmtMoney(c.planned, a.currency),
+              rest: fmtMoney(Math.max((c.current_budget || c.budget) - c.actual, 0), a.currency),
+              total: fmtMoney(c.current_budget || c.budget, a.currency),
+            }
+          : undefined
+      }
       caption={
         c && (
           <>
@@ -174,9 +190,20 @@ export function TimeVsWork({ a }: { a: ProjectAnalytics }) {
     <TimeWorkRings
       elapsed={a.elapsed_pct}
       done={a.actual_pct}
+      elapsedNote={dayOfSpan(a)}
       footnote={`Baseline ${fmtP6Date(a.baseline_start)} → ${fmtP6Date(a.baseline_finish)} · data date ${fmtP6Date(a.data_date)}`}
     />
   );
+}
+
+/** "day 360 of 480" — the baseline span in calendar days at the data date. */
+function dayOfSpan(a: ProjectAnalytics): string | undefined {
+  if (!a.baseline_start || !a.baseline_finish) return undefined;
+  const day = 86_400_000;
+  const start = Date.parse(a.baseline_start);
+  const span = Math.round((Date.parse(a.baseline_finish) - start) / day) + 1;
+  const elapsed = Math.min(Math.max(Math.round((Date.parse(a.data_date) - start) / day), 0), span);
+  return `day ${fmtNum(elapsed, 0)} of ${fmtNum(span, 0)}`;
 }
 
 // --- monthly -------------------------------------------------------------------
@@ -371,7 +398,13 @@ export function BudgetActualCard({ a }: { a: ProjectAnalytics }) {
           )}
         </span>
       </div>
-      <Sparkarea months={months} dataDate={a.data_date} series={m === "hours" ? "actual" : "cost"} />
+      <Sparkarea
+        months={months}
+        dataDate={a.data_date}
+        series={m === "hours" ? "actual" : "cost"}
+        budget={measure.budget || budget}
+        format={fmt}
+      />
       <div className="dash-legend">
         <span>
           <i className="dash-swatch is-planned" aria-hidden="true" />

@@ -17,7 +17,7 @@ from collections import defaultdict
 from datetime import date
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.engine.risk.resource_forecast import AssignmentInput, UpdatePoint, forecast
 from app.models.baseline import Baseline, BaselineActivity, BaselineStatus
@@ -36,6 +36,7 @@ _MAX_RESOURCE_ROWS = 25
 def _history(db: Session, tenant_id: uuid.UUID, project_id: uuid.UUID):
     rows = (
         db.query(ScheduleImport)
+        .options(undefer(ScheduleImport.activities_snapshot), undefer(ScheduleImport.assignments_snapshot))
         .filter(ScheduleImport.tenant_id == tenant_id, ScheduleImport.project_id == project_id)
         .all()
     )

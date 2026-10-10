@@ -20,8 +20,8 @@ class ActivityRelationship(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    predecessor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activities.id"), nullable=False)
-    successor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activities.id"), nullable=False)
+    predecessor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activities.id"), nullable=False, index=True)
+    successor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activities.id"), nullable=False, index=True)
     link_type: Mapped[LinkType] = mapped_column(
         SAEnum(LinkType, name="link_type"), nullable=False, default=LinkType.FS
     )

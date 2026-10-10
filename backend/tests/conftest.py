@@ -71,6 +71,16 @@ def db_session(monkeypatch):
         session.close()
 
 
+@pytest.fixture(autouse=True)
+def _result_cache_redis(monkeypatch):
+    # The result cache (app/core/cache.py) talks to Redis outside FastAPI's
+    # dependency injection (its invalidation runs in session events), so it
+    # gets its own fakeredis per test — empty, so no answer leaks between tests.
+    cache_redis = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr("app.core.cache._client", lambda: cache_redis)
+    return cache_redis
+
+
 @pytest.fixture()
 def fake_redis():
     # Real fakeredis instance (not a Mock) so INCR/EXPIRE/SETEX/EXISTS behave

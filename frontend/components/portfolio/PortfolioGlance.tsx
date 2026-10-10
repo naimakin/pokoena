@@ -110,6 +110,12 @@ export function PortfolioGlance({
             actual={hours.budget > 0 || hours.current_budget > 0 ? actualPct : null}
             planned={hours.budget > 0 ? plannedPct : null}
             emptyText="No labor resources in the baselined programmes"
+            amounts={{
+              done: fmtHours(hours.actual),
+              planned: fmtHours(hours.planned),
+              rest: fmtHours(Math.max((hours.current_budget || hours.budget) - hours.actual, 0)),
+              total: fmtHours(hours.current_budget || hours.budget),
+            }}
             caption={
               <>
                 Actual <b className="num">{fmtCompact(hours.actual)}</b> of {fmtHours(hours.current_budget || hours.budget)}

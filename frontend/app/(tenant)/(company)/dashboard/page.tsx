@@ -95,12 +95,10 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [layoutRes, summaryRes] = await Promise.all([
-        api.get<DashboardLayout>(`/dashboard/layout?project_id=${project.id}`),
-        api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`),
-      ]);
+      // The layout is a single small row; once it's in, every widget's request
+      // goes out at the same time — the summary no longer holds the rest back.
+      const layoutRes = await api.get<DashboardLayout>(`/dashboard/layout?project_id=${project.id}`);
       setLayout(layoutRes);
-      setSummary(summaryRes);
       if (layoutRes.is_default && firstRunPromptedFor.current !== project.id) {
         firstRunPromptedFor.current = project.id;
         setConfigOpen(true);
@@ -145,6 +143,7 @@ export default function DashboardPage() {
             setCurveStatus(err instanceof ApiError && err.status === 423 ? "locked" : "error");
           });
       }
+      setSummary(await api.get<DashboardSummary>(`/dashboard/summary?project_id=${project.id}`));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load the dashboard.");
     } finally {

@@ -57,20 +57,24 @@ class ScheduleImport(Base):
     # this import — wbs_nodes itself is wholesale-replaced on every import (see
     # services/xer_import.py) so this is the only place an earlier import's WBS
     # tree survives, for Planning > WBS's "view an earlier program" selector.
-    wbs_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    wbs_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list, deferred=True)
     # Frozen list of this import's relationships (pred/succ external_id, link
     # type, lag, criticality at import time) — enough for Logic Diff
     # (engine/diff/logic_diff.py) to compare two imports without a full
     # versioned schedule graph. See services/xer_import.py for how it's built.
-    relationships_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    relationships_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list, deferred=True)
     # Frozen per-activity finish dates / criticality / status at import time —
     # the only place a "vs previous UPD" slip comparison can come from, since
     # the live `activities` table is overwritten wholesale on every import.
     # Consumed by engine/diff/slip_diff.py. Built in services/xer_import.py
     # alongside relationships_snapshot.
-    activities_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    activities_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list, deferred=True)
+    # The four *_snapshot columns are deferred: each holds a row per activity /
+    # relationship, and most reads of an import (Program Library, the current
+    # update, data dates) never touch them. Reading one loads it on access;
+    # a loop over many imports that needs it passes undefer(...).
     # Frozen per-assignment units (activity external_id, resource, budget /
     # actual / remaining) at import time. resource_assignments is replaced
     # wholesale on every import, so this is the only productivity history —
     # read by Risk > Resources (engine/risk/resource_forecast.py).
-    assignments_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    assignments_snapshot: Mapped[list] = mapped_column(_JSON, nullable=False, default=list, deferred=True)

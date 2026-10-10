@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.cache import cached_json, project_scopes
 from app.db.session import get_db
 from app.deps import AuthContext, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.engine.cpm.calendar_engine import NoWorkingDayError
@@ -731,12 +732,22 @@ def get_progress_summary(
 @router.get("/progress-curve", response_model=ProgressCurveOut)
 def get_progress_curve(
     project_id: uuid.UUID, db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)
-) -> ProgressCurveOut:
+) -> Response:
     """Monthly planned / actual / forecast % complete — the progress S-curve.
-    Same basis as /progress-summary (engine/evm/progress_engine.py)."""
+    Same basis as /progress-summary (engine/evm/progress_engine.py). Cached
+    (app/core/cache.py): it rereads every update's activity snapshot."""
     get_tenant_scoped_or_404(db, Project, project_id, ctx)
     require_project_permission(db, project_id, ctx, *VIEW_ANY)
     baseline = _require_active_baseline(db, ctx, project_id)
+    return cached_json(
+        "progress-curve",
+        scopes=project_scopes(ctx.tenant_id, project_id),
+        key=[project_id, baseline.id],
+        compute=lambda: _progress_curve(db, ctx, project_id, baseline),
+    )
+
+
+def _progress_curve(db: Session, ctx: AuthContext, project_id: uuid.UUID, baseline: Baseline) -> ProgressCurveOut:
 
     data_date, points = compute_progress_curve(db, ctx.tenant_id, project_id, baseline)
     return ProgressCurveOut(

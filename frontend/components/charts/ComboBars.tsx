@@ -127,7 +127,7 @@ export function ComboBars({
                 y={y(r.planned)}
                 width={barW}
                 height={Math.max(plotB - y(r.planned), 0)}
-                className="viz-combo-bar is-planned"
+                className={`viz-combo-bar is-planned${hover === i ? " is-hover" : ""}`}
               />
               {r.past && (
                 <rect
@@ -135,7 +135,7 @@ export function ComboBars({
                   y={y(r.actual)}
                   width={barW}
                   height={Math.max(plotB - y(r.actual), 0)}
-                  className={`viz-combo-bar is-${series}`}
+                  className={`viz-combo-bar is-${series}${hover === i ? " is-hover" : ""}`}
                 />
               )}
               {i % labelStep === 0 && (
@@ -189,8 +189,27 @@ export function ComboBars({
           rows={[
             { swatch: "planned", label: "Planned", value: format(h.planned) },
             ...(h.past ? [{ swatch: series, label: "Actual", value: format(h.actual) }] : []),
-            ...(h.cumPlanned != null ? [{ label: "Cumulative planned", value: `${h.cumPlanned.toFixed(1)}%` }] : []),
-            ...(h.cumActual != null ? [{ label: "Cumulative actual", value: `${h.cumActual.toFixed(1)}%` }] : []),
+            ...(h.cumPlanned != null
+              ? [
+                  {
+                    swatch: "planned",
+                    label: "Cumulative planned",
+                    value: `${h.cumPlanned.toFixed(1)}%`,
+                    pct: h.cumPlanned,
+                  },
+                ]
+              : []),
+            ...(h.cumActual != null
+              ? [
+                  {
+                    swatch: series,
+                    label: "Cumulative actual",
+                    value: `${h.cumActual.toFixed(1)}%`,
+                    pct: h.cumActual,
+                    markPct: h.cumPlanned,
+                  },
+                ]
+              : []),
           ]}
         />
       )}

@@ -79,7 +79,22 @@ export function fmtPts(value: number | null | undefined): string {
   return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)} pts`;
 }
 
-/** Floating tooltip box, positioned by the caller inside a relative parent. */
+export interface VizTipRow {
+  label: string;
+  value: ReactNode;
+  /** Series key ("planned", "actual", "cost", or a status tone) — drawn as a short line. */
+  swatch?: string;
+  /** A share in %: drawn as a mini bar under the row, filled in the swatch's colour. */
+  pct?: number | null;
+  /** A second share marked on that bar as a tick (the plan, against an actual). */
+  markPct?: number | null;
+  /** Colour the value text: "warn" / "crit" only for a genuinely bad gap. */
+  tone?: VizTone;
+}
+
+/** Floating tooltip box, positioned by the caller inside a relative parent.
+ *  Values lead (bold, ink), labels follow; a row with `pct` also draws its
+ *  share as a mini bar, with `markPct` as a tick — so a % reads at a glance. */
 export function VizTip({
   x,
   y,
@@ -91,8 +106,9 @@ export function VizTip({
   y: number;
   flip: boolean;
   title: ReactNode;
-  rows: { swatch?: string; label: string; value: ReactNode }[];
+  rows: VizTipRow[];
 }) {
+  const clamp = (v: number) => Math.min(Math.max(v, 0), 100);
   return (
     <div
       className="viz-tip"
@@ -102,14 +118,30 @@ export function VizTip({
     >
       <div className="viz-tip-title">{title}</div>
       {rows.map((r) => (
-        <div key={r.label} className="viz-tip-row">
-          {r.swatch && <i className={`viz-key is-${r.swatch}`} aria-hidden="true" />}
-          {r.label}
-          <b className="num">{r.value}</b>
+        <div key={r.label} className={`viz-tip-row${r.pct != null ? " has-bar" : ""}`}>
+          <span className="viz-tip-line">
+            {r.swatch && <i className={`viz-tip-key is-${r.swatch}`} aria-hidden="true" />}
+            {r.label}
+            <b className={`num${r.tone === "warn" || r.tone === "crit" ? ` tone-${r.tone}` : ""}`}>{r.value}</b>
+          </span>
+          {r.pct != null && (
+            <span className="viz-tip-bar" aria-hidden="true">
+              <span className={`viz-tip-fill is-${r.swatch ?? "actual"}`} style={{ width: `${clamp(r.pct)}%` }} />
+              {r.markPct != null && <span className="viz-tip-mark" style={{ left: `${clamp(r.markPct)}%` }} />}
+            </span>
+          )}
         </div>
       ))}
     </div>
   );
+}
+
+/** Tooltip position inside `box` for a pointer event: beside the pointer,
+ *  flipped to its left on the right half so it never runs off the card. */
+export function tipAt(e: { clientX: number; clientY: number }, box: Element) {
+  const r = box.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  return { x, y: e.clientY - r.top + 12, flip: x > r.width / 2 };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

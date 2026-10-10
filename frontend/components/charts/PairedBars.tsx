@@ -57,6 +57,14 @@ export function PairedBars({
     Math.max(1e-9, ...rows.map((r) => Math.max(r.planned ?? 0, r.actual ?? 0, r.total ?? 0)));
   const w = (v: number | null | undefined) => `${Math.min(Math.max(((v ?? 0) / axisMax) * 100, 0), 100)}%`;
 
+  /** A value as a share for the tooltip's mini bar: of the row's own budget
+   *  when it has one, else of the axis (100 on a % chart). */
+  function shareOf(row: BarRow, v: number | null): number | null {
+    if (v == null) return null;
+    const whole = row.total ?? axisMax;
+    return whole > 0 ? (v / whole) * 100 : null;
+  }
+
   function onMove(e: React.MouseEvent<HTMLElement>, row: BarRow) {
     const box = (e.currentTarget.closest(".viz-bars") as HTMLElement).getBoundingClientRect();
     const x = e.clientX - box.left;
@@ -82,7 +90,11 @@ export function PairedBars({
           </span>
         );
         return (
-          <div key={r.key} className="viz-bars-row" onMouseMove={(e) => onMove(e, r)}>
+          <div
+            key={r.key}
+            className={`viz-bars-row${tip?.row.key === r.key ? " is-hover" : ""}`}
+            onMouseMove={(e) => onMove(e, r)}
+          >
             {label}
             <div className="viz-bars-track" aria-hidden="true">
               {r.total != null && <span className="viz-bars-total" style={{ width: w(r.total) }} />}
@@ -124,10 +136,27 @@ export function PairedBars({
           flip={tip.flip}
           title={tip.row.label}
           rows={[
-            { swatch: "planned", label: "Planned to date", value: format(tip.row.planned) },
-            { swatch: series, label: "Actual", value: format(tip.row.actual) },
+            {
+              swatch: "planned",
+              label: "Planned to date",
+              value: format(tip.row.planned),
+              pct: shareOf(tip.row, tip.row.planned),
+            },
+            {
+              swatch: series,
+              label: "Actual",
+              value: format(tip.row.actual),
+              pct: shareOf(tip.row, tip.row.actual),
+              markPct: shareOf(tip.row, tip.row.planned),
+            },
             ...(tip.row.planned != null && tip.row.actual != null
-              ? [{ label: "Variance", value: `${tip.row.actual - tip.row.planned >= 0 ? "+" : "−"}${format(Math.abs(tip.row.actual - tip.row.planned))}` }]
+              ? [
+                  {
+                    label: "Variance",
+                    value: `${tip.row.actual - tip.row.planned >= 0 ? "+" : "−"}${format(Math.abs(tip.row.actual - tip.row.planned))}`,
+                    tone: ratioTone(tip.row.actual, tip.row.planned),
+                  },
+                ]
               : []),
             ...(tip.row.details ?? []),
           ]}

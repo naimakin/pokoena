@@ -4,8 +4,10 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core.cache import cached_json, project_scopes
 from app.db.session import get_db
 from app.deps import AuthContext, check_capability, get_current_tenant_user, get_tenant_scoped_or_404, require_project_permission
 from app.models.project import Project
@@ -115,12 +117,20 @@ def _summary(projects: list[ProjectPortfolio]) -> PortfolioSummaryOut:
 
 
 @router.get("", response_model=PortfolioOut)
-def get_portfolio(db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)) -> PortfolioOut:
+def get_portfolio(db: Session = Depends(get_db), ctx: AuthContext = Depends(get_current_tenant_user)) -> Response:
     _require_company(ctx)
-    projects = [
-        project_portfolio(db, ctx.tenant_id, p)
-        for p in visible_projects(db, ctx.tenant_id, ctx.user.id, ctx.role)
-    ]
+    visible = visible_projects(db, ctx.tenant_id, ctx.user.id, ctx.role)
+    # Per user (who sees which projects), invalidated by a change to any of them.
+    return cached_json(
+        "portfolio",
+        scopes=project_scopes(ctx.tenant_id, *(p.id for p in visible)),
+        key=[ctx.tenant_id, ctx.user.id],
+        compute=lambda: _portfolio(db, ctx, visible),
+    )
+
+
+def _portfolio(db: Session, ctx: AuthContext, visible: list[Project]) -> PortfolioOut:
+    projects = [project_portfolio(db, ctx.tenant_id, p) for p in visible]
 
     top: list[PortfolioActivityOut] = []
     for pp in projects:
